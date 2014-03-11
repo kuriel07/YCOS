@@ -1,0 +1,622 @@
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     1
+
+
+MACRO ASSEMBLER A51 V7.01
+OBJECT MODULE PLACED IN .\Debug\Output\Main.OBJ
+ASSEMBLER INVOKED BY: C:\Keil51\C51\BIN\A51.EXE .\Debug\Output\Main.src PR(.\Debug\List\Main.ls1) EP DEBUG
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ; .\Debug\Output\Main.SRC generated from: 8051SYS\Main.c
+                       2     ; COMPILER INVOKED BY:
+                       3     ;        C:\Keil51\C51\BIN\C51.EXE 8051SYS\Main.c LARGE OMF2 OPTIMIZE(0,SIZE) BROWSE NOINTV
+                             ECTOR DEBUG PRINT(.\Debug\List\Main.lst) SRC(.\Debug\Output\Main.SRC)
+                       4     
+                       5     $nomod51 
+                       6     
+                       7     NAME    MAIN
+                       8     
+  00DC                 9     UIMSK   DATA    0DCH
+  00E9                10     FL_SDP1 DATA    0E9H
+  00EA                11     FL_SDP2 DATA    0EAH
+  0083                12     DPH0    DATA    083H
+  00AB                13     IE_INT3 BIT     0A8H.3
+  00A8                14     IE      DATA    0A8H
+  0085                15     DPH1    DATA    085H
+  00AD                16     IE_INT5 BIT     0A8H.5
+  0082                17     DPL0    DATA    082H
+  0084                18     DPL1    DATA    084H
+  00A9                19     IE_TMR0 BIT     0A8H.1
+  00C3                20     DES_END BIT     0C0H.3
+  00B8                21     IP      DATA    0B8H
+  00DE                22     UCR2    DATA    0DEH
+  00DD                23     UCR3    DATA    0DDH
+  00EA                24     FL_STS_F_CHKFF_ERR      BIT     0E8H.2
+  0081                25     SP      DATA    081H
+  00C5                26     DES_DATEN       BIT     0C0H.5
+  00AA                27     IE_UART BIT     0A8H.2
+  00DA                28     UBRC    DATA    0DAH
+  0087                29     PCON    DATA    087H
+  00E8                30     FL_STS_F_OVER   BIT     0E8H.0
+  00C2                31     CRCDAT  DATA    0C2H
+  00D9                32     UBUF    DATA    0D9H
+  0089                33     TMOD    DATA    089H
+  0088                34     TCON    DATA    088H
+  00C3                35     MMU_SEL DATA    0C3H
+  00D8                36     USR_TBE BIT     0D8H.0
+  0086                37     CLKCON  DATA    086H
+  00DB                38     CHIPSC  DATA    0DBH
+  008F                39     CLKSEL  DATA    08FH
+  00C0                40     DESCTL  DATA    0C0H
+  00F0                41     B       DATA    0F0H
+  00E2                42     RNGDAT  DATA    0E2H
+  00E0                43     ACC     DATA    0E0H
+  00A8                44     IE_DES  BIT     0A8H.0
+  00E1                45     RNGCTL  DATA    0E1H
+  008C                46     TH0     DATA    08CH
+  00C0                47     DES_START       BIT     0C0H.0
+  008A                48     TL0     DATA    08AH
+  00A5                49     WDTCON  DATA    0A5H
+  00F8                50     DESD0   DATA    0F8H
+  00F9                51     DESD1   DATA    0F9H
+  00FA                52     DESD2   DATA    0FAH
+  00EB                53     FL_CON  DATA    0EBH
+  00FB                54     DESD3   DATA    0FBH
+  0080                55     SFR80   DATA    080H
+  00FC                56     DESD4   DATA    0FCH
+  0090                57     SFR90   DATA    090H
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     2
+
+  0081                58     SFR81   DATA    081H
+  00FD                59     DESD5   DATA    0FDH
+  0091                60     SFR91   DATA    091H
+  0082                61     SFR82   DATA    082H
+  00FE                62     DESD6   DATA    0FEH
+  0092                63     SFR92   DATA    092H
+  0083                64     SFR83   DATA    083H
+  00FF                65     DESD7   DATA    0FFH
+  0093                66     SFR93   DATA    093H
+  0084                67     SFR84   DATA    084H
+  0094                68     SFR94   DATA    094H
+  0085                69     SFR85   DATA    085H
+  0095                70     SFR95   DATA    095H
+  0086                71     SFR86   DATA    086H
+  0096                72     SFR96   DATA    096H
+  0087                73     SFR87   DATA    087H
+  0083                74     DPH     DATA    083H
+  0097                75     SFR97   DATA    097H
+  0088                76     SFR88   DATA    088H
+  00A0                77     SFRA0   DATA    0A0H
+  0098                78     SFR98   DATA    098H
+  0089                79     SFR89   DATA    089H
+  00E9                80     FL_STS_F_OP_ERR BIT     0E8H.1
+  00AC                81     IE_FLASH        BIT     0A8H.4
+  00AE                82     IE_WDT  BIT     0A8H.6
+  00B0                83     SFRB0   DATA    0B0H
+  00A1                84     SFRA1   DATA    0A1H
+  0099                85     SFR99   DATA    099H
+  00C0                86     SFRC0   DATA    0C0H
+  00B1                87     SFRB1   DATA    0B1H
+  00A2                88     SFRA2   DATA    0A2H
+  008D                89     TCON_TF0        BIT     088H.5
+  0082                90     DPL     DATA    082H
+  00D0                91     SFRD0   DATA    0D0H
+  00C1                92     SFRC1   DATA    0C1H
+  00B2                93     SFRB2   DATA    0B2H
+  00A3                94     SFRA3   DATA    0A3H
+  00E0                95     SFRE0   DATA    0E0H
+  00D1                96     SFRD1   DATA    0D1H
+  00C2                97     SFRC2   DATA    0C2H
+  00B3                98     SFRB3   DATA    0B3H
+  00A4                99     SFRA4   DATA    0A4H
+  00EF               100     BANK_SEL        DATA    0EFH
+  00F0               101     SFRF0   DATA    0F0H
+  00E1               102     SFRE1   DATA    0E1H
+  00D2               103     SFRD2   DATA    0D2H
+  00C3               104     SFRC3   DATA    0C3H
+  00B4               105     SFRB4   DATA    0B4H
+  00A5               106     SFRA5   DATA    0A5H
+  00C1               107     DES_MODE        BIT     0C0H.1
+  00F1               108     SFRF1   DATA    0F1H
+  00E2               109     SFRE2   DATA    0E2H
+  00D3               110     SFRD3   DATA    0D3H
+  00C4               111     SFRC4   DATA    0C4H
+  00B5               112     SFRB5   DATA    0B5H
+  00A6               113     SFRA6   DATA    0A6H
+  00E7               114     FL_PATCH        DATA    0E7H
+  00F2               115     SFRF2   DATA    0F2H
+  00E3               116     SFRE3   DATA    0E3H
+  00D4               117     SFRD4   DATA    0D4H
+  00C5               118     SFRC5   DATA    0C5H
+  00B6               119     SFRB6   DATA    0B6H
+  00A7               120     SFRA7   DATA    0A7H
+  00F3               121     SFRF3   DATA    0F3H
+  00E4               122     SFRE4   DATA    0E4H
+  00D5               123     SFRD5   DATA    0D5H
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     3
+
+  00C6               124     SFRC6   DATA    0C6H
+  00B7               125     SFRB7   DATA    0B7H
+  00A8               126     SFRA8   DATA    0A8H
+  008A               127     SFR8A   DATA    08AH
+  00F4               128     SFRF4   DATA    0F4H
+  00E5               129     SFRE5   DATA    0E5H
+  00D6               130     SFRD6   DATA    0D6H
+  00C7               131     SFRC7   DATA    0C7H
+  00B8               132     SFRB8   DATA    0B8H
+  00A9               133     SFRA9   DATA    0A9H
+  009A               134     SFR9A   DATA    09AH
+  008B               135     SFR8B   DATA    08BH
+  00A2               136     DPS     DATA    0A2H
+  00F5               137     SFRF5   DATA    0F5H
+  00E6               138     SFRE6   DATA    0E6H
+  00D7               139     SFRD7   DATA    0D7H
+  00C8               140     SFRC8   DATA    0C8H
+  00B9               141     SFRB9   DATA    0B9H
+  009B               142     SFR9B   DATA    09BH
+  008C               143     SFR8C   DATA    08CH
+  00F6               144     SFRF6   DATA    0F6H
+  00E7               145     SFRE7   DATA    0E7H
+  00D8               146     SFRD8   DATA    0D8H
+  00C9               147     SFRC9   DATA    0C9H
+  009C               148     SFR9C   DATA    09CH
+  008D               149     SFR8D   DATA    08DH
+  00F7               150     SFRF7   DATA    0F7H
+  00E8               151     SFRE8   DATA    0E8H
+  00D9               152     SFRD9   DATA    0D9H
+  009D               153     SFR9D   DATA    09DH
+  008E               154     SFR8E   DATA    08EH
+  00A6               155     WDTRST  DATA    0A6H
+  00DF               156     UCR     DATA    0DFH
+  00F8               157     SFRF8   DATA    0F8H
+  00E9               158     SFRE9   DATA    0E9H
+  009E               159     SFR9E   DATA    09EH
+  008F               160     SFR8F   DATA    08FH
+  00E3               161     FDCON   DATA    0E3H
+  00F9               162     SFRF9   DATA    0F9H
+  009F               163     SFR9F   DATA    09FH
+  00C6               164     DES_KEY1EN      BIT     0C0H.6
+  008C               165     TCON_TR0        BIT     088H.4
+  00C7               166     DES_KEY2EN      BIT     0C0H.7
+  00E8               167     FL_STS  DATA    0E8H
+  00C2               168     DES_TDES        BIT     0C0H.2
+  00EE               169     BANK_NUM        DATA    0EEH
+  00AA               170     SFRAA   DATA    0AAH
+  00BA               171     SFRBA   DATA    0BAH
+  00AB               172     SFRAB   DATA    0ABH
+  00CA               173     SFRCA   DATA    0CAH
+  00BB               174     SFRBB   DATA    0BBH
+  00AC               175     SFRAC   DATA    0ACH
+  00DA               176     SFRDA   DATA    0DAH
+  00CB               177     SFRCB   DATA    0CBH
+  00BC               178     SFRBC   DATA    0BCH
+  00AD               179     SFRAD   DATA    0ADH
+  0080               180     rP0     DATA    080H
+  00EA               181     SFREA   DATA    0EAH
+  00DB               182     SFRDB   DATA    0DBH
+  00CC               183     SFRCC   DATA    0CCH
+  00BD               184     SFRBD   DATA    0BDH
+  00AE               185     SFRAE   DATA    0AEH
+  0090               186     rP1     DATA    090H
+  00FA               187     SFRFA   DATA    0FAH
+  00EB               188     SFREB   DATA    0EBH
+  00DC               189     SFRDC   DATA    0DCH
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     4
+
+  00CD               190     SFRCD   DATA    0CDH
+  00BE               191     SFRBE   DATA    0BEH
+  00AF               192     SFRAF   DATA    0AFH
+  00AF               193     IE_EA   BIT     0A8H.7
+  00A0               194     rP2     DATA    0A0H
+  00FB               195     SFRFB   DATA    0FBH
+  00EC               196     SFREC   DATA    0ECH
+  00DD               197     SFRDD   DATA    0DDH
+  00CE               198     SFRCE   DATA    0CEH
+  00BF               199     SFRBF   DATA    0BFH
+  00B0               200     rP3     DATA    0B0H
+  00FC               201     SFRFC   DATA    0FCH
+  00ED               202     SFRED   DATA    0EDH
+  00DE               203     SFRDE   DATA    0DEH
+  00CF               204     SFRCF   DATA    0CFH
+  00FD               205     SFRFD   DATA    0FDH
+  00EE               206     SFREE   DATA    0EEH
+  00DF               207     SFRDF   DATA    0DFH
+  00FE               208     SFRFE   DATA    0FEH
+  00EF               209     SFREF   DATA    0EFH
+  00FF               210     SFRFF   DATA    0FFH
+  00D8               211     USR     DATA    0D8H
+  0097               212     SLEEP   DATA    097H
+  00D0               213     PSW     DATA    0D0H
+  00DB               214     VDCON   DATA    0DBH
+                     215     ?PR?main?MAIN        SEGMENT CODE 
+                     216     ?PR?HW_Init?MAIN     SEGMENT CODE 
+                     217     ?C_INITSEG           SEGMENT CODE 
+                     218     ?XD?MAIN             SEGMENT XDATA 
+                     219             EXTRN   CODE (ISO7816_main)
+                     220             EXTRN   CODE (ISO7816_init)
+                     221             EXTRN   CODE (?C_STARTUP)
+                     222             PUBLIC  _tick_counter
+                     223             PUBLIC  HW_Init
+                     224             PUBLIC  main
+                     225     
+----                 226             RSEG  ?XD?MAIN
+0000                 227       _tick_counter:   DS   2
+                     228     
+----                 229             RSEG  ?C_INITSEG
+0000 42              230             DB      042H
+0001 0000     F      231             DW      _tick_counter
+0003 0000            232             DW      00000H
+                     233     
+                     234     ; 
+                     235     ; #include      "_17BD_UserCode.h"  
+                     236     ; #include      "defs.h"
+                     237     ; #include      "..\ISO7816\ISO7816.h"
+                     238     ; #include      "..\NORFlash\NORFlash.h"
+                     239     ; #include      "..\yggdrasil\yggdrasil.h"
+                     240     ; #include      <intrins.h>
+                     241     ; 
+                     242     ; //BYTE        ISO7816_Time;
+                     243     ; 
+                     244     ; uint16 _tick_counter = 0;
+                     245     ; //extern uint16 C_XBP;
+                     246     ; //====================================================
+                     247     ; //    Timer 0 interrutp service routine
+                     248     ; //extern void ISO7816_main(void);
+                     249     ; //extern void _C_START(void);
+                     250     ; /*void TMR0_ISR(void) interrupt 1
+                     251     ; {
+                     252     ;       IE_TMR0 = 0;
+                     253     ;       _tick_counter++;
+                     254     ;       if(_tick_counter < 300) { 
+                     255     ;               TH0 = 0xC3;                     //50000 clock, reload value
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     5
+
+                     256     ;               TL0 = 0x50;             
+                     257     ;               TCON_TF0 = 0;           //clear flag
+                     258     ;               IE_TMR0 = 1;
+                     259     ;       } else {
+                     260     ;               _iso7816_state =  ISO7816_STOP;                 //cancel pending operation
+                     261     ;               //#pragma       asm
+                     262     ;               TH0 = 0x00;                     //50000 clock, reload value
+                     263     ;               TL0 = 0x00;             
+                     264     ;               TCON_TF0 = 0;           //clear flag
+                     265     ;               IE_TMR0 = 0;
+                     266     ;               //SP = 0x23;
+                     267     ;               #pragma asm
+                     268     ;               POP 7;
+                     269     ;               POP 6;
+                     270     ;               POP ACC;
+                     271     ;               POP PSW ;
+                     272     ;               POP DPL0;
+                     273     ;               POP DPH0;
+                     274     ;               POP B;
+                     275     ;               POP ACC;
+                     276     ;               POP ACC;        //clear return address
+                     277     ;               POP ACC;
+                     278     ;               MOV DPTR, #ISO7816_Main;
+                     279     ;               PUSH DPL;
+                     280     ;               PUSH DPH;
+                     281     ;               RETI
+                     282     ;               //MOV SP, #023h;
+                     283     ;               //MOV PSW, #0;
+                     284     ;               //MOV A, #0;
+                     285     ;               //MOV B, #0;
+                     286     ;               //MOV   SP,#?STACK-1
+                     287     ;               //AJMP  ISO7816_Main;
+                     288     ;               //LJMP  MAIN
+                     289     ;               #pragma endasm
+                     290     ;               //*((uchar *)(SP - 8)) = 0x20;
+                     291     ;               //*((uchar *)(SP - 8 + 1)) = 0x00;
+                     292     ;               //PC = 0x2000;
+                     293     ;       }
+                     294     ;       return;
+                     295     ; } */
+                     296     ; 
+                     297     ; //====================================================
+                     298     ; //    Main process
+                     299     ; void  main(void)
+                     300     
+----                 301             RSEG  ?PR?main?MAIN
+0000                 302     main:
+                     303             USING   0
+                     304                             ; SOURCE LINE # 66
+                     305     ; {     
+                     306                             ; SOURCE LINE # 67
+                     307     ;       HW_Init();                                              //      H/W initial
+                     308                             ; SOURCE LINE # 68
+0000 120000   F      309             LCALL   HW_Init
+                     310     ;       //ISO7816_Time = 0;                             //      0: 1st time,ATR
+                     311     ;       ISO7816_init();
+                     312                             ; SOURCE LINE # 70
+0003 120000   F      313             LCALL   ISO7816_init
+                     314     ;       //while(1)
+                     315     ;       //{  
+                     316     ;               //if(ISO7816_Time > 0)
+                     317     ;               //{
+                     318     ;               //      Sleep_Mode();                   //      Power down mode after threa
+                             d has been executed                  
+                     319     ;               //}
+                     320     ;       ISO7816_main();
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     6
+
+                     321                             ; SOURCE LINE # 77
+0006 120000   F      322             LCALL   ISO7816_main
+                     323     ;       //}
+                     324     ; }
+                     325                             ; SOURCE LINE # 79
+0009                 326     ?C0001:
+0009 22              327             RET     
+                     328     ; END OF main
+                     329     
+                     330     ; 
+                     331     ; //====================================================
+                     332     ; //    ISO/IEC 7816 commands handling
+                     333     ; void  HW_Init(void)
+                     334     
+----                 335             RSEG  ?PR?HW_Init?MAIN
+0000                 336     HW_Init:
+                     337             USING   0
+                     338                             ; SOURCE LINE # 83
+                     339     ; {
+                     340                             ; SOURCE LINE # 84
+                     341     ;       IE_EA = 1;                                              //      Interrupt enabed by
+                              corresponding control bit
+                     342                             ; SOURCE LINE # 85
+0000 D2AF            343             SETB    IE_EA
+                     344     ;       IP = 0x00;                                              //      No priviledge
+                     345                             ; SOURCE LINE # 86
+0002 75B800          346             MOV     IP,#00H
+                     347     ;       UCR2 = 0x03;                                    //      Retry 3 times
+                     348                             ; SOURCE LINE # 87
+0005 75DE03          349             MOV     UCR2,#03H
+                     350     ;       RNGCTL = 0x01;                                  //      Close RNG
+                     351                             ; SOURCE LINE # 88
+0008 75E101          352             MOV     RNGCTL,#01H
+                     353     ;       CLKCON = 0x01;                                  //      Open DES clock 
+                     354                             ; SOURCE LINE # 89
+000B 758601          355             MOV     CLKCON,#01H
+                     356     ; }
+                     357                             ; SOURCE LINE # 90
+000E                 358     ?C0002:
+000E 22              359             RET     
+                     360     ; END OF HW_Init
+                     361     
+                     362             END
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     7
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+?C0001 . . . . . .  C ADDR   0009H   R   SEG=?PR?MAIN?MAIN
+?C0002 . . . . . .  C ADDR   000EH   R   SEG=?PR?HW_INIT?MAIN
+?C_INITSEG . . . .  C SEG    0005H       REL=UNIT
+?C_STARTUP . . . .  C ADDR   -----       EXT
+?PR?HW_INIT?MAIN .  C SEG    000FH       REL=UNIT
+?PR?MAIN?MAIN. . .  C SEG    000AH       REL=UNIT
+?XD?MAIN . . . . .  X SEG    0002H       REL=UNIT
+ACC. . . . . . . .  D ADDR   00E0H   A   
+B. . . . . . . . .  D ADDR   00F0H   A   
+BANK_NUM . . . . .  D ADDR   00EEH   A   
+BANK_SEL . . . . .  D ADDR   00EFH   A   
+CHIPSC . . . . . .  D ADDR   00DBH   A   
+CLKCON . . . . . .  D ADDR   0086H   A   
+CLKSEL . . . . . .  D ADDR   008FH   A   
+CRCDAT . . . . . .  D ADDR   00C2H   A   
+DESCTL . . . . . .  D ADDR   00C0H   A   
+DESD0. . . . . . .  D ADDR   00F8H   A   
+DESD1. . . . . . .  D ADDR   00F9H   A   
+DESD2. . . . . . .  D ADDR   00FAH   A   
+DESD3. . . . . . .  D ADDR   00FBH   A   
+DESD4. . . . . . .  D ADDR   00FCH   A   
+DESD5. . . . . . .  D ADDR   00FDH   A   
+DESD6. . . . . . .  D ADDR   00FEH   A   
+DESD7. . . . . . .  D ADDR   00FFH   A   
+DES_DATEN. . . . .  B ADDR   00C0H.5 A   
+DES_END. . . . . .  B ADDR   00C0H.3 A   
+DES_KEY1EN . . . .  B ADDR   00C0H.6 A   
+DES_KEY2EN . . . .  B ADDR   00C0H.7 A   
+DES_MODE . . . . .  B ADDR   00C0H.1 A   
+DES_START. . . . .  B ADDR   00C0H.0 A   
+DES_TDES . . . . .  B ADDR   00C0H.2 A   
+DPH. . . . . . . .  D ADDR   0083H   A   
+DPH0 . . . . . . .  D ADDR   0083H   A   
+DPH1 . . . . . . .  D ADDR   0085H   A   
+DPL. . . . . . . .  D ADDR   0082H   A   
+DPL0 . . . . . . .  D ADDR   0082H   A   
+DPL1 . . . . . . .  D ADDR   0084H   A   
+DPS. . . . . . . .  D ADDR   00A2H   A   
+FDCON. . . . . . .  D ADDR   00E3H   A   
+FL_CON . . . . . .  D ADDR   00EBH   A   
+FL_PATCH . . . . .  D ADDR   00E7H   A   
+FL_SDP1. . . . . .  D ADDR   00E9H   A   
+FL_SDP2. . . . . .  D ADDR   00EAH   A   
+FL_STS . . . . . .  D ADDR   00E8H   A   
+FL_STS_F_CHKFF_ERR  B ADDR   00E8H.2 A   
+FL_STS_F_OP_ERR. .  B ADDR   00E8H.1 A   
+FL_STS_F_OVER. . .  B ADDR   00E8H.0 A   
+HW_INIT. . . . . .  C ADDR   0000H   R   SEG=?PR?HW_INIT?MAIN
+IE . . . . . . . .  D ADDR   00A8H   A   
+IE_DES . . . . . .  B ADDR   00A8H.0 A   
+IE_EA. . . . . . .  B ADDR   00A8H.7 A   
+IE_FLASH . . . . .  B ADDR   00A8H.4 A   
+IE_INT3. . . . . .  B ADDR   00A8H.3 A   
+IE_INT5. . . . . .  B ADDR   00A8H.5 A   
+IE_TMR0. . . . . .  B ADDR   00A8H.1 A   
+IE_UART. . . . . .  B ADDR   00A8H.2 A   
+IE_WDT . . . . . .  B ADDR   00A8H.6 A   
+IP . . . . . . . .  D ADDR   00B8H   A   
+ISO7816_INIT . . .  C ADDR   -----       EXT
+ISO7816_MAIN . . .  C ADDR   -----       EXT
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     8
+
+MAIN . . . . . . .  C ADDR   0000H   R   SEG=?PR?MAIN?MAIN
+MMU_SEL. . . . . .  D ADDR   00C3H   A   
+PCON . . . . . . .  D ADDR   0087H   A   
+PSW. . . . . . . .  D ADDR   00D0H   A   
+RNGCTL . . . . . .  D ADDR   00E1H   A   
+RNGDAT . . . . . .  D ADDR   00E2H   A   
+RP0. . . . . . . .  D ADDR   0080H   A   
+RP1. . . . . . . .  D ADDR   0090H   A   
+RP2. . . . . . . .  D ADDR   00A0H   A   
+RP3. . . . . . . .  D ADDR   00B0H   A   
+SFR80. . . . . . .  D ADDR   0080H   A   
+SFR81. . . . . . .  D ADDR   0081H   A   
+SFR82. . . . . . .  D ADDR   0082H   A   
+SFR83. . . . . . .  D ADDR   0083H   A   
+SFR84. . . . . . .  D ADDR   0084H   A   
+SFR85. . . . . . .  D ADDR   0085H   A   
+SFR86. . . . . . .  D ADDR   0086H   A   
+SFR87. . . . . . .  D ADDR   0087H   A   
+SFR88. . . . . . .  D ADDR   0088H   A   
+SFR89. . . . . . .  D ADDR   0089H   A   
+SFR8A. . . . . . .  D ADDR   008AH   A   
+SFR8B. . . . . . .  D ADDR   008BH   A   
+SFR8C. . . . . . .  D ADDR   008CH   A   
+SFR8D. . . . . . .  D ADDR   008DH   A   
+SFR8E. . . . . . .  D ADDR   008EH   A   
+SFR8F. . . . . . .  D ADDR   008FH   A   
+SFR90. . . . . . .  D ADDR   0090H   A   
+SFR91. . . . . . .  D ADDR   0091H   A   
+SFR92. . . . . . .  D ADDR   0092H   A   
+SFR93. . . . . . .  D ADDR   0093H   A   
+SFR94. . . . . . .  D ADDR   0094H   A   
+SFR95. . . . . . .  D ADDR   0095H   A   
+SFR96. . . . . . .  D ADDR   0096H   A   
+SFR97. . . . . . .  D ADDR   0097H   A   
+SFR98. . . . . . .  D ADDR   0098H   A   
+SFR99. . . . . . .  D ADDR   0099H   A   
+SFR9A. . . . . . .  D ADDR   009AH   A   
+SFR9B. . . . . . .  D ADDR   009BH   A   
+SFR9C. . . . . . .  D ADDR   009CH   A   
+SFR9D. . . . . . .  D ADDR   009DH   A   
+SFR9E. . . . . . .  D ADDR   009EH   A   
+SFR9F. . . . . . .  D ADDR   009FH   A   
+SFRA0. . . . . . .  D ADDR   00A0H   A   
+SFRA1. . . . . . .  D ADDR   00A1H   A   
+SFRA2. . . . . . .  D ADDR   00A2H   A   
+SFRA3. . . . . . .  D ADDR   00A3H   A   
+SFRA4. . . . . . .  D ADDR   00A4H   A   
+SFRA5. . . . . . .  D ADDR   00A5H   A   
+SFRA6. . . . . . .  D ADDR   00A6H   A   
+SFRA7. . . . . . .  D ADDR   00A7H   A   
+SFRA8. . . . . . .  D ADDR   00A8H   A   
+SFRA9. . . . . . .  D ADDR   00A9H   A   
+SFRAA. . . . . . .  D ADDR   00AAH   A   
+SFRAB. . . . . . .  D ADDR   00ABH   A   
+SFRAC. . . . . . .  D ADDR   00ACH   A   
+SFRAD. . . . . . .  D ADDR   00ADH   A   
+SFRAE. . . . . . .  D ADDR   00AEH   A   
+SFRAF. . . . . . .  D ADDR   00AFH   A   
+SFRB0. . . . . . .  D ADDR   00B0H   A   
+SFRB1. . . . . . .  D ADDR   00B1H   A   
+SFRB2. . . . . . .  D ADDR   00B2H   A   
+SFRB3. . . . . . .  D ADDR   00B3H   A   
+SFRB4. . . . . . .  D ADDR   00B4H   A   
+SFRB5. . . . . . .  D ADDR   00B5H   A   
+SFRB6. . . . . . .  D ADDR   00B6H   A   
+SFRB7. . . . . . .  D ADDR   00B7H   A   
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE     9
+
+SFRB8. . . . . . .  D ADDR   00B8H   A   
+SFRB9. . . . . . .  D ADDR   00B9H   A   
+SFRBA. . . . . . .  D ADDR   00BAH   A   
+SFRBB. . . . . . .  D ADDR   00BBH   A   
+SFRBC. . . . . . .  D ADDR   00BCH   A   
+SFRBD. . . . . . .  D ADDR   00BDH   A   
+SFRBE. . . . . . .  D ADDR   00BEH   A   
+SFRBF. . . . . . .  D ADDR   00BFH   A   
+SFRC0. . . . . . .  D ADDR   00C0H   A   
+SFRC1. . . . . . .  D ADDR   00C1H   A   
+SFRC2. . . . . . .  D ADDR   00C2H   A   
+SFRC3. . . . . . .  D ADDR   00C3H   A   
+SFRC4. . . . . . .  D ADDR   00C4H   A   
+SFRC5. . . . . . .  D ADDR   00C5H   A   
+SFRC6. . . . . . .  D ADDR   00C6H   A   
+SFRC7. . . . . . .  D ADDR   00C7H   A   
+SFRC8. . . . . . .  D ADDR   00C8H   A   
+SFRC9. . . . . . .  D ADDR   00C9H   A   
+SFRCA. . . . . . .  D ADDR   00CAH   A   
+SFRCB. . . . . . .  D ADDR   00CBH   A   
+SFRCC. . . . . . .  D ADDR   00CCH   A   
+SFRCD. . . . . . .  D ADDR   00CDH   A   
+SFRCE. . . . . . .  D ADDR   00CEH   A   
+SFRCF. . . . . . .  D ADDR   00CFH   A   
+SFRD0. . . . . . .  D ADDR   00D0H   A   
+SFRD1. . . . . . .  D ADDR   00D1H   A   
+SFRD2. . . . . . .  D ADDR   00D2H   A   
+SFRD3. . . . . . .  D ADDR   00D3H   A   
+SFRD4. . . . . . .  D ADDR   00D4H   A   
+SFRD5. . . . . . .  D ADDR   00D5H   A   
+SFRD6. . . . . . .  D ADDR   00D6H   A   
+SFRD7. . . . . . .  D ADDR   00D7H   A   
+SFRD8. . . . . . .  D ADDR   00D8H   A   
+SFRD9. . . . . . .  D ADDR   00D9H   A   
+SFRDA. . . . . . .  D ADDR   00DAH   A   
+SFRDB. . . . . . .  D ADDR   00DBH   A   
+SFRDC. . . . . . .  D ADDR   00DCH   A   
+SFRDD. . . . . . .  D ADDR   00DDH   A   
+SFRDE. . . . . . .  D ADDR   00DEH   A   
+SFRDF. . . . . . .  D ADDR   00DFH   A   
+SFRE0. . . . . . .  D ADDR   00E0H   A   
+SFRE1. . . . . . .  D ADDR   00E1H   A   
+SFRE2. . . . . . .  D ADDR   00E2H   A   
+SFRE3. . . . . . .  D ADDR   00E3H   A   
+SFRE4. . . . . . .  D ADDR   00E4H   A   
+SFRE5. . . . . . .  D ADDR   00E5H   A   
+SFRE6. . . . . . .  D ADDR   00E6H   A   
+SFRE7. . . . . . .  D ADDR   00E7H   A   
+SFRE8. . . . . . .  D ADDR   00E8H   A   
+SFRE9. . . . . . .  D ADDR   00E9H   A   
+SFREA. . . . . . .  D ADDR   00EAH   A   
+SFREB. . . . . . .  D ADDR   00EBH   A   
+SFREC. . . . . . .  D ADDR   00ECH   A   
+SFRED. . . . . . .  D ADDR   00EDH   A   
+SFREE. . . . . . .  D ADDR   00EEH   A   
+SFREF. . . . . . .  D ADDR   00EFH   A   
+SFRF0. . . . . . .  D ADDR   00F0H   A   
+SFRF1. . . . . . .  D ADDR   00F1H   A   
+SFRF2. . . . . . .  D ADDR   00F2H   A   
+SFRF3. . . . . . .  D ADDR   00F3H   A   
+SFRF4. . . . . . .  D ADDR   00F4H   A   
+SFRF5. . . . . . .  D ADDR   00F5H   A   
+SFRF6. . . . . . .  D ADDR   00F6H   A   
+SFRF7. . . . . . .  D ADDR   00F7H   A   
+SFRF8. . . . . . .  D ADDR   00F8H   A   
+SFRF9. . . . . . .  D ADDR   00F9H   A   
+A51 MACRO ASSEMBLER  MAIN                                                                 01/27/2014 09:14:17 PAGE    10
+
+SFRFA. . . . . . .  D ADDR   00FAH   A   
+SFRFB. . . . . . .  D ADDR   00FBH   A   
+SFRFC. . . . . . .  D ADDR   00FCH   A   
+SFRFD. . . . . . .  D ADDR   00FDH   A   
+SFRFE. . . . . . .  D ADDR   00FEH   A   
+SFRFF. . . . . . .  D ADDR   00FFH   A   
+SLEEP. . . . . . .  D ADDR   0097H   A   
+SP . . . . . . . .  D ADDR   0081H   A   
+TCON . . . . . . .  D ADDR   0088H   A   
+TCON_TF0 . . . . .  B ADDR   0088H.5 A   
+TCON_TR0 . . . . .  B ADDR   0088H.4 A   
+TH0. . . . . . . .  D ADDR   008CH   A   
+TL0. . . . . . . .  D ADDR   008AH   A   
+TMOD . . . . . . .  D ADDR   0089H   A   
+UBRC . . . . . . .  D ADDR   00DAH   A   
+UBUF . . . . . . .  D ADDR   00D9H   A   
+UCR. . . . . . . .  D ADDR   00DFH   A   
+UCR2 . . . . . . .  D ADDR   00DEH   A   
+UCR3 . . . . . . .  D ADDR   00DDH   A   
+UIMSK. . . . . . .  D ADDR   00DCH   A   
+USR. . . . . . . .  D ADDR   00D8H   A   
+USR_TBE. . . . . .  B ADDR   00D8H.0 A   
+VDCON. . . . . . .  D ADDR   00DBH   A   
+WDTCON . . . . . .  D ADDR   00A5H   A   
+WDTRST . . . . . .  D ADDR   00A6H   A   
+_TICK_COUNTER. . .  X ADDR   0000H   R   SEG=?XD?MAIN
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

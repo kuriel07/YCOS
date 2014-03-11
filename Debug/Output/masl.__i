@@ -1,0 +1,1 @@
+"plugins\masl.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\masl.lst) OBJECT(.\Debug\Output\masl.obj)

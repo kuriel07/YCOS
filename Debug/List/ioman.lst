@@ -1,0 +1,571 @@
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE IOMAN
+OBJECT MODULE PLACED IN .\Debug\Output\ioman.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE drivers\ioman.c LARGE OMF2 OPTIMIZE(0,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\ioman.lst) OBJECT(.\Debug\Output\ioman.obj)
+
+stmt level    source
+
+   1          /* IO Man (IO Manager), provides access to the hardware such as EEPROM
+   2           *
+   3           * Copyright 2010, Agus Purwanto.
+   4           * All rights reserved.
+   5           *
+   6           * 
+   7           */
+   8          
+   9          #include <stdio.h>
+  10          #include "ioman.h"
+  11          #include "..\defs.h"
+  12          #include "..\yggdrasil\yggdrasil.h"
+  13          #include "..\misc\hexstring.h"   
+  14          #include "..\ISO7816\ISO7816.h"
+  15          #include "..\NORFlash\NORFlash.h"
+  16          #include "..\misc\mem.h"
+  17          #include "flash.h"
+  18          #include <string.h>
+  19          //#define _CRT_SECURE_NO_DEPRECATE 1
+  20          //<TO DO>
+  21          //ganti dengan macro biar pemakaian RAM lebih irit dan kecepatan akses lebih baik
+  22          //jika kompiler mendukung ketika diimplementasikan ke EEPROM, ganti dengan assembly
+  23          
+  24          #ifdef _YGGDRASIL_MICRO_KERNEL
+  25          //apdu_command * iobuf = iso7816_buffer;                //buffer input/output
+  26          #endif
+  27          
+  28          //<TO DO>
+  29          //ini untuk desktop saja, ketika implementasi ke eeprom tidak diperlukan
+  30          #ifdef _X86_ARCH
+              //static FILE *eeprom;
+              #endif
+  33          //uint16 xdata data_pointer;
+  34          
+  35          void ioman_init() _REENTRANT_
+  36          {
+  37   1              //init pertama mode baca dulu
+  38   1              /*#ifdef _X86_ARCH
+  39   1              eeprom = fopen("\\32K.eeprom", "r+b");
+  40   1              if(eeprom==NULL) { fopen("\\32K.eeprom", "w+b"); 
+  41   1              eeprom = fopen("\\32K.eeprom", "r+b");}
+  42   1              #endif */
+  43   1              //data_pointer = 0;
+  44   1              rP1 = 0;
+  45   1              rP3 = 1;
+  46   1              MMU_SEL = 1;
+  47   1              maze_init();
+  48   1      } 
+  49          
+  50          /*void ioman_read_program(uint16 pos, ucharx * bytes, uint16 length) {
+  51                  uint16 ptr;
+  52                  uchar i;
+  53                  //ptr = pos + 0x8000;
+  54                  switch(pos >> 12) {
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 2   
+
+  55                          case 0:
+  56                          case 1:
+  57                                  rP3=6;    //XDATA 8000-FFFFh --> 0000-1FFFh
+  58                                  MMU_SEL = 0x01;
+  59                                  ptr = pos + 0x8000;
+  60                                  break;
+  61                          case 2:
+  62                          case 3:
+  63                          case 4:
+  64                          case 5:
+  65                          case 6:
+  66                          case 7:
+  67                                  MMU_SEL = 0x01;
+  68                                  ptr = pos;
+  69                                  break;
+  70                          case 8:
+  71                          case 9:
+  72                          case 0xA:
+  73                          case 0xB:
+  74                          case 0xC:
+  75                          case 0xD:
+  76                          case 0xE:
+  77                          case 0xF:
+  78                          default:
+  79                                  rP3 = 0; 
+  80                                  MMU_SEL = 0x01;
+  81                                  ptr = pos;
+  82                                  break;
+  83                  }
+  84                  ReadFlash(IOBuf, ptr, length);
+  85                  memcopy(bytes, IOBuf, 0, length);       
+  86                  MMU_SEL = 0x00;
+  87          }*/
+  88          
+  89          //void ioman_read_buffer(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+  90                                            
+  91          
+  92          //uint16 maze_cache_log_address;
+  93          //uint16 maze_cache_phys_address; 
+  94          uint16 maze_cache_laddr = 0xFFFF;
+  95          uint16 maze_cache_paddr = 0xFFFF;
+  96          uint16 _maze_map_base_addr = 0xFFFF;                            //maze table base address for sector mapping
+  97          
+  98          void ioman_erase_all(void) {
+  99   1              uint16 address;
+ 100   1              for(address = FLASH_PHYS_PAGE_SIZE; address != 0; address += FLASH_PHYS_PAGE_SIZE) {
+ 101   2                      ioman_erase_page(address);
+ 102   2              }
+ 103   1              ioman_erase_page(0);
+ 104   1              _maze_map_base_addr = 0xFFFF;                   //during formating set map base address to 0xFFFF
+ 105   1      }        
+ 106          
+ 107          void maze_init() _REENTRANT_ {
+ 108   1              uint16 sector_found = 0xFFFF;
+ 109   1              uint16 base_addr = 0;                   //jangan diutak-atik
+ 110   1              uchar cur_cntr = 0x80;
+ 111   1              flash_mark mark;
+ 112   1              read_next_sector:
+ 113   1              flash_read(base_addr + FLASH_LOG_PAGE_SIZE, &mark, sizeof(flash_mark));
+*** WARNING C182 IN LINE 113 OF DRIVERS\IOMAN.C: pointer to different objects
+ 114   1              if(mark.tag == FLASH_MAP_TAG) {                 //valid sector tag
+ 115   2                      if((cur_cntr & 0x80) && mark.cntr == 0) {                       //check counter
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 3   
+
+ 116   3                              sector_found = base_addr;
+ 117   3                              cur_cntr = mark.cntr;   
+ 118   3                      } else {
+ 119   3                              if((cur_cntr & 0x7F) <= mark.cntr) { 
+ 120   4                                      sector_found = base_addr;
+ 121   4                                      cur_cntr = mark.cntr;
+ 122   4                              }
+ 123   3                      }
+ 124   2              }
+ 125   1              base_addr += FLASH_PHYS_PAGE_SIZE;
+ 126   1              if(base_addr != 0) goto read_next_sector;
+ 127   1              /*if(sector_found == 0xFFFF) {                                  //no map found, create new map, clearing all table
+ 128   1                      memset(FlashBuffer, 0xff, FLASH_PHYS_PAGE_SIZE);
+ 129   1                      ((flash_sector *)FlashBuffer)->mark.num = 0;
+ 130   1                      ((flash_sector *)FlashBuffer)->mark.cntr = 0x80;
+ 131   1                      ((flash_sector *)FlashBuffer)->mark.tag = FLASH_MAP_TAG;
+ 132   1                      sector_found = maze_find_empty_sector();                        //find empty sector
+ 133   1                      flash_write(sector_found, FlashBuffer);                                 //write new sector
+ 134   1              } */
+ 135   1              _maze_map_base_addr = sector_found;
+ 136   1              //return sector_found;
+ 137   1      }
+ 138          
+ 139          uint16 maze_log2phys(uint16 laddr) _REENTRANT_ {                //convert logical ADDRESS to physical ADDRESS by iterati
+             -ng each sector, return -1 on not found
+ 140   1              #if 0
+                      uint16 sector_found = 0xFFFF;
+                      uint16 base_addr = 0;                   //jangan diutak-atik
+                      uchar cur_cntr = 0x80;
+                      flash_mark mark;
+                      uint16 l_sector = laddr / FLASH_LOG_PAGE_SIZE;                  //logical sector address
+                      if(maze_cache_laddr == l_sector) {                                              //already in cache
+                              //return ((maze_cache_paddr * FLASH_PHYS_PAGE_SIZE) + (laddr % FLASH_LOG_PAGE_SIZE));
+                      }
+                      read_next_sector:
+                      flash_read(base_addr + FLASH_LOG_PAGE_SIZE, &mark, sizeof(flash_mark));
+                      if(mark.tag == FLASH_SECTOR_TAG) {                      //valid sector tag
+                              if(mark.num == l_sector) {                              //sector.num equal logical id
+                                      if((cur_cntr & 0x80) && mark.cntr == 0) {                       //check counter
+                                              sector_found = base_addr + (laddr % FLASH_LOG_PAGE_SIZE);
+                                              cur_cntr = mark.cntr;   
+                                      } else {
+                                              if((cur_cntr & 0x7F) <= mark.cntr) { 
+                                                      sector_found = base_addr + (laddr % FLASH_LOG_PAGE_SIZE);
+                                                      cur_cntr = mark.cntr;
+                                              }
+                                      }
+                              }
+                      }
+                      base_addr += FLASH_PHYS_PAGE_SIZE;
+                      if(base_addr != 0) goto read_next_sector;
+                      maze_cache_laddr = l_sector;
+                      maze_cache_paddr = (sector_found / FLASH_PHYS_PAGE_SIZE);
+                      return sector_found;    
+                      #endif
+ 170   1              uint16 l_sector = laddr / FLASH_LOG_PAGE_SIZE;                  //logical sector address
+ 171   1              uint16 sector_found = 0xFFFF;
+ 172   1              if(_maze_map_base_addr != 0xFFFF) {
+ 173   2                      flash_read(_maze_map_base_addr + (l_sector * sizeof(uint16)), &sector_found, sizeof(uint16));
+*** WARNING C182 IN LINE 173 OF DRIVERS\IOMAN.C: pointer to different objects
+ 174   2              }
+ 175   1              return sector_found;
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 4   
+
+ 176   1      }
+ 177          
+ 178          uint16 maze_find_empty_sector() _REENTRANT_ {           //return empty sector physical base ADDRESS, can be used t
+             -o allocate new sector
+ 179   1              //_maze_base_addr = 0;
+ 180   1              static uint16 _maze_base_addr = 0;
+ 181   1              uint16 base_addr = 0;
+ 182   1              flash_mark mark;
+ 183   1              read_next_sector:
+ 184   1              flash_read(_maze_base_addr + FLASH_LOG_PAGE_SIZE, &mark, sizeof(flash_mark));
+*** WARNING C182 IN LINE 184 OF DRIVERS\IOMAN.C: pointer to different objects
+ 185   1              if(mark.tag != FLASH_SECTOR_TAG && mark.tag != FLASH_MAP_TAG) {                 //invalid sector tag (empty sector)
+ 186   2                      return _maze_base_addr;
+ 187   2              }
+ 188   1              base_addr += FLASH_PHYS_PAGE_SIZE;
+ 189   1              _maze_base_addr += FLASH_PHYS_PAGE_SIZE; 
+ 190   1              if(base_addr != 0) goto read_next_sector;
+ 191   1              return 0xFFFF;                                                                          //return -1 on not found
+ 192   1      }
+ 193          
+ 194          void ioman_read_buffer(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+ 195   1              #if 0
+                      MMU_SEL=1;
+                      if((pos ^ (pos + length)) & 0x8000) { 
+                              rP3 = 1;                                                                        //update bank 1
+                              ReadFlash(IOBuf, (pos | 0x8000), 0x8000 - pos);
+                              rP3 = 2;                                                                        //update bank 2
+                              temp_pos = 0x8000 - pos;
+                              ReadFlash(IOBuf + temp_pos, 0x8000, (pos + length) - 0x8000);
+                              //memcpy(bytes, IOBuf, length);
+                      } else {
+                              if(pos & 0x8000) {
+                                              rP3 = 2;
+                                              //ptr = pos;
+                              } else {
+                                              rP3 = 1;
+                                              pos |= 0x8000;
+                              }
+                              ReadFlash(IOBuf, pos, length);
+                      }       
+                      memcpy(bytes, IOBuf, length);
+                      #endif
+ 216   1              uint16 paddr = 0;
+ 217   1              uint16 base_addr, bytes_read;
+ 218   1              uint16 offset = 0, p_offset = 0;
+ 219   1              p_offset = (pos % FLASH_LOG_PAGE_SIZE);
+ 220   1              read_next_sector:
+ 221   1              paddr = maze_log2phys(pos);
+ 222   1              base_addr = pos / FLASH_LOG_PAGE_SIZE;                          //num of sector
+ 223   1              base_addr = base_addr * FLASH_LOG_PAGE_SIZE;            //base sector address for this address
+ 224   1              bytes_read = (base_addr + FLASH_LOG_PAGE_SIZE) - pos;                   //number of bytes that can be read
+ 225   1              paddr = paddr + p_offset;
+ 226   1              if(bytes_read > length) {
+ 227   2                      flash_read(paddr, bytes + offset, length);                      //read phys address
+ 228   2              } else {
+ 229   2                      flash_read(paddr, bytes + offset, bytes_read);                  //read phys address
+ 230   2                      p_offset = 0;
+ 231   2                      pos += bytes_read;
+ 232   2                      length = length - bytes_read;
+ 233   2                      offset += bytes_read;
+ 234   2                      goto read_next_sector;
+ 235   2              }
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 5   
+
+ 236   1      }
+ 237          
+ 238          //extern BYTEC  SW[12];
+ 239          //uint16 ioman_write_buffer(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+ 240          uint16 ioman_write_buffer(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+ 241   1              #if 0
+                      MMU_SEL=1;
+                      if((pos ^ (pos + length)) & 0x8000) { 
+                              rP3 = 1;                                                                        //update bank 1
+                              if(UpdateFlash((pos | 0x8000), bytes, (0x8000 - pos)) != SUCCESS) return APDU_FLASH_WERROR;
+                              rP3 = 2;                                                                        //update bank 2
+                              temp_pos = 0x8000 - pos;
+                              //length = (pos + length) - 0x8000;
+                              if(UpdateFlash(0x8000, bytes + temp_pos, (pos + length) - 0x8000) != SUCCESS) return APDU_FLASH_WERROR;
+                      } else {
+                              if(pos & 0x8000) {
+                                              rP3 = 2;
+                                              //ptr = pos;
+                              } else {
+                                              rP3 = 1;
+                                              pos |= 0x8000;
+                              }
+                              //UpdateFlash(ptr, bytes, length);
+                              //memcopy(IOBuf, bytes, 0, length);
+                              if(UpdateFlash(pos, bytes, length) != SUCCESS) return APDU_FLASH_WERROR;
+                      }
+                      return APDU_SUCCESS;
+                      #endif
+ 264   1              uint16 status = APDU_SUCCESS;
+ 265   1              uint16 paddr = 0;
+ 266   1              uint16 base_laddr, bytes_write, base_paddr;
+ 267   1              uint16 new_base_paddr;
+ 268   1              uint16 l_offset = 0, p_offset = 0;
+ 269   1              write_next_sector:
+ 270   1              paddr = maze_log2phys(pos);
+ 271   1              base_laddr = pos / FLASH_LOG_PAGE_SIZE;                         //num of sector
+ 272   1              base_laddr = base_laddr * FLASH_LOG_PAGE_SIZE;          //base sector address for this address 
+ 273   1              if(paddr == 0xFFFF) {                                                           //physical address not found, initialize new flash_sector
+ 274   2                      memset(FlashBuffer, 0xff, FLASH_PHYS_PAGE_SIZE);
+ 275   2                      ((flash_sector *)FlashBuffer)->mark.num = (pos / FLASH_LOG_PAGE_SIZE);
+ 276   2                      ((flash_sector *)FlashBuffer)->mark.cntr = 0x80;
+ 277   2                      ((flash_sector *)FlashBuffer)->mark.tag = FLASH_SECTOR_TAG;
+ 278   2                      base_paddr = maze_find_empty_sector();                  //find empty sector
+ 279   2              } else {                                                                                        //physical address found, read sector physical address
+ 280   2                      base_paddr = paddr / FLASH_PHYS_PAGE_SIZE;                              //num of sector
+ 281   2                      base_paddr = base_paddr * FLASH_PHYS_PAGE_SIZE;         //base sector address for this address
+ 282   2                      flash_read(base_paddr, FlashBuffer, FLASH_PHYS_PAGE_SIZE);                      //read phys address
+ 283   2              }
+ 284   1              bytes_write = (base_laddr + FLASH_LOG_PAGE_SIZE) - pos;
+ 285   1              new_base_paddr = maze_find_empty_sector();
+ 286   1              if(new_base_paddr == 0xFFFF) new_base_paddr = base_paddr;               //cannot find empty sector, use current sector
+ 287   1              if(new_base_paddr == 0xFFFF) return APDU_FLASH_WERROR;
+ 288   1              if(bytes_write > length) {
+ 289   2                      p_offset = pos - base_laddr;
+ 290   2                      memcpy(FlashBuffer + p_offset, bytes + l_offset, length);
+ 291   2                      //increment counter to prevent redundant data and sequence validator
+ 292   2                      if(((flash_sector *)FlashBuffer)->mark.cntr & 0x80) {
+ 293   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0;           //recycle counter
+ 294   3                      } else {
+ 295   3                              ((flash_sector *)FlashBuffer)->mark.cntr++;
+ 296   3                      }
+ 297   2                      status = flash_write(new_base_paddr, FlashBuffer);                                      //write new sector
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 6   
+
+ 298   2                      if(status != APDU_SUCCESS) return status; 
+ 299   2                      //maze_cache_laddr = (pos / FLASH_LOG_PAGE_SIZE);
+ 300   2                      //maze_cache_paddr = (new_base_paddr / FLASH_PHYS_PAGE_SIZE);
+ 301   2                      if(base_paddr != new_base_paddr) {                                                                      //check if new sector = old sector
+ 302   3                              status = flash_erase(base_paddr);                                                                       //erase old sector
+ 303   3                              if(status != APDU_SUCCESS) return status;
+ 304   3                      }
+ 305   2      
+ 306   2                      /////////////////////    UPDATE MAZE MAP    /////////////////////        
+ 307   2                      p_offset = (pos / FLASH_LOG_PAGE_SIZE);
+ 308   2                      if(_maze_map_base_addr == 0xFFFF) {                             
+ 309   3                              memset(FlashBuffer, 0xff, FLASH_PHYS_PAGE_SIZE);
+ 310   3                              ((flash_sector *)FlashBuffer)->mark.num = (pos / FLASH_LOG_PAGE_SIZE);
+ 311   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0x80;
+ 312   3                              ((flash_sector *)FlashBuffer)->mark.tag = FLASH_MAP_TAG;
+ 313   3                              //_maze_map_base_addr = maze_find_empty_sector();                       //find empty sector
+ 314   3                      } else {
+ 315   3                              flash_read(_maze_map_base_addr, FlashBuffer, FLASH_PHYS_PAGE_SIZE);                     //read phys address
+ 316   3                      }
+ 317   2                      *((uint16 *)FlashBuffer + p_offset) = new_base_paddr;                                   //set new table physical address mapping
+ 318   2                      new_base_paddr = maze_find_empty_sector();                                                      //find empty sector     for table
+ 319   2                      //increment counter to prevent redundant data and sequence validator
+ 320   2                      if(((flash_sector *)FlashBuffer)->mark.cntr & 0x80) {
+ 321   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0;           //recycle counter
+ 322   3                      } else {
+ 323   3                              ((flash_sector *)FlashBuffer)->mark.cntr++;
+ 324   3                      }
+ 325   2                      status = flash_write(new_base_paddr, FlashBuffer);                                      //write new sector
+ 326   2                      if(status != APDU_SUCCESS) return status; 
+ 327   2                      base_paddr = _maze_map_base_addr;
+ 328   2                      _maze_map_base_addr = new_base_paddr;                                                   //set maze map pointer to new table map
+ 329   2                      if(new_base_paddr != base_paddr) {                                                                      //check if new sector = old sector
+ 330   3                              status = flash_erase(base_paddr);                                               //erase old sector (old map)
+ 331   3                              if(status != APDU_SUCCESS) return status;
+ 332   3                      }
+ 333   2                      //////////////////    END OF UPDATE MAZE MAP    //////////////////
+ 334   2      
+ 335   2                      p_offset = 0;
+ 336   2              } else {
+ 337   2                      p_offset = pos - base_laddr;
+ 338   2                      memcpy(FlashBuffer + p_offset, bytes + l_offset, bytes_write); 
+ 339   2                      //increment counter to prevent redundant data and sequence validator
+ 340   2                      if(((flash_sector *)FlashBuffer)->mark.cntr & 0x80) {
+ 341   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0;           //recycle counter
+ 342   3                      } else {
+ 343   3                              ((flash_sector *)FlashBuffer)->mark.cntr++;
+ 344   3                      }
+ 345   2                      status = flash_write(new_base_paddr, FlashBuffer);                                      //write new sector       
+ 346   2                      if(status != APDU_SUCCESS) return status;
+ 347   2                      status = flash_erase(base_paddr);                                                                       //erase old sector
+ 348   2                      if(status != APDU_SUCCESS) return status;
+ 349   2      
+ 350   2                      /////////////////////    UPDATE MAZE MAP    /////////////////////                
+ 351   2                      p_offset = (pos / FLASH_LOG_PAGE_SIZE);
+ 352   2                      if(_maze_map_base_addr == 0xFFFF) {                             
+ 353   3                              memset(FlashBuffer, 0xff, FLASH_PHYS_PAGE_SIZE);
+ 354   3                              ((flash_sector *)FlashBuffer)->mark.num = (pos / FLASH_LOG_PAGE_SIZE);
+ 355   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0x80;
+ 356   3                              ((flash_sector *)FlashBuffer)->mark.tag = FLASH_MAP_TAG;
+ 357   3                              _maze_map_base_addr = maze_find_empty_sector();                         //find empty sector
+ 358   3                      } else {
+ 359   3                              flash_read(_maze_map_base_addr, FlashBuffer, FLASH_PHYS_PAGE_SIZE);                     //read phys address
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 7   
+
+ 360   3                      }
+ 361   2                      *((uint16 *)FlashBuffer + p_offset) = new_base_paddr;                                   //set new table physical address mapping
+ 362   2                      new_base_paddr = maze_find_empty_sector();                                                      //find empty sector     for table
+ 363   2                      //increment counter to prevent redundant data and sequence validator
+ 364   2                      if(((flash_sector *)FlashBuffer)->mark.cntr & 0x80) {
+ 365   3                              ((flash_sector *)FlashBuffer)->mark.cntr = 0;           //recycle counter
+ 366   3                      } else {
+ 367   3                              ((flash_sector *)FlashBuffer)->mark.cntr++;
+ 368   3                      }
+ 369   2                      status = flash_write(new_base_paddr, FlashBuffer);                                      //write new sector
+ 370   2                      if(status != APDU_SUCCESS) return status;       
+ 371   2                      base_paddr = _maze_map_base_addr;
+ 372   2                      _maze_map_base_addr = new_base_paddr;                                                   //set maze map pointer to new table map
+ 373   2                      if(new_base_paddr != base_paddr) {                                                                      //check if new sector = old sector
+ 374   3                              status = flash_erase(base_paddr);                                               //erase old sector (old map)
+ 375   3                              if(status != APDU_SUCCESS) return status;
+ 376   3                      }
+ 377   2                      //////////////////    END OF UPDATE MAZE MAP    //////////////////
+ 378   2      
+ 379   2                      p_offset = 0;                                   //clear physical offset
+ 380   2                      pos += bytes_write;
+ 381   2                      length = length - bytes_write; 
+ 382   2                      l_offset += bytes_write;
+ 383   2                      goto write_next_sector;
+ 384   2              }
+ 385   1      
+ 386   1              return status;
+ 387   1      } 
+ 388          
+ 389          void ioman_erase_page(uint16 pos) {
+ 390   1              #if 0
+                      uint16 ptr = 0; // = pos + 0x2000;
+                      MMU_SEL=1;
+                      if(pos & 0x8000) {
+                                      rP3 = 2;
+                                      ptr = pos;
+                      } else {
+                                      rP3 = 1;
+                                      ptr = pos | 0x8000;
+                      }
+                      Erase_Page((BYTEX *)(ptr & 0xFE00));
+                      #endif
+ 402   1              flash_erase(pos);
+ 403   1      }
+ 404          
+ 405          uint16 ioman_write_program(uint16 pos, ucharx * bytes, uint16 length) _REENTRANT_ {
+ 406   1              uint16 ptr;
+ 407   1              //uchar i;
+ 408   1              //ptr = pos + 0x8000;
+ 409   1              switch((uchar)(pos >> 12)) {
+ 410   2                      case 0:
+ 411   2                      case 1:
+ 412   2                              rP3=6;    //XDATA 8000-FFFFh --> 0000-1FFFh
+ 413   2                              MMU_SEL = 0x01;
+ 414   2                              ptr = pos + 0x8000;
+ 415   2                              break;
+ 416   2                      case 2:
+ 417   2                      case 3:
+ 418   2                      case 4:
+ 419   2                      case 5:
+ 420   2                      case 6:
+ 421   2                      case 7:
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 8   
+
+ 422   2                              MMU_SEL = 0x01;
+ 423   2                              ptr = pos;
+ 424   2                              break;
+ 425   2                      case 8:
+ 426   2                      case 9:
+ 427   2                      case 0xA:
+ 428   2                      case 0xB:
+ 429   2                      case 0xC:
+ 430   2                      case 0xD:
+ 431   2                      case 0xE:
+ 432   2                      case 0xF:
+ 433   2                      default:
+ 434   2                              rP3 = 0; 
+ 435   2                              MMU_SEL = 0x01;
+ 436   2                              ptr = pos;
+ 437   2                              break;
+ 438   2              }
+ 439   1              if(UpdateFlash(ptr, bytes, length) != SUCCESS) return APDU_FLASH_WERROR;
+ 440   1              return APDU_SUCCESS;
+ 441   1      }
+ 442          
+ 443          uint16 ioman_program_copy(uint16 dest, uint16 src, uint16 length) _REENTRANT_ {
+ 444   1              dest = dest & 0xFE00;
+ 445   1              src = src & 0xFE00;
+ 446   1              length = length & 0xFE00;  
+ 447   1              rP3 = 0; 
+ 448   1              MMU_SEL = 0x01;
+ 449   1              for(length; length != 0; length -= 0x200) {
+ 450   2                      memcpy(FlashBuffer, (BYTEX *)((src + length) - 0x200), 0x200);
+ 451   2                      if(Erase_Page((BYTEX *)((dest + length) - 0x200)) != SUCCESS) return APDU_FLASH_WERROR;
+ 452   2                      if(Write_Bytes((BYTEX *)((dest + length) - 0x200), FlashBuffer, 0x200) != SUCCESS) return APDU_FLASH_WER
+             -ROR;
+ 453   2              }
+ 454   1              return APDU_SUCCESS;
+ 455   1      }
+ 456          
+ 457          void ioman_set_to_bootloader(void) {
+ 458   1              ReturnToBL();
+ 459   1      }
+ 460          
+ 461          void ioman_write_pos(uint16 pos, char byte)
+ 462          {
+ 463   1              /*#ifdef _X86_ARCH
+ 464   1              fseek(eeprom, pos, SEEK_SET );  
+ 465   1              fputc(byte, eeprom);
+ 466   1              #endif */
+ 467   1              //UpdateFlash(pos,BYTE * RAMbuf,BYTE length)
+ 468   1      }
+*** WARNING C280 IN LINE 461 OF DRIVERS\IOMAN.C: 'pos': unreferenced local variable
+*** WARNING C280 IN LINE 461 OF DRIVERS\IOMAN.C: 'byte': unreferenced local variable
+ 469          
+ 470          #ifdef _YGGDRASIL_MICRO_KERNEL          //prosedur/fungsi berikut didalam sistem operasi
+ 471          
+ 472          
+ 473          void ioman_transmit(uchar size, uchar ins, char * buffer, uint16 status) _REENTRANT_
+ 474          {
+ 475   1              /*#ifdef _X86_ARCH
+ 476   1              uint16 i;
+ 477   1              for(i=0;i<size;i++)
+ 478   1              {
+ 479   1                      printf("%02x ", (uchar)buffer[i]);
+ 480   1              }
+C51 COMPILER V7.01  IOMAN                                                                  01/27/2014 09:04:14 PAGE 9   
+
+ 481   1              printf("SW1 : %02x, SW2 : %02x\n", status/256, status%256);
+ 482   1              #endif */
+ 483   1              //send_byte(ins);                                               //      Procedure byte in Case 2 APDU,followed with Le data
+ 484   1              if(size > 0) {
+ 485   2                      send_byte(ins);
+ 486   2                      Tx_n_Bytes(size,buffer);
+ 487   2              }
+ 488   1              Tx_Status(status);
+ 489   1      }
+ 490          
+ 491          #if 0
+              uchar ioman_receive(uchar * buffer)
+              {
+                      /*#ifdef _X86_ARCH
+                      uchar c;
+                      uchar i=0;
+                      ulang_get_key:
+                      //printf("%i\n", i);
+                              buffer[i] = 0x00;
+                              c = gethex();
+                              if(c==0x10) { goto exit_while; } else {
+                                      buffer[i] = ((c & 0x0F) << 4); 
+                              }
+                              c = gethex();
+                              if(c==0x10) { goto exit_while; } else {
+                                      buffer[i] |= (c & 0x0F); 
+                              }
+                              printf(" ");
+                              i++;
+                      goto ulang_get_key;
+                      exit_while:
+                      printf("\n");
+                      return i;
+                      #else
+                      return 0;
+                      #endif */
+              }
+              #endif
+ 519          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3984    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     15    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  5 WARNING(S),  0 ERROR(S)

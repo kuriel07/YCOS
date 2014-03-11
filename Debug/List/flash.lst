@@ -1,0 +1,104 @@
+C51 COMPILER V7.01  FLASH                                                                  01/25/2014 09:07:15 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE FLASH
+OBJECT MODULE PLACED IN .\Debug\Output\flash.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE drivers\flash.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\flash.lst) OBJECT(.\Debug\Output\flash.obj)
+
+stmt level    source
+
+   1          #include "flash.h"       
+   2          #include <string.h>
+   3          
+   4          //#define       FlashStart      0x00000
+   5          //#define       FlashLimit      0x10000
+   6          
+   7          uint16 temp_pos;
+   8          void flash_read(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+   9   1              //uint16 len;
+  10   1              MMU_SEL=1;
+  11   1              /*if((pos ^ (pos + length)) & 0x8000) { 
+  12   1                      rP3 = 1;                                                                        //update bank 1
+  13   1                      //ReadFlash(IOBuf, (pos | 0x8000), 0x8000 - pos);
+  14   1                      temp_pos = 0x8000 - pos;
+  15   1                      if(temp_pos == 0) {
+  16   1                              memcpy(bytes, (BYTEX *)(pos | 0x8000), FLASH_PHYS_PAGE_SIZE);
+  17   1                      } else {
+  18   1                              memcpy(bytes, (BYTEX *)(pos | 0x8000), 0x8000 - pos);
+  19   1                      }
+  20   1                      //if((FlashAddr >= FlashStart) && (FlashAddr < FlashLimit)) memcpy(ramAddr,(BYTEX *)FlashAddr,length);
+  21   1                      rP3 = 2;                                                                        //update bank 2
+  22   1                      temp_pos = 0x8000 - pos;
+  23   1                      //ReadFlash(IOBuf + temp_pos, 0x8000, (pos + length) - 0x8000);
+  24   1                      memcpy(bytes, (BYTEX *)(pos | 0x8000), (pos + length) - 0x8000);
+  25   1              } else {         */
+  26   1              if(pos & 0x8000) {
+  27   2                      rP3 = 2;
+  28   2                              //ptr = pos;
+  29   2              } else {
+  30   2                      rP3 = 1;
+  31   2                              //pos |= 0x8000;
+  32   2              }
+  33   1              //ReadFlash(IOBuf, pos, length);
+  34   1              memcpy(bytes, (BYTEX *)(pos | 0x8000), length);
+  35   1              //}     
+  36   1              //memcpy(bytes, IOBuf, length);
+  37   1      }
+  38          //BYTE  Write_Bytes(BYTEX * pDest, BYTEX * pSrc, HALFW len)
+  39          uint16 flash_write(uint16 pos, uchar * bytes) _REENTRANT_ {
+  40   1              uchar cntr=0;
+  41   1              MMU_SEL=1;
+  42   1              if(pos & 0x8000) {
+  43   2                      rP3 = 2;
+  44   2                      pos |= 0x8000;
+  45   2              } else {
+  46   2                      rP3 = 1;
+  47   2                      pos |= 0x8000;
+  48   2              }
+  49   1              restart_flash_write:
+  50   1              if(Write_Bytes((BYTEX *)pos, bytes, FLASH_PHYS_PAGE_SIZE) != SUCCESS) {
+  51   2                      if(++cntr > 3) return APDU_FLASH_WERROR;
+  52   2                      goto restart_flash_write; 
+  53   2              }
+  54   1              return APDU_SUCCESS;
+C51 COMPILER V7.01  FLASH                                                                  01/25/2014 09:07:15 PAGE 2   
+
+  55   1      }
+  56          
+  57          uint16 flash_erase(uint16 pos) _REENTRANT_ {
+  58   1              //uint16 ptr = 0;       // = pos + 0x2000;
+  59   1              uchar cntr = 0;
+  60   1              MMU_SEL=1;
+  61   1              if(pos & 0x8000) {
+  62   2                      rP3 = 2;
+  63   2                      pos = pos;
+  64   2              } else {
+  65   2                      rP3 = 1;
+  66   2                      pos = pos | 0x8000;
+  67   2              }
+  68   1              restart_flash_erase:
+  69   1              if(Erase_Page((BYTEX *)(pos & 0xFE00)) != SUCCESS) {
+  70   2                      if(++cntr > 3) return APDU_FLASH_WERROR;
+  71   2                      goto restart_flash_erase; 
+  72   2              }
+  73   1              return APDU_SUCCESS;
+  74   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    332    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      2    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

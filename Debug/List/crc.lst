@@ -1,0 +1,81 @@
+C51 COMPILER V7.01  CRC                                                                    01/25/2014 09:07:15 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE CRC
+OBJECT MODULE PLACED IN .\Debug\Output\crc.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE auth\crc.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\D
+                    -ebug\List\crc.lst) OBJECT(.\Debug\Output\crc.obj)
+
+stmt level    source
+
+   1          #include "crc.h"  
+   2          //#include "..\..\defs.h"
+   3          //#include "..\..\YGGSYS\yggapis.h"
+   4          //#include "..\liquid.h"
+   5          #include <stdlib.h>
+   6          
+   7          static uint32 lGenCRC32(uint32 lOldCRC, uchar ByteVal) _REENTRANT_ {
+   8   1              uint32 TabVal;
+   9   1              uchar j;
+  10   1              TabVal = ((lOldCRC) ^ ByteVal) & 0xFF;
+  11   1              for(j=8; j>0; j--) {
+  12   2                      if(TabVal & 1) {
+  13   3                              TabVal = (TabVal >> 1) ^ 0xEDB88320;
+  14   3                      } else {
+  15   3                              TabVal >>= 1;
+  16   3                      }
+  17   2              }
+  18   1              return TabVal ^ ((lOldCRC >> 8) & 0x00FFFFFF);
+  19   1      }
+  20          
+  21          #if CRC32_PROCESS_MEMORY
+  22          uint32 CalCRC32(uchar * SrcAddr, uint16 length) _REENTRANT_ {
+  23   1              uint32 crc32;
+  24   1              uint16 ii;
+  25   1              crc32 = 0xFFFFFFFF;             //pre-conditioning
+  26   1              for(ii = 0; ii < length; ii++)
+  27   1                      crc32 = lGenCRC32(crc32, SrcAddr[ii]);
+  28   1              crc32 = ~crc32;                         //post-conditioning
+  29   1              return crc32;
+  30   1      }
+  31          #endif
+  32          
+  33          #if CRC32_PROCESS_FILE
+  34          uint32 FileCRC32(fs_handle * handle, uint16 length, uint16 offset) _REENTRANT_ {
+  35   1              uint32 crc32;
+  36   1              uint16 ii;
+  37   1              uchar jj;
+  38   1              uchar buffer[16];
+  39   1              crc32 = 0xFFFFFFFF;             //pre-conditioning
+  40   1              for(ii = 0; ii < length; ii+=16) {
+  41   2                      _readbin(handle, offset+ii, buffer, 16);
+  42   2                      for(jj = 0 ;jj < 16 && (ii+jj) < length; jj++) {
+  43   3                              crc32 = lGenCRC32(crc32, buffer[jj]);
+  44   3                      }
+  45   2              }
+  46   1              crc32 = ~crc32;                         //post-conditioning
+  47   1              return crc32;
+  48   1      }
+  49          #endif
+  50          
+  51           
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V7.01  CRC                                                                    01/25/2014 09:07:15 PAGE 2   
+
+   CODE SIZE        =    571    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

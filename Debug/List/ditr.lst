@@ -1,0 +1,53 @@
+C51 COMPILER V7.01  DITR                                                                   01/25/2014 09:07:28 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE DITR
+OBJECT MODULE PLACED IN .\Debug\Output\ditr.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE plugins\ditr.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT
+                    -(.\Debug\List\ditr.lst) OBJECT(.\Debug\Output\ditr.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+   2          #include "..\config.h"
+   3          #include "..\midgard\midgard.h"
+   4          #include "..\asgard\file.h"
+   5          #include "..\liquid.h"
+   6          #include "..\framework\VAS.h"
+   7          #include "..\framework\SMS.h" 
+   8          #include "..\framework\dcs.h"
+   9          #include "ditr.h"
+  10          
+  11          #if VAS_DITR_ALLOCATED
+              
+              uchar ditr_decode(void) _REENTRANT_ {                    //return response length, 0 on no response (automatically execute
+             - next command)         
+                      extern uchar * vas_cistr;                       //current input string
+                      extern uchar vas_cvid;                          //current variable id
+                      uchar j = 0;
+                      if(vas_cistr == NULL) goto exit_plugin;
+                      j += VAS_push_header(j, (DISPLAY_TEXT & 0x7F), 0x80, STK_DEV_DISPLAY);
+                      j += SAT_file_push(j, (STK_TAG_TEXT_STRING & 0x7F), vas_cistr[0], vas_cistr + 1);
+                      exit_plugin:
+                      VAS_exit_plugin;
+                      return j;                                       //0 => next instruction (no response), 
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

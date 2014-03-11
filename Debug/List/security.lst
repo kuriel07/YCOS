@@ -1,0 +1,808 @@
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE SECURITY
+OBJECT MODULE PLACED IN .\Debug\Output\security.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE asgard\security.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PR
+                    -INT(.\Debug\List\security.lst) OBJECT(.\Debug\Output\security.obj)
+
+stmt level    source
+
+   1          #include "security.h"
+   2          #include "..\defs.h"
+   3          #include "..\config.h"
+   4          #include "..\drivers\ioman.h"
+   5          #include "fs.h"
+   6          #include "..\auth\des.h"
+   7          #include "..\yggdrasil\yggdrasil.h"
+   8          #include "..\misc\barrenkalaheapcalc.h"
+   9          #include "..\midgard\midgard.h"
+  10          #include "..\misc\mem.h"
+  11          #include <string.h>
+  12          
+  13          #if ASGARD_VERSION == 2
+              #if USE_SHARED_VAR
+              BYTEC padding[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+              uint16 cluster_no;
+              uchar * str;
+              uint16 i;
+              chv_file *cf;
+              uchar buffer[8];
+              uchar status;
+              #endif
+              
+              uint16 getCHVcluster(uchar no)
+              {
+                      return (((table.partition_size - 512)/CLUSTER_SIZE)) - no;  
+              }
+              
+              uint16 createCHV(uchar no, char *pin, char *puk, uchar pin_max_retry, uchar puk_max_retry) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      char padding[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+                      uint16 cluster_no;
+                      char * str;
+                      uint16 i;
+                      chv_file *cf;
+                      char buffer[8];
+                      #endif
+                      cf = (chv_file *)m_alloc(sizeof(chv_file));
+                      #if _DMA_DEBUG
+                      barren_insert(cf, sizeof(chv_file));
+                      #endif
+                      cluster_no = getCHVcluster(no);
+                      //printf("cluster no for chv %i is %i\n", no, cluster_no);
+                      fs_write_available_space(cluster_no, TRUE);
+                      str = (char *) cf;
+                      cf->type = T_CHV;
+                      cf->chv_no = no & 0x0F;
+                      if(cf->chv_no == ACC_ALW) {
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return FILE_CANNOT_BE_CREATED;
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 2   
+
+                      }
+                      cf->status = CHV_DISABLE;
+                      memcopy(buffer, padding, 0, 8);                         //dienkripsi dengan des
+                      memcopy(buffer, pin, 0, strlen(pin) );
+                      //auth_DEShash( cf->pin, CHV_KEY, buffer);
+                      /*decrypt_DEShash(buffer, CHV_KEY, cf->pin);
+                      for(i=0;i<8;i++)
+                      {
+                              printf("%x ", (uchar)buffer[i]);
+                      }
+                      printf("\n");*/
+                              
+                      memcopy(buffer, padding, 0, 8);                         //dienkripsi dengan des
+                      memcopy(buffer, puk, 0, strlen(puk) );
+                      //auth_DEShash( cf->puk, CHV_KEY, buffer);
+                      memcopy(cf->pin, buffer, 0, 8);
+                      //memcopy(cf->puk, padding, 0, 8);
+                      cf->pin_attempts = 0;
+                      cf->puk_attempts = 0;
+                      cf->pin_max_attempts = pin_max_retry;
+                      cf->puk_max_attempts = puk_max_retry;
+                      
+                      /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                      for(i=0;i<sizeof(chv_file);i++)
+                      {
+                              ioman_write(*(str++));
+                      }*/
+                      ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return cluster_no;
+              }
+              
+              chv_file * file_get_chv(uint16 cluster_no)
+              {
+                      chv_file *newfile;
+                      char *str;
+                      uchar i;
+                      newfile = (chv_file *) m_alloc (sizeof(chv_file));
+                      #if _DMA_DEBUG
+                      barren_insert(newfile, sizeof(chv_file));
+                      #endif
+                      str = (char *)newfile;
+                      /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                      for(i=0;i<sizeof(chv_file);i++)
+                      {
+                              *(str++) = ioman_read();
+                      }*/
+                      ioman_read_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                      return newfile; //jangan dihapus karena akan dipakai
+              }
+              
+              uchar getCHVstatus(uchar chv_no)
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      chv_file * cf;
+                      #endif
+                      chv_no &= 0x0f;
+                      #ifdef _YGGDRASIL_MICRO_KERNEL          //fungsi ini dijalankan didalam sistem operasi
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 3   
+
+                      if(v_chv_status[chv_no] == CHV_VERIFIED) {
+                              return CHV_VERIFIED;
+                      }
+                      #endif
+                      cf = file_get_chv(getCHVcluster(chv_no));
+                      if(chv_no == ACC_ALW) {
+                              status = CHV_ALWAYS;
+                      } else if(chv_no == ACC_NVR) {
+                              status = CHV_NEVER;
+                      } else {
+                              status = cf->status;
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              uchar verifyCHV(uchar chv_no, char *pin) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      char * str;
+                      uint16 i;
+                      uint16 cluster_no;
+                      chv_file * cf;
+                      char buffer[8];
+                      #endif
+                      chv_no &= 0x0f; 
+                      if(chv_no == ACC_ALW) {
+                              return CHV_DISABLE;
+                      }
+                      cluster_no = getCHVcluster(chv_no);
+                      cf = file_get_chv(cluster_no);
+                      str = (char *) cf;
+                      if(cf->status == CHV_BLOCK) {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+                      }
+                      //auth_DEShash(buffer, CHV_KEY, pin);
+                      //memcopy(pin, buffer, 0, 8);
+              
+                      if(memcompare(cf->pin, pin, 0, 8)==TRUE) {
+                              cf->pin_attempts = 0;
+                              status = cf->status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              } */
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              ///if(status != CHV_DISABLE) {
+                                      #ifdef _YGGDRASIL_MICRO_KERNEL          //fungsi ini dijalankan didalam sistem operasi
+                                      v_chv_status[chv_no] = CHV_VERIFIED;    //set status chv didalam kernel menjadi CHV_VERIFIED
+                                      #endif
+                                      status = CHV_VERIFIED;
+                              //}
+                      } else {
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 4   
+
+                              cf->pin_attempts += 1;
+                              status = cf->status;
+                              if(cf->pin_attempts >= cf->pin_max_attempts) {
+                                      status = CHV_BLOCK;
+                              }
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              status = CHV_PIN_FAILED;
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              uchar enableCHV(uchar chv_no, char *pin) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      char * str;
+                      uint16 i;
+                      uint16 cluster_no;
+                      chv_file * cf;
+                      #endif
+                      //char buffer[8];
+                      chv_no &= 0x0f;
+                      
+                      //auth_DEShash( buffer, CHV_KEY, pin);
+                      //memcopy(pin, buffer, 0, 8);
+                      if(chv_no == ACC_ALW) {
+                              return CHV_DISABLE;
+                      }
+                      cluster_no = getCHVcluster(chv_no);
+                      cf = file_get_chv(cluster_no);
+                      str = (char *) cf;
+                      if(chv_no != ACC_CHV1)  //selain chv1 yang lain tidak dapat didisable/enable
+                      {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+                      }
+                      if(cf->status == CHV_BLOCK) {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+                      }
+              
+              
+                      if(memcompare(cf->pin, pin, 0, 8)==TRUE) {
+                              cf->pin_attempts = 0;
+                              status = CHV_ENABLE;
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 5   
+
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                      } else {
+                              cf->pin_attempts += 1;
+                              status = cf->status;
+                              if(cf->pin_attempts >= cf->pin_max_attempts) {
+                                      status = CHV_BLOCK;
+                              }
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              status = CHV_PIN_FAILED;
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              uchar disableCHV(uchar chv_no, char *pin) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      char * str;
+                      uint16 i;
+                      uint16 cluster_no;
+                      chv_file * cf;
+                      #endif
+                      //char buffer[8];
+                      chv_no &= 0x0f;
+                      
+                      //auth_DEShash( buffer, CHV_KEY, pin);
+                      //memcopy(pin, buffer, 0, 8);
+                      if(chv_no == ACC_ALW) {
+                              return CHV_DISABLE;
+                      }
+                      cluster_no = getCHVcluster(chv_no);
+                      cf = file_get_chv(cluster_no);
+                      str = (char *) cf;
+                      if(chv_no != ACC_CHV1)  //selain chv1 yang lain tidak dapat didisable/enable
+                      {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+                      }
+                      if(cf->status == CHV_BLOCK) {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 6   
+
+                              return status;
+                      }
+              
+                      if(memcompare(cf->pin, pin, 0, 8)==TRUE) {
+                              cf->pin_attempts = 0;
+                              status = CHV_DISABLE;
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                      } else {
+                              cf->pin_attempts += 1;
+                              status = cf->status;
+                              if(cf->pin_attempts >= cf->pin_max_attempts) {
+                                      status = CHV_BLOCK;
+                              }
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }  */
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              status = CHV_PIN_FAILED;
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              uchar unblockCHV(uchar chv_no, char *pin, char *puk) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      char * str;
+                      uint16 i;
+                      uint16 cluster_no;
+                      chv_file * cf;
+                      char buffer[8];
+                      #endif
+                      chv_no &= 0x0f;
+                      //printf(puk)
+                      //auth_DEShash( buffer, CHV_KEY, pin);
+                      //memcopy(pin, buffer, 0, 8);
+                      //auth_DEShash( buffer, CHV_KEY, puk);
+                      //memcopy(puk, buffer, 0, 8);
+                      if(chv_no == ACC_ALW) {
+                              return CHV_DISABLE;
+                      }
+                      cluster_no = getCHVcluster(chv_no);
+                      cf = file_get_chv(cluster_no);
+                      str = (char *) cf;
+                      if(cf->status != CHV_BLOCK) {
+                              status = cf->status;
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 7   
+
+                      }
+                      if(cf->puk_attempts < cf->puk_max_attempts) {
+                              if(memcompare(cf->puk, puk, 0, 8)==TRUE) {
+                                      cf->pin_attempts = 0;
+                                      cf->puk_attempts = 0;
+                                      if(chv_no == ACC_CHV1) {
+                                              status = CHV_ENABLE;
+                                      } else {
+                                              status = CHV_DISABLE;   //kondisi default semua chv kecuali chv1
+                                      }
+                                      memcopy(cf->pin, pin, 0, 8);    //new pin value
+                                      cf->status = status;
+                                      /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                                      for(i=0;i<sizeof(chv_file);i++) {
+                                              ioman_write(*(str++));
+                                      }*/
+                                      ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              } else {
+                                      cf->puk_attempts += 1;
+                                      /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                                      for(i=0;i<sizeof(chv_file);i++) {
+                                              ioman_write(*(str++));
+                                      }*/
+                                      ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                                      status = CHV_PUK_FAILED;
+                              }
+                      }
+                      else
+                      {
+                              status = CHV_PUK_FAILED;        //puk is blocked
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              uchar changeCHV(uchar chv_no, char *pin1, char *pin2) _REENTRANT_
+              {
+                      #if !USE_SHARED_VAR
+                      uchar status;
+                      char * str;
+                      uint16 i;
+                      uint16 cluster_no;
+                      chv_file * cf;
+                      char buffer[8];
+                      #endif
+                      chv_no &= 0x0f;
+                      
+                      //auth_DEShash( buffer, CHV_KEY, pin1);
+                      //memcopy(pin1, buffer, 0, 8);
+                      //auth_DEShash( buffer, CHV_KEY, pin2);
+                      //memcopy(pin2, buffer, 0, 8);
+                      if(chv_no == ACC_ALW) {
+                              return CHV_DISABLE;
+                      }
+                      cluster_no = getCHVcluster(chv_no);
+                      cf = file_get_chv(cluster_no);
+                      str = (char *) cf;
+                      if(cf->status == CHV_BLOCK) {
+                              status = cf->status;
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 8   
+
+                              m_free(cf);
+                              #if _DMA_DEBUG
+                              barren_eject(cf);
+                              #endif
+                              return status;
+                      }
+              
+                      if(memcompare(cf->pin, pin1, 0, 8)==TRUE) {
+                              cf->pin_attempts = 0;
+                              status = cf->status;
+                              memcopy(cf->pin, pin2, 0, 8);
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                      } else {
+                              cf->pin_attempts += 1;
+                              status = cf->status;
+                              if(cf->pin_attempts >= cf->pin_max_attempts) {
+                                      status = CHV_BLOCK;
+                              }
+                              cf->status = status;
+                              /*ioman_seek((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET);
+                              for(i=0;i<sizeof(chv_file);i++) {
+                                      ioman_write(*(str++));
+                              }*/
+                              ioman_write_buffer((cluster_no * CLUSTER_SIZE) + ALLOCATION_DATA_OFFSET, str, sizeof(chv_file));
+                              status = CHV_PIN_FAILED;
+                      }
+                      m_free(cf);
+                      #if _DMA_DEBUG
+                      barren_eject(cf);
+                      #endif
+                      return status;
+              }
+              
+              #endif
+ 466          #if ASGARD_VERSION == 4
+ 467          BYTEC chv_padding[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};                //padding char for chv
+ 468          uchar _chv_status[MAX_CHV];             //maximum 6 chv         1~6
+ 469          
+ 470          void chv_get_config(uchar chv_no, chv_file * buffer)  _REENTRANT_ {
+ 471   1              //chv_file * chv;
+ 472   1              chv_no = chv_no - 1;                    //start from 0
+ 473   1              //chv = (chv_file *)m_alloc(sizeof(chv_file)); 
+ 474   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), buffer, sizeof(chv_file));
+*** WARNING C182 IN LINE 474 OF ASGARD\SECURITY.C: pointer to different objects
+ 475   1              //return chv;
+ 476   1      }
+ 477          
+ 478          void chv_init(void) _REENTRANT_ {
+ 479   1              register uchar i;
+ 480   1              //chv_file * chv;
+ 481   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 482   1              uchar * chv_buffer = m_alloc(sizeof(chv_file) * MAX_CHV);
+ 483   1              chv_file * chv;
+ 484   1              chv = (chv_file *)chv_buffer;
+ 485   1              ioman_read_buffer(CHV_DATA_OFFSET + (i * sizeof(chv_file)), chv_buffer, sizeof(chv_file) * MAX_CHV);
+ 486   1              for(i=0;i<MAX_CHV;i++) {
+ 487   2                      if(chv->tag == CHV_TAG) {                       //valid chv file
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 9   
+
+ 488   3                              _chv_status[i] = chv->status;   //load any designated chv to the corresponding memory area
+ 489   3                      } else {
+ 490   3                              _chv_status[i] = CHV_UNINITIALIZED;
+ 491   3                      }
+ 492   2                      chv += sizeof(chv_file);
+ 493   2              }
+ 494   1              m_free(chv_buffer);
+ 495   1              //m_free(chv);                                                  //free memory
+ 496   1      }
+ 497          
+ 498          void chv_create(uchar chv_no, uchar *pin, uchar *puk, uchar pin_max_retry, uchar puk_max_retry) _REENTRANT
+             -_ {
+ 499   1              //chv_file * chv;
+ 500   1              chv_file chv;
+ 501   1              chv_no = chv_no - 1;                    //start from 0
+ 502   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 503   1              chv.tag = CHV_TAG;
+ 504   1              chv.status = 0;                                                                 //default disabled
+ 505   1              _chv_status[chv_no] = 0;                                                //set current chv status
+ 506   1              memcpy(chv.pin, chv_padding, 8);                                //
+ 507   1              memcpy(chv.pin, pin, strlen(pin) );
+ 508   1              memcpy(chv.puk, chv_padding, 8);                                //
+ 509   1              memcpy(chv.puk, puk, strlen(pin) );
+ 510   1              chv.pin_attempts = 0;
+ 511   1              chv.pin_max_attempts = pin_max_retry;
+ 512   1              chv.puk_attempts = 0;
+ 513   1              chv.puk_max_attempts = puk_max_retry;
+ 514   1              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 514 OF ASGARD\SECURITY.C: pointer to different objects
+ 515   1              //m_free(chv);
+ 516   1      }
+ 517          
+ 518          uint16 chv_verify(uchar chv_no, uchar *pin)  _REENTRANT_ {
+ 519   1              //chv_file chv[sizeof(chv_file)];
+ 520   1              chv_file chv;
+ 521   1              chv_no = chv_no - 1;                    //start from 0
+ 522   1              //if(_chv_status[chv_no] & CHV_UNINITIALIZED) { return APDU_WRONG_PARAMETER; }                          //this chv doesn't even
+             - exist
+ 523   1              //if(_chv_status[chv_no] & CHV_BLOCKED) { return APDU_INVALID_STATUS; }                                         //this chv is blocked
+ 524   1      
+ 525   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 526   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 526 OF ASGARD\SECURITY.C: pointer to different objects
+ 527   1              if(chv.tag != CHV_TAG) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }
+ 528   1              if(chv.pin_attempts >= chv.pin_max_attempts) { /*m_free(chv);*/ return APDU_INVALID_STATUS; }                           //this c
+             -hv is blocked
+ 529   1              if(memcmp(chv.pin, pin, 8) == 0) {
+ 530   2                      chv.pin_attempts = 0;
+ 531   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 531 OF ASGARD\SECURITY.C: pointer to different objects
+ 532   2                      _chv_status[chv_no] |= CHV_VERIFIED;                                                                                                                                    //verification didn't change chv status on flash
+ 533   2              } else {
+ 534   2                      chv.pin_attempts++;  
+ 535   2                      if(chv.pin_attempts == (chv.pin_max_attempts - 1)) { 
+ 536   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 536 OF ASGARD\SECURITY.C: pointer to different objects
+ 537   3                              //m_free(chv);
+ 538   3                              return APDU_CHV_LAST_ATTEMPT;
+ 539   3                      }
+ 540   2                      if(chv.pin_attempts >= chv.pin_max_attempts) { 
+ 541   3                              chv.status |= CHV_BLOCKED;
+ 542   3                              _chv_status[chv_no] = chv.status;
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 10  
+
+ 543   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 543 OF ASGARD\SECURITY.C: pointer to different objects
+ 544   3                              //m_free(chv);
+ 545   3                              return APDU_INVALID_STATUS;
+ 546   3                      }
+ 547   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 547 OF ASGARD\SECURITY.C: pointer to different objects
+ 548   2                      //m_free(chv);
+ 549   2                      return APDU_ACCESS_DENIED;
+ 550   2              }
+ 551   1              //m_free(chv);
+ 552   1              return APDU_SUCCESS;
+ 553   1      }
+ 554          
+ 555          uint16 chv_enable(uchar chv_no, uchar *pin) _REENTRANT_ {
+ 556   1              //chv_file chv[sizeof(chv_file)];
+ 557   1              chv_file chv;
+ 558   1              chv_no = chv_no - 1;                    //start from 0
+ 559   1              //if(_chv_status[chv_no] & CHV_UNINITIALIZED) { return APDU_WRONG_PARAMETER; }                          //this chv doesn't even
+             - exist
+ 560   1              //if(_chv_status[chv_no] & CHV_BLOCKED) { return APDU_INVALID_STATUS; }                                         //this chv is blocked
+ 561   1      
+ 562   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 563   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 563 OF ASGARD\SECURITY.C: pointer to different objects
+ 564   1              if(chv.tag != CHV_TAG) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }
+ 565   1              if(chv.pin_attempts >= chv.pin_max_attempts) { /*m_free(chv);*/ return APDU_INVALID_STATUS; }                           //this c
+             -hv is blocked
+ 566   1              if(memcmp(chv.pin, pin, 8) == 0) {
+ 567   2                      chv.pin_attempts = 0;
+ 568   2                      _chv_status[chv_no] |= CHV_ENABLED;     
+ 569   2                      _chv_status[chv_no] &= ~CHV_VERIFIED;                                                                                                                           //
+ 570   2                      chv.status = _chv_status[chv_no];
+ 571   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 571 OF ASGARD\SECURITY.C: pointer to different objects
+ 572   2              } else {
+ 573   2                      chv.pin_attempts++;
+ 574   2                      if(chv.pin_attempts == (chv.pin_max_attempts - 1)) { 
+ 575   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 575 OF ASGARD\SECURITY.C: pointer to different objects
+ 576   3                              //m_free(chv);
+ 577   3                              return APDU_CHV_LAST_ATTEMPT;
+ 578   3                      }
+ 579   2                      if(chv.pin_attempts >= chv.pin_max_attempts) { 
+ 580   3                              chv.status |= CHV_BLOCKED;
+ 581   3                              _chv_status[chv_no] = chv.status;
+ 582   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 582 OF ASGARD\SECURITY.C: pointer to different objects
+ 583   3                              //m_free(chv);
+ 584   3                              return APDU_INVALID_STATUS;
+ 585   3                      }
+ 586   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 586 OF ASGARD\SECURITY.C: pointer to different objects
+ 587   2                      //m_free(chv);
+ 588   2                      return APDU_ACCESS_DENIED;
+ 589   2              }
+ 590   1              //m_free(chv);
+ 591   1              return APDU_SUCCESS;
+ 592   1      }
+ 593          
+ 594          uint16 chv_disable(uchar chv_no, uchar *pin) _REENTRANT_ {
+ 595   1              //chv_file chv[sizeof(chv_file)];
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 11  
+
+ 596   1              chv_file chv;
+ 597   1              chv_no = chv_no - 1;                    //start from 0
+ 598   1              //if(_chv_status[chv_no] & CHV_UNINITIALIZED) { return _chv_status[chv_no]; }                           //this chv doesn't even 
+             -exist
+ 599   1              //if(_chv_status[chv_no] & CHV_BLOCKED) { return _chv_status[chv_no]; }                                         //this chv is blocked
+ 600   1      
+ 601   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 602   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 602 OF ASGARD\SECURITY.C: pointer to different objects
+ 603   1              if(chv.tag != CHV_TAG) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }
+ 604   1              if(chv.pin_attempts >= chv.pin_max_attempts) { /*m_free(chv);*/ return APDU_INVALID_STATUS; }                           //this c
+             -hv is blocked
+ 605   1              if(memcmp(chv.pin, pin, 8) == 0) {
+ 606   2                      chv.pin_attempts = 0;
+ 607   2                      _chv_status[chv_no] &= ~CHV_ENABLED;                                                                                                                                    //
+ 608   2                      chv.status = _chv_status[chv_no];
+ 609   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 609 OF ASGARD\SECURITY.C: pointer to different objects
+ 610   2              } else {
+ 611   2                      chv.pin_attempts++;  
+ 612   2                      if(chv.pin_attempts == (chv.pin_max_attempts - 1)) { 
+ 613   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 613 OF ASGARD\SECURITY.C: pointer to different objects
+ 614   3                              //m_free(chv);
+ 615   3                              return APDU_CHV_LAST_ATTEMPT;
+ 616   3                      }
+ 617   2                      if(chv.pin_attempts >= chv.pin_max_attempts) { 
+ 618   3                              chv.status |= CHV_BLOCKED;
+ 619   3                              _chv_status[chv_no] = chv.status;
+ 620   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 620 OF ASGARD\SECURITY.C: pointer to different objects
+ 621   3                              //m_free(chv);
+ 622   3                              return APDU_INVALID_STATUS;
+ 623   3                      }
+ 624   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 624 OF ASGARD\SECURITY.C: pointer to different objects
+ 625   2                      //m_free(chv);
+ 626   2                      return APDU_ACCESS_DENIED;
+ 627   2              }
+ 628   1              //m_free(chv);
+ 629   1              return APDU_SUCCESS;
+ 630   1      }
+ 631          
+ 632          uint16 chv_unblock(uchar chv_no, uchar *pin, uchar *puk) _REENTRANT_ {
+ 633   1              //chv_file chv[sizeof(chv_file)];
+ 634   1              chv_file chv;
+ 635   1              chv_no = chv_no - 1;                    //start from 0
+ 636   1              //if(_chv_status[chv_no] & CHV_UNINITIALIZED) { return _chv_status[chv_no]; }                           //this chv doesn't even 
+             -exist
+ 637   1              //if((_chv_status[chv_no] & CHV_BLOCKED) == 0) { return _chv_status[chv_no]; }                  //this chv must be block
+             -ed
+ 638   1      
+ 639   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 640   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 640 OF ASGARD\SECURITY.C: pointer to different objects
+ 641   1              if(chv.tag != CHV_TAG) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }
+ 642   1              //if(chv.status & CHV_UNINITIALIZED) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }                          //this chv does
+             -n't even exist
+ 643   1              if(chv.puk_attempts >= chv.puk_max_attempts) { /*m_free(chv);*/ return APDU_INVALID_STATUS; }                           //this c
+             -hv is blocked
+ 644   1              if(memcmp(chv.puk, puk, 8) == 0) {
+ 645   2                      chv.puk_attempts = 0;                                                                                                                                   //
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 12  
+
+ 646   2                      chv.status &= ~CHV_BLOCKED; 
+ 647   2                      _chv_status[chv_no] = chv.status;
+ 648   2                      memcpy(chv.pin, pin, 8 );
+ 649   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 649 OF ASGARD\SECURITY.C: pointer to different objects
+ 650   2              } else {
+ 651   2                      chv.puk_attempts++;
+ 652   2                      if(chv.puk_attempts == (chv.puk_max_attempts - 1)) { 
+ 653   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 653 OF ASGARD\SECURITY.C: pointer to different objects
+ 654   3                              //m_free(chv);
+ 655   3                              return APDU_CHV_LAST_ATTEMPT;
+ 656   3                      }
+ 657   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 657 OF ASGARD\SECURITY.C: pointer to different objects
+ 658   2                      return APDU_ACCESS_DENIED;
+ 659   2              }
+ 660   1              //m_free(chv);
+ 661   1              return APDU_SUCCESS;
+ 662   1      }
+ 663          
+ 664          uint16 chv_change(uchar chv_no, uchar *old, uchar *new) _REENTRANT_ {
+ 665   1              //chv_file chv[sizeof(chv_file)];
+ 666   1              chv_file chv;
+ 667   1              chv_no = chv_no - 1;                    //start from 0
+ 668   1              //if(_chv_status[chv_no] & CHV_UNINITIALIZED) { return _chv_status[chv_no]; }                           //this chv doesn't even 
+             -exist
+ 669   1              //if(_chv_status[chv_no] & CHV_BLOCKED) { return _chv_status[chv_no]; }                                         //this chv is blocked
+ 670   1      
+ 671   1              //chv = (chv_file *)m_alloc(sizeof(chv_file));
+ 672   1              ioman_read_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 672 OF ASGARD\SECURITY.C: pointer to different objects
+ 673   1              if(chv.tag != CHV_TAG) { /*m_free(chv);*/ return APDU_WRONG_PARAMETER; }
+ 674   1              if(chv.pin_attempts >= chv.pin_max_attempts) { /*m_free(chv);*/ return APDU_INVALID_STATUS; }                           //this c
+             -hv is blocked
+ 675   1              if(memcmp(chv.pin, old, 8) == 0) {
+ 676   2                      chv.pin_attempts = 0;                                                                                                                                   //
+ 677   2                      chv.status = _chv_status[chv_no];
+ 678   2                      memcpy(chv.pin, new, 8 );
+ 679   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 679 OF ASGARD\SECURITY.C: pointer to different objects
+ 680   2              } else {
+ 681   2                      chv.pin_attempts++; 
+ 682   2                      if(chv.pin_attempts == (chv.pin_max_attempts - 1)) { 
+ 683   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 683 OF ASGARD\SECURITY.C: pointer to different objects
+ 684   3                              //m_free(chv);
+ 685   3                              return APDU_CHV_LAST_ATTEMPT;
+ 686   3                      }
+ 687   2                      if(chv.pin_attempts >= chv.pin_max_attempts) { 
+ 688   3                              chv.status |= CHV_BLOCKED;
+ 689   3                              _chv_status[chv_no] = chv.status;
+ 690   3                              ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 690 OF ASGARD\SECURITY.C: pointer to different objects
+ 691   3                              ///m_free(chv);
+ 692   3                              return APDU_INVALID_STATUS;
+ 693   3                      }
+ 694   2                      ioman_write_buffer(CHV_DATA_OFFSET + (chv_no * sizeof(chv_file)), &chv, sizeof(chv_file));                      //
+*** WARNING C182 IN LINE 694 OF ASGARD\SECURITY.C: pointer to different objects
+ 695   2                      //m_free(chv);
+ 696   2                      return APDU_ACCESS_DENIED;
+ 697   2              }
+C51 COMPILER V7.01  SECURITY                                                               01/25/2014 09:07:14 PAGE 13  
+
+ 698   1              //m_free(chv);
+ 699   1              return APDU_SUCCESS;
+ 700   1      }
+ 701          
+ 702          uchar chv_get_status(uchar chv_no) _REENTRANT_ {
+ 703   1              chv_no = chv_no - 1;                    //start from 0
+ 704   1              if(chv_no < MAX_CHV) {
+ 705   2                      return _chv_status[chv_no];
+ 706   2              } else {
+ 707   2                      return CHV_UNINITIALIZED;
+ 708   2              }
+ 709   1      }
+ 710          
+ 711          void chv_set_status(uchar chv_no, uchar status) {
+ 712   1              chv_no = chv_no - 1;                    //start from 0 
+ 713   1              if(chv_no < MAX_CHV) {
+ 714   2                      _chv_status[chv_no] = status;
+ 715   2              }
+ 716   1      }
+ 717          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1467    ----
+   CONSTANT SIZE    =      8    ----
+   XDATA SIZE       =      6    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  26 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1 @@
+"misc\mem.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\mem.lst) OBJECT(.\Debug\Output\mem.obj)

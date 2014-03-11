@@ -1,0 +1,501 @@
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     1
+
+
+MACRO ASSEMBLER A51 V7.01
+OBJECT MODULE PLACED IN .\Debug\Output\STARTUP.obj
+ASSEMBLER INVOKED BY: C:\Keil51\C51\BIN\A51.EXE 8051SYS\STARTUP.A51 SET(LARGE) DEBUG PRINT(.\Debug\List\STARTUP.lst) OBJ
+                      ECT(.\Debug\Output\STARTUP.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $nomod51 
+                       2     ;------------------------------------------------------------------------------
+                       3     ;  This file is part of the C51 Compiler package
+                       4     ;  Copyright (c) 1988-2002 Keil Elektronik GmbH and Keil Software, Inc.
+                       5     ;------------------------------------------------------------------------------
+                       6     ;  STARTUP.A51:  This code is executed after processor reset.
+                       7     ;
+                       8     ;  To translate this file use A51 with the following invocation:
+                       9     ;
+                      10     ;     A51 STARTUP.A51
+                      11     ;
+                      12     ;  To link the modified STARTUP.OBJ file to you$NOMOD51
+                      13     ;------------------------------------------------------------------------------
+                      14     ;  This file is part of the C51 Compiler package
+                      15     ;  Copyright (c) 1988-2002 Keil Elektronik GmbH and Keil Software, Inc.
+                      16     ;------------------------------------------------------------------------------
+                      17     ;  STARTUP.A51:  This code is executed after processor reset.
+                      18     ;
+                      19     ;  To translate this file use A51 with the following invocation:
+                      20     ;
+                      21     ;     A51 STARTUP.A51
+                      22     ;
+                      23     ;  To link the modified STARTUP.OBJ file to your application use the following
+                      24     ;  BL51 invocation:
+                      25     ;
+                      26     ;     BL51 <your object file list>, STARTUP.OBJ <controls>
+                      27     ;
+                      28     ;------------------------------------------------------------------------------
+                      29     ;
+                      30     ;  User-defined Power-On Initialization of Memory
+                      31     ;
+                      32     ;  With the following EQU statements the initialization of memory
+                      33     ;  at processor reset can be defined:
+                      34     ;
+                      35     ;               ; the absolute start-address of IDATA memory is always 0
+  0100                36     IDATALEN        EQU     100H    ; the length of IDATA memory in bytes.
+                      37     ;
+  0000                38     XDATASTART      EQU     0H      ; the absolute start-address of XDATA memory
+  0800                39     XDATALEN        EQU     00800H  ; the length of XDATA memory in bytes.
+                      40     ;
+  0000                41     PDATASTART      EQU     0H      ; the absolute start-address of PDATA memory
+  0000                42     PDATALEN        EQU     0H      ; the length of PDATA memory in bytes.
+                      43     ;
+                      44     ;  Notes:  The IDATA space overlaps physically the DATA and BIT areas of the
+                      45     ;          8051 CPU. At minimum the memory space occupied from the C51 
+                      46     ;          run-time routines must be set to zero.
+                      47     ;------------------------------------------------------------------------------
+                      48     ;
+                      49     ;  Reentrant Stack Initilization
+                      50     ;
+                      51     ;  The following EQU statements define the stack pointer for reentrant
+                      52     ;  functions and initialized it:
+                      53     ;
+                      54     ;  Stack Space for reentrant functions in the SMALL model.
+  0000                55     IBPSTACK        EQU     0       ; set to 1 if small reentrant is used.
+  0100                56     IBPSTACKTOP     EQU     0FFH+1  ; set top of stack to highest location+1.
+                      57     ;
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     2
+
+                      58     ;  Stack Space for reentrant functions in the LARGE model.      
+  0001                59     XBPSTACK        EQU     1       ; set to 1 if large reentrant is used.
+  0800                60     XBPSTACKTOP     EQU     07FFH+1; set top of stack to highest location+1.
+                      61     ;
+                      62     ;  Stack Space for reentrant functions in the COMPACT model.    
+  0000                63     PBPSTACK        EQU     0       ; set to 1 if compact reentrant is used.
+  0800                64     PBPSTACKTOP     EQU     07FFH+1; set top of stack to highest location+1.
+                      65     ;
+                      66     ;------------------------------------------------------------------------------
+                      67     ;
+                      68     ;  Page Definition for Using the Compact Model with 64 KByte xdata RAM
+                      69     ;
+                      70     ;  The following EQU statements define the xdata page used for pdata
+                      71     ;  variables. The EQU PPAGE must conform with the PPAGE control used
+                      72     ;  in the linker invocation.
+                      73     ;
+  0000                74     PPAGEENABLE     EQU     0       ; set to 1 if pdata object are used.
+  0000                75     PPAGE           EQU     0       ; define PPAGE number.
+                      76     ;
+                      77     ;------------------------------------------------------------------------------
+                      78     ; Standard SFR Symbols 
+  00E0                79     ACC     DATA    0E0H
+  00F0                80     B       DATA    0F0H
+  0081                81     SP      DATA    81H
+  0082                82     DPL     DATA    82H
+  0083                83     DPH     DATA    83H
+  00A0                84     P2              DATA    0A0H
+  008F                85     CLKSEL  DATA    8FH
+                      86     
+                      87     NAME    ?C_STARTUP
+                      88     
+                      89     
+                      90     ?C_C51STARTUP   SEGMENT   CODE
+                      91     ?STACK          SEGMENT   IDATA
+                      92     EXTRN   CODE    (MAIN)
+                      93     ?C_INITSEG      SEGMENT         CODE
+                      94     
+----                  95                     RSEG    ?STACK
+0000                  96                     DS      40H
+                      97     
+                      98     
+                      99                     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     100                     EXTRN CODE (?C_START)
+                     101                     PUBLIC  ?C_STARTUP
+                     102     
+                     103     ;=======================================================
+----                 104                     CSEG    AT      0x00
+0000                 105     ?C_STARTUP:
+0000 022000          106                     LJMP    CStartup
+                     107     ;=======================================================
+                     108     
+                     109     ;=======================================================
+                     110     EXTRN   CODE    (DES_ISR)
+----                 111                     CSEG    AT      0x03
+0003                 112     INTERRUPT0:
+0003 020000   F      113                     LJMP    DES_ISR
+0006 32              114                     RETI
+0007 00              115                     NOP
+0008 00              116                     NOP
+0009 00              117                     NOP
+000A 00              118                     NOP
+                     119     ;=======================================================
+                     120     
+                     121     ;=======================================================
+                     122     EXTRN   CODE    (TMR0_ISR)
+----                 123                     CSEG    AT      0x0B
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     3
+
+000B                 124     INTERRUPT1:
+000B 020000   F      125                     LJMP    TMR0_ISR
+000E 32              126                     RETI
+000F 00              127                     NOP
+0010 00              128                     NOP
+0011 00              129                     NOP
+0012 00              130                     NOP
+                     131     ;=======================================================
+                     132     
+                     133     ;=======================================================
+                     134     EXTRN   CODE    (UART_ISR)
+----                 135                     CSEG    AT      0x13
+0013                 136     INTERRUPT2:
+0013 020000   F      137                     LJMP    UART_ISR
+0016 32              138                     RETI
+0017 00              139                     NOP
+0018 00              140                     NOP
+0019 00              141                     NOP
+001A 00              142                     NOP
+                     143     ;=======================================================
+                     144     
+                     145     ;=======================================================
+                     146     EXTRN   CODE    (INT3_ISR)
+----                 147                     CSEG    AT      0x1B
+001B                 148     INTERRUPT3:
+001B 020000   F      149                     LJMP    INT3_ISR
+001E 32              150                     RETI
+001F 00              151                     NOP
+0020 00              152                     NOP
+0021 00              153                     NOP
+0022 00              154                     NOP
+                     155     ;=======================================================
+                     156     
+                     157     ;=======================================================
+                     158     EXTRN   CODE    (FLASH_ISR)
+----                 159                     CSEG    AT      0x23
+0023                 160     INTERRUPT4:
+0023 020000   F      161                     LJMP    FLASH_ISR
+0026 32              162                     RETI
+0027 00              163                     NOP
+0028 00              164                     NOP
+0029 00              165                     NOP
+002A 00              166                     NOP
+                     167     ;=======================================================
+                     168     
+                     169     ;=======================================================
+                     170     EXTRN   CODE    (INT5_ISR)
+----                 171                     CSEG    AT      0x2B
+002B                 172     INTERRUPT5:
+002B 020000   F      173                     LJMP    INT5_ISR
+002E 32              174                     RETI
+002F 00              175                     NOP
+0030 00              176                     NOP
+0031 00              177                     NOP
+0032 00              178                     NOP
+                     179     ;=======================================================
+                     180     
+                     181     ;=======================================================
+                     182     EXTRN   CODE    (WDT_ISR)
+----                 183                     CSEG    AT      0x33
+0033                 184     INTERRUPT6:
+0033 020000   F      185                     LJMP    WDT_ISR
+0036 32              186                     RETI
+0037 00              187                     NOP
+0038 00              188                     NOP
+0039 00              189                     NOP
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     4
+
+003A 00              190                     NOP
+                     191     ;=======================================================
+                     192     
+                     193     ;=======================================================
+----                 194                     RSEG    ?C_C51STARTUP
+----                 195                     CSEG    AT      0x2000
+                     196                     _XDATA_GROUP_   SEGMENT         XDATA
+                     197     
+2000                 198     CStartup:
+                     199     
+2000 758F80          200                     MOV             CLKSEL, #80H
+                     201     
+                     202     IF IDATALEN <> 0
+2003 78FF            203                     MOV             R0,             #IDATALEN - 1
+2005 E4              204                     CLR             A
+2006                 205     IDATALOOP:      
+2006 F6              206                     MOV             @R0,    A
+2007 D8FD            207                     DJNZ    R0,             IDATALOOP
+                     208     ENDIF
+                     209     
+                     210     IF XDATALEN <> 0
+                     211     
+2009 900000          212                     MOV             DPTR,   #XDATASTART
+200C 7F00     F      213                     MOV             R7,             #LOW (_XDATA_GROUP_)
+200E 7E00     F      214                     MOV             R6,             #HIGH (_XDATA_GROUP_)
+                     215     
+2010 EF              216                     MOV             A,              R7
+2011 7003            217                     JNZ             INCHI
+2013                 218     JUDGEHI:
+2013 EE              219                     MOV             A,              R6
+2014 6008            220                     JZ              NONXRAMINIT0
+                     221     
+2016                 222     INCHI:
+2016 0E              223                     INC             R6
+                     224     
+2017 E4              225                     CLR             A
+2018                 226     XDATALOOP:      
+2018 F0              227                     MOVX    @DPTR,  A
+2019 A3              228                     INC             DPTR
+201A DFFC            229                     DJNZ    R7,             XDATALOOP
+201C DEFA            230                     DJNZ    R6,             XDATALOOP
+                     231     
+201E                 232     NONXRAMINIT0:
+                     233                     
+                     234     ENDIF
+                     235     
+                     236     IF PPAGEENABLE <> 0
+                                             MOV             P2,             #PPAGE
+                             ENDIF
+                     239     
+                     240     IF PDATALEN <> 0
+                                             MOV             R0,             #PDATASTART
+                                             MOV             R7,             #LOW (PDATALEN)
+                                             CLR             A
+                             PDATALOOP:      
+                                             MOVX    @R0,    A
+                                             INC             R0
+                                             DJNZ    R7,             PDATALOOP
+                             ENDIF
+                     249     
+                     250     IF IBPSTACK <> 0
+                             EXTRN DATA (?C_IBP)
+                             
+                                             MOV     ?C_IBP,#LOW IBPSTACKTOP
+                             ENDIF
+                     255     
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     5
+
+                     256     IF XBPSTACK <> 0
+                     257     EXTRN DATA (?C_XBP)
+                     258     
+201E 750008   F      259                     MOV     ?C_XBP,#HIGH XBPSTACKTOP
+2021 750000   F      260                     MOV     ?C_XBP+1,#LOW XBPSTACKTOP
+                     261     ENDIF
+                     262     
+                     263     IF PBPSTACK <> 0
+                             EXTRN DATA (?C_PBP)
+                                             MOV     ?C_PBP,#LOW PBPSTACKTOP
+                             ENDIF
+                     267     
+                     268     ;       ===============================================
+                     269     ;       Non-zero initialized read/write data initialization
+2024                 270     INITIIALIZEDDATA:
+2024 900000   F      271             MOV     DPTR,   #?C_INITSEG
+2027 7E00            272             MOV             R6,     #00H
+                     273     
+2029                 274     LOOPINIT:
+2029 E4              275             CLR             A
+202A 93              276             MOVC    A,      @A+DPTR 
+202B 6065            277             JZ              JUMPTOMAIN                                              ;       No 
+                             initialized data,jump to main()
+                     278             
+202D A3              279             INC     DPTR 
+202E FF              280             MOV             R7,     A                                                       ;  
+                                  Save the length in R7
+202F 543F            281             ANL             A,      #3FH
+2031 30E511          282             JNB             ACC.5,  LEN5BIT                                 ;       Length in 5
+                             -bit
+                     283     
+2034                 284     LEN13BIT:       
+2034 EF              285             MOV             A,      R7
+2035 FE              286             MOV             R6,     A                                                       ;  
+                                  High 5-bit of length
+2036 E4              287             CLR             A
+2037 93              288             MOVC    A,      @A+DPTR 
+2038 A3              289             INC     DPTR
+2039 FF              290             MOV             R7,     A                                                       ;  
+                                  Save the low 8-bit of length in R7
+203A EE              291             MOV             A,      R6
+203B 547F            292             ANL             A,      #7FH
+203D 30E638          293             JNB             ACC.6,  ADDR8BITL                               ;       Bit 6 is 0b
+                             ,8-bit address for IDATA or DATA
+2040 541F            294             ANL             A,      #1FH                                            ;       Bit
+                              6 is 1b,16-bit address for XDATA
+2042 FE              295             MOV             R6,     A
+2043 8009            296             SJMP    ADDR16BIT
+                     297     
+2045                 298     LEN5BIT:
+2045 EF              299             MOV             A,      R7
+2046 547F            300             ANL             A,      #7FH
+2048 30E633          301             JNB             ACC.6,  ADDR8BITS                               ;       Bit 6 is 0b
+                             ,8-bit address for IDATA or DATA
+204B 541F            302             ANL             A,      #1FH                                            ;       Bit
+                              6 is 1b,16-bit address for XDATA
+204D FF              303             MOV             R7,     A
+                     304     
+204E                 305     ADDR16BIT:
+204E EF              306             MOV             A,      R7
+204F 6001            307             JZ              $+3                                                             ;  
+                                  R6 is increased if and only if the R7 is not zero
+2051 0E              308             INC             R6
+2052 E4              309             CLR             A
+2053 93              310             MOVC    A,      @A+DPTR
+2054 FA              311             MOV             R2,     A                                                       ;  
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     6
+
+                                  High byte of XDATA address
+2055 A3              312             INC             DPTR
+2056 E4              313             CLR     A
+2057 93              314             MOVC    A,      @A+DPTR
+2058 F8              315             MOV             R0,     A                                                       ;  
+                                  Low byte of XDATA address
+2059 E4              316             CLR             A
+205A A3              317             INC             DPTR
+                     318     
+205B                 319     INITXDATA:
+205B E4              320             CLR             A
+205C 93              321             MOVC    A,      @A+DPTR                         ;   Load the first byte of initiali
+                             zed XDATA
+205D A3              322             INC     DPTR 
+205E FB              323         MOV         R3,     A
+                     324     
+205F C8              325         XCH         A,      R0                                                      ;       Sav
+                             e CODE DPTR to R0(L) and R2(H)
+2060 C582            326         XCH         A,      DPL                                             ;       Set XDATA D
+                             PTR from R0(L) and R2(H)     
+2062 C8              327         XCH         A,      R0 
+2063 CA              328         XCH         A,      R2 
+2064 C583            329         XCH         A,      DPH 
+2066 CA              330         XCH         A,      R2
+                     331     
+2067 EB              332         MOV         A,      R3
+2068 F0              333         MOVX        @DPTR,  A                                               ;       Initialize 
+                             one byte in XDATA RAM
+2069 A3              334         INC         DPTR 
+                     335     
+206A C8              336         XCH         A,      R0                                                      ;       Sav
+                             e XDATA DPTR to R0(L) and R2(H) 
+206B C582            337         XCH         A,      DPL                                             ;       Set CODE DP
+                             TR from R0(L) and R2(H)       
+206D C8              338         XCH         A,      R0 
+206E CA              339         XCH         A,      R2 
+206F C583            340         XCH         A,      DPH 
+2071 CA              341         XCH         A,      R2
+                     342     
+2072 DFE7            343             DJNZ    R7,     INITXDATA
+2074 DEE5            344             DJNZ    R6,     INITXDATA
+2076 80B1            345             SJMP    LOOPINIT 
+                     346     
+2078                 347     ADDR8BITL:
+2078 EE              348             MOV             A,      R6
+2079 541F            349             ANL             A,      #1FH
+207B FE              350             MOV             R6,     A                                                       ;  
+                                  Save the high 5-bit of length in R6
+207C 8004            351             SJMP    ADDR8BIT
+                     352     
+207E                 353     ADDR8BITS:
+207E EF              354             MOV             A,      R7
+207F 541F            355             ANL             A,      #1FH
+2081 FF              356             MOV             R7,     A
+                     357     
+2082                 358     ADDR8BIT:
+2082 0E              359             INC             R6
+2083 E4              360             CLR     A
+2084 93              361             MOVC    A,      @A+DPTR
+2085 F8              362             MOV             R0,     A                                                       ;  
+                                  8-bit IDATA address
+2086 A3              363             INC     DPTR
+                     364     
+2087                 365     INITIDATA:
+2087 E4              366             CLR     A
+2088 93              367             MOVC    A,      @A+DPTR
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     7
+
+2089 A3              368             INC     DPTR
+208A F6              369             MOV             @R0,    A
+208B 08              370             INC             R0
+                     371     
+208C DFF9            372         DJNZ        R7,     INITIDATA
+208E DEF7            373             DJNZ    R6,     INITIDATA
+2090 8097            374         SJMP        LOOPINIT                                                ;       8-bit offse
+                             t limited   
+                     375     ;       End of initialization of non-zero initialized data
+                     376     ;       ===============================================
+                     377     
+2092                 378     JUMPTOMAIN:
+2092 758100   F      379                     MOV     SP,#?STACK-1
+                     380             ;       LJMP    ?C_START
+                     381     
+2095 020000   F      382                     LJMP    MAIN
+                     383     ;       ===============================================
+                     384                     END
+                             
+A51 MACRO ASSEMBLER  STARTUP                                                              01/22/2013 11:11:02 PAGE     8
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+?C_C51STARTUP. . .  C SEG    0000H       REL=UNIT
+?C_INITSEG . . . .  C SEG    0000H       REL=UNIT
+?C_START . . . . .  C ADDR   -----       EXT
+?C_STARTUP . . . .  C ADDR   0000H   A   
+?C_XBP . . . . . .  D ADDR   -----       EXT
+?STACK . . . . . .  I SEG    0040H       REL=UNIT
+ACC. . . . . . . .  D ADDR   00E0H   A   
+ADDR16BIT. . . . .  C ADDR   204EH   A   
+ADDR8BIT . . . . .  C ADDR   2082H   A   
+ADDR8BITL. . . . .  C ADDR   2078H   A   
+ADDR8BITS. . . . .  C ADDR   207EH   A   
+B. . . . . . . . .  D ADDR   00F0H   A   
+CLKSEL . . . . . .  D ADDR   008FH   A   
+CSTARTUP . . . . .  C ADDR   2000H   A   
+DES_ISR. . . . . .  C ADDR   -----       EXT
+DPH. . . . . . . .  D ADDR   0083H   A   
+DPL. . . . . . . .  D ADDR   0082H   A   
+FLASH_ISR. . . . .  C ADDR   -----       EXT
+IBPSTACK . . . . .  N NUMB   0000H   A   
+IBPSTACKTOP. . . .  N NUMB   0100H   A   
+IDATALEN . . . . .  N NUMB   0100H   A   
+IDATALOOP. . . . .  C ADDR   2006H   A   
+INCHI. . . . . . .  C ADDR   2016H   A   
+INITIDATA. . . . .  C ADDR   2087H   A   
+INITIIALIZEDDATA .  C ADDR   2024H   A   
+INITXDATA. . . . .  C ADDR   205BH   A   
+INT3_ISR . . . . .  C ADDR   -----       EXT
+INT5_ISR . . . . .  C ADDR   -----       EXT
+INTERRUPT0 . . . .  C ADDR   0003H   A   
+INTERRUPT1 . . . .  C ADDR   000BH   A   
+INTERRUPT2 . . . .  C ADDR   0013H   A   
+INTERRUPT3 . . . .  C ADDR   001BH   A   
+INTERRUPT4 . . . .  C ADDR   0023H   A   
+INTERRUPT5 . . . .  C ADDR   002BH   A   
+INTERRUPT6 . . . .  C ADDR   0033H   A   
+JUDGEHI. . . . . .  C ADDR   2013H   A   
+JUMPTOMAIN . . . .  C ADDR   2092H   A   
+LEN13BIT . . . . .  C ADDR   2034H   A   
+LEN5BIT. . . . . .  C ADDR   2045H   A   
+LOOPINIT . . . . .  C ADDR   2029H   A   
+MAIN . . . . . . .  C ADDR   -----       EXT
+NONXRAMINIT0 . . .  C ADDR   201EH   A   
+P2 . . . . . . . .  D ADDR   00A0H   A   
+PBPSTACK . . . . .  N NUMB   0000H   A   
+PBPSTACKTOP. . . .  N NUMB   0800H   A   
+PDATALEN . . . . .  N NUMB   0000H   A   
+PDATASTART . . . .  N NUMB   0000H   A   
+PPAGE. . . . . . .  N NUMB   0000H   A   
+PPAGEENABLE. . . .  N NUMB   0000H   A   
+SP . . . . . . . .  D ADDR   0081H   A   
+TMR0_ISR . . . . .  C ADDR   -----       EXT
+UART_ISR . . . . .  C ADDR   -----       EXT
+WDT_ISR. . . . . .  C ADDR   -----       EXT
+XBPSTACK . . . . .  N NUMB   0001H   A   
+XBPSTACKTOP. . . .  N NUMB   0800H   A   
+XDATALEN . . . . .  N NUMB   0800H   A   
+XDATALOOP. . . . .  C ADDR   2018H   A   
+XDATASTART . . . .  N NUMB   0000H   A   
+_XDATA_GROUP_. . .  X SEG    0000H       REL=UNIT
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

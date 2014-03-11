@@ -1,0 +1,1 @@
+"NORFlash\NORFlash.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\NORFlash.lst) OBJECT(.\Debug\Output\NORFlash.obj)

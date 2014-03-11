@@ -1,0 +1,656 @@
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE MIDGARD
+OBJECT MODULE PLACED IN .\Debug\Output\midgard.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE midgard\midgard.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PR
+                    -INT(.\Debug\List\midgard.lst) OBJECT(.\Debug\Output\midgard.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+   2          #include "midgard.h"
+   3          //#include "ucos_ii.h"
+   4          //#include "2440lib.h"
+   5          
+   6          //#else
+   7          static volatile uchar alloc_buffer[MEM_HEAP_SIZE];
+   8          //#endif
+   9          
+  10          //fixed heap allocation bug, tested on x86 and ARM (April 12 2011)
+  11          //fixed heap information bug, tested on x86 and ARM (April 13 2011)
+  12          
+  13          //heap information
+  14          //uint16 _total_heap;
+  15          //uint16 _used_heap;
+  16          //uint16 _maximum_total_heap = 0;
+  17          
+  18          //extern char Image$$RW$$Limit[];
+  19          //alloc_chain * _chunkroot = (alloc_chain *)Image$$RW$$Limit;
+  20          //alloc_chain * _chunkroot = (alloc_chain *)alloc_buffer;
+  21          
+  22          uint32 m_init_alloc(void) _REENTRANT_
+  23          {
+  24   1              //global memory management allocation
+  25   1              //chunkroot needed in order to initialize memory manager
+  26   1              ((alloc_chain *)alloc_buffer)->size = 0;                //chunkroot tidak bisa di s_free
+  27   1              ((alloc_chain *)alloc_buffer)->next = (alloc_chain *)((intptr)((alloc_chain *)alloc_buffer) + (sizeof(all
+             -oc_chain) + (sizeof(alloc_chain) % 4) ));
+  28   1              #if ALLOC_CHAIN_USE_PREV
+                      ((alloc_chain *)alloc_buffer)->prev = NULL;
+                      #endif
+  31   1              ((alloc_chain *)alloc_buffer)->next->next = NULL;               //if not null might caused bug on allocation
+  32   1              //_chunkroot->next = 0;
+  33   1              //_total_heap = _chunkroot->size;
+  34   1              return 0;
+  35   1      }
+  36          
+  37          #ifdef _USE_MIDGARD
+  38          #if MEMORY_WIDTH == MW_32BIT
+              void * m_alloc(uint32 size) _REENTRANT_ {
+              #else
+  41          void * m_alloc(uint16 size) _REENTRANT_ {
+  42   1      #endif
+  43   1              //#ifdef OS_uCOS_II_H
+  44   1              //heap used by several task simultaneously like sharing memory
+  45   1              //#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register 
+             -*/
+  46   1          //OS_CPU_SR  cpu_sr;
+  47   1          //#endif
+  48   1          //#endif
+  49   1          alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer);
+  50   1              alloc_chain *alloc_ptr_temp = (alloc_chain *)NULL;
+  51   1              alloc_chain * candidate;
+  52   1              //alloc_chain *temp;
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 2   
+
+  53   1              //#ifdef OS_uCOS_II_H
+  54   1              //OS_ENTER_CRITICAL();
+  55   1              //#endif
+  56   1              //size = size + (4 - (size % 4));
+  57   1              get_next_chain:
+  58   1              if(alloc_ptr->next == NULL) {           //allocate new chunk at the end of the heap
+  59   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * creating new chunk with size %i\n", size);
+                              #endif
+  62   2                      alloc_ptr->size = size;
+  63   2                      alloc_ptr->next = (alloc_chain *)((intptr)alloc_ptr + sizeof(alloc_chain) + size);
+  64   2                      //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+  65   2                      //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+  66   2                      #if ALLOC_CHAIN_USE_PREV
+                              alloc_ptr->prev = alloc_ptr_temp;
+                              #endif
+  69   2                      alloc_ptr_temp = alloc_ptr->next;       //berubah fungsi untuk menjadi pointer chunk selanjutnya
+  70   2                      #if ALLOC_CHAIN_USE_PREV
+                              alloc_ptr_temp->prev = alloc_ptr;
+                              #endif
+  73   2                      alloc_ptr_temp->next = NULL;
+  74   2                      alloc_ptr_temp->size = 0;
+  75   2                      //alloc_ptr = alloc_ptr_temp;
+  76   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * address of new chunk at %ld\n", (alloc_chain *)((intptr)alloc_ptr));
+                              #endif
+  79   2                      //Uart_Printf("%d\n", alloc_ptr);
+  80   2                      //#ifdef OS_uCOS_II_H
+  81   2                      //OS_EXIT_CRITICAL();
+  82   2                      //#endif
+  83   2                      //_total_heap += alloc_ptr->size;
+  84   2                      /*if(_total_heap > _maximum_total_heap) {
+  85   2                              printf("Maximum total heap : %d\n", _total_heap);
+  86   2                              _maximum_total_heap = _total_heap;
+  87   2                      }  */
+  88   2                      return (void *)((intptr)alloc_ptr + sizeof(alloc_chain));       //return pointer sekarang + ukuran header kare
+             -na *[header]+[body]
+  89   2              }
+  90   1              //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+  91   1              alloc_ptr_temp = alloc_ptr;
+  92   1              alloc_ptr = alloc_ptr->next;
+  93   1              if((intptr)alloc_ptr >= (intptr)((intptr)alloc_ptr_temp + (alloc_ptr_temp->size + sizeof(alloc_chain)) + 
+             -(sizeof(alloc_chain) + size))) {
+  94   2                      //printf("allocate in previous memory : %x, %x\n", (uint32)alloc_ptr, ((uint32)alloc_ptr_temp + alloc_pt
+             -r_temp->size + sizeof(alloc_chain) + sizeof(alloc_chain) + size + (size % 4)));
+  95   2                      //printf("allocate in previous memory : %x, %x\n", (intptr)alloc_ptr, ((intptr)alloc_ptr_temp + alloc_pt
+             -r_temp->size + sizeof(alloc_chain)));
+  96   2                      //printf("allocate in previous memory : %x, %x\n", (uint32)alloc_ptr, sizeof(alloc_chain));
+  97   2                      //allocate new heap using FFA (First Fit Algorithm)
+  98   2                      //Uart_Printf("allocate previous heap\n");
+  99   2                      candidate = (alloc_chain *)((intptr)alloc_ptr_temp + (alloc_ptr_temp->size + sizeof(alloc_chain)));
+ 100   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * creating new chunk with size %i\n", size);
+                              #endif
+ 103   2                      //candidate->size = size + (size % 4);
+ 104   2                      candidate->size = size;
+ 105   2                      alloc_ptr_temp->next = candidate;
+ 106   2                      #if ALLOC_CHAIN_USE_PREV
+                              candidate->prev = alloc_ptr_temp;
+                              #endif
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 3   
+
+ 109   2                      candidate->next = alloc_ptr;
+ 110   2                      #if ALLOC_CHAIN_USE_PREV
+                              alloc_ptr->prev = candidate;
+                              #endif
+ 113   2                      //Uart_Printf("%d %d %d %d\n", candidate->prev, candidate, candidate->size, candidate->next);
+ 114   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * address of new chunk at %x\n", (uint32)candidate);
+                              #endif
+ 117   2                      //#ifdef OS_uCOS_II_H
+ 118   2                      //Uart_Printf("exit\n");
+ 119   2                      //OS_EXIT_CRITICAL();
+ 120   2                      //#endif
+ 121   2                      //_total_heap += candidate->size;
+ 122   2                      /*if(_total_heap > _maximum_total_heap) {
+ 123   2                              printf("Maximum total heap : %d\n", _total_heap);
+ 124   2                              _maximum_total_heap = _total_heap;
+ 125   2                      }*/
+ 126   2                      return (void *)((intptr)candidate + (intptr)sizeof(alloc_chain));
+ 127   2              }
+ 128   1              goto get_next_chain;
+ 129   1      }
+ 130          
+ 131          #if MEMORY_WIDTH == MW_32BIT
+              uint32 m_get_allocated_space(void) _REENTRANT_ {
+                      uint32 alloc_space = 0;
+              #else
+ 135          uint16 m_get_allocated_space(void) _REENTRANT_ {
+ 136   1              uint16 alloc_space = 0;
+ 137   1      #endif
+ 138   1          alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer);
+ 139   1              //size = size + (4 - (size % 4));
+ 140   1              get_next_chain:
+ 141   1              if(alloc_ptr->next==NULL) {             //allocate new chunk at the end of the heap
+ 142   2                      alloc_space += alloc_ptr->size;
+ 143   2                      return alloc_space;     //return pointer sekarang + ukuran header karena *[header]+[body]
+ 144   2              }
+ 145   1              //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+ 146   1              //alloc_ptr_temp = alloc_ptr;
+ 147   1              alloc_space += alloc_ptr->size;
+ 148   1              alloc_ptr = alloc_ptr->next;
+ 149   1              goto get_next_chain;
+ 150   1      }
+ 151          
+ 152          void m_free(void *ptr) _REENTRANT_ {
+ 153   1              //#ifdef OS_uCOS_II_H
+ 154   1              //#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register 
+             -*/
+ 155   1          //OS_CPU_SR  cpu_sr;
+ 156   1          //#endif
+ 157   1          //#endif
+ 158   1              #if ALLOC_CHAIN_USE_PREV
+                  alloc_chain *alloc_ptr = (alloc_chain *)((intptr)ptr - (intptr)sizeof(alloc_chain));
+                      alloc_chain *alloc_prev = alloc_ptr->prev;
+                      alloc_chain *alloc_next = alloc_ptr->next;
+                      if(ptr == NULL) return;
+                      if(alloc_prev == NULL) return;          //this memory is already freed
+                      if(alloc_ptr->size == 0) return;                //this memory is already freed
+                      /*if(alloc_next == NULL) {              //this is the last chunk
+                              printf("this is the last chunk\n");     
+                      }*/
+                      //#ifdef OS_uCOS_II_H
+                      //OS_ENTER_CRITICAL();
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 4   
+
+                      //#endif
+                      //alloc_prev = alloc_ptr->prev;
+                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                      //printf(" * delete chunk at %x\n", (intptr)alloc_ptr);
+                      //printf(" * chunk at %x, next chunk at ", (intptr)alloc_prev);
+                      #endif
+                      //_total_heap -= alloc_ptr->size;
+                      //alloc_ptr = alloc_ptr->next;
+                      if(alloc_ptr == ((alloc_chain *)alloc_buffer)) {
+                              //alloc_prev->next = alloc_ptr->next;
+                              //alloc_prev->next->prev = alloc_prev;
+                              #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf("%x\n", (intptr)alloc_prev->next);
+                              #endif
+                      } else { 
+                              alloc_next->prev = alloc_prev;
+                              alloc_prev->next = alloc_next;
+                              //alloc_prev->next->prev = alloc_prev;
+                              #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf("%x\n", (intptr)alloc_prev->next);
+                              #endif
+                              //s_gc();
+                              //getch();
+                      }
+                      alloc_ptr->next = NULL;
+                      alloc_ptr->prev = NULL;
+                      alloc_ptr->size = 0;
+                      #else
+ 198   1              volatile alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer);
+ 199   1              alloc_chain * temp;
+ 200   1              //alloc_chain *alloc_prev = NULL;
+ 201   1              while(alloc_ptr != NULL) {
+ 202   2                      //if(alloc_ptr->next == NULL) return;           //not found
+ 203   2                      if((intptr)alloc_ptr->next == (intptr)(ptr - sizeof(alloc_chain))) {            //found
+ 204   3                              temp = alloc_ptr->next;
+ 205   3                              alloc_ptr->next = temp->next;
+ 206   3                              temp->size = 0;
+ 207   3                              temp->next = NULL;
+ 208   3                              return;
+ 209   3                      }
+ 210   2                      alloc_ptr = alloc_ptr->next;            //next iterator
+ 211   2              }
+ 212   1      
+ 213   1              #endif
+ 214   1              //#ifdef OS_uCOS_II_H
+ 215   1              //OS_EXIT_CRITICAL();
+ 216   1              //#endif
+ 217   1      }
+ 218          #endif
+ 219          
+ 220          #ifdef ENABLE_HEAP_ALLOC
+              #if MEMORY_WIDTH == MW_32BIT
+              void * m_heap_alloc(struct Heap_Manager * heap, uint32 size) {
+              #else
+              void * m_heap_alloc(struct Heap_Manager * heap, uint16 size) {
+              #endif
+                      //#ifdef OS_uCOS_II_H
+                      //heap used by several task simultaneously like sharing memory
+                      //#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register 
+             -*/
+                  //OS_CPU_SR  cpu_sr;
+                  //#endif
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 5   
+
+                  //#endif
+                  alloc_chain *alloc_ptr = heap->root;
+                      static alloc_chain *alloc_ptr_temp = (alloc_chain *)NULL;
+                      alloc_chain * candidate;
+                      //#ifdef OS_uCOS_II_H
+                      //OS_ENTER_CRITICAL();
+                      //#endif
+                      size = size + (4 - (size % 4));         //2 byte boundary
+                      get_next_chain:
+                      //Uart_Printf("%d\n", alloc_ptr);
+                      //printf("%d %d\n", ((intptr)alloc_ptr + (intptr)size + ((size%4)>0)), ((intptr)heap + heap->size + sizeo
+             -f(alloc_chain)));
+                      if(((intptr)alloc_ptr + (intptr)size + (size % 4)) > ((intptr)heap + heap->size + sizeof(alloc_chain)))
+                      {
+                              //heap is already full, please allocate smaller size
+                              //printf("heap full\n");
+                              return NULL;
+                      }
+                      if(alloc_ptr->next==NULL) {             //allocate new chunk at the end of the heap
+                              #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * creating new chunk with size %i\n", size);
+                              #endif
+                              
+                              alloc_ptr->size = size + (size % 4);
+                              alloc_ptr->next = (alloc_chain *)((intptr)alloc_ptr + (intptr)sizeof(alloc_chain) + alloc_ptr->size);
+                              //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+                              //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+                              alloc_ptr->prev = alloc_ptr_temp;
+                              alloc_ptr_temp = alloc_ptr->next;       //berubah fungsi untuk menjadi pointer chunk selanjutnya
+                              alloc_ptr_temp->prev = alloc_ptr;
+                              alloc_ptr_temp->size = 0;
+                              alloc_ptr_temp->next = NULL;
+                              //Uart_Printf("%d\n", alloc_ptr);
+                              //printf("%d\n", ((intptr)alloc_ptr + (intptr)sizeof(alloc_chain)));
+                              //#ifdef OS_uCOS_II_H
+                              //Uart_Printf("exit\n");
+                              //OS_EXIT_CRITICAL();
+                              //#endif
+                              _used_heap += alloc_ptr->size;
+                              return (void *)((intptr)alloc_ptr + (intptr)sizeof(alloc_chain));       //return pointer sekarang + ukuran hea
+             -der karena *[header]+[body]
+                      }
+                      //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+                      alloc_ptr_temp = alloc_ptr;
+                      alloc_ptr = alloc_ptr->next;
+                      if((intptr)alloc_ptr >= ((intptr)alloc_ptr_temp + alloc_ptr_temp->size + sizeof(alloc_chain) + sizeof(all
+             -oc_chain) + size)) {
+                              //allocate new heap using FFA (First Fit Algorithm)
+                              candidate = (alloc_chain *)((intptr)alloc_ptr_temp + alloc_ptr_temp->size + sizeof(alloc_chain));
+                              candidate->size = size + (size % 4);
+                              alloc_ptr_temp->next = candidate;
+                              alloc_ptr_temp->next->prev = alloc_ptr_temp;
+                              candidate->next = alloc_ptr;
+                              candidate->next->prev = candidate;
+                              //Uart_Printf("%d\n", candidate);
+                              //printf("%d\n", ((intptr)candidate + (intptr)sizeof(alloc_chain)));
+                              //#ifdef OS_uCOS_II_H
+                              //Uart_Printf("exit\n");
+                              //OS_EXIT_CRITICAL();
+                              //#endif
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 6   
+
+                              _used_heap += candidate->size;
+                              return (void *)((intptr)candidate + (intptr)sizeof(alloc_chain));
+                      }
+                      goto get_next_chain;
+              }
+              
+              void m_heap_free(struct Heap_Manager * heap, void * ptr)
+              {
+                  alloc_chain *alloc_ptr = (alloc_chain *)((intptr)ptr - (intptr)sizeof(alloc_chain));
+                      static alloc_chain *alloc_prev;
+                      if(ptr == NULL) return;
+                      alloc_prev = alloc_ptr->prev;
+                      //alloc_ptr = alloc_ptr->next;
+                      if(alloc_ptr == heap->root) {
+                              alloc_prev->next = alloc_ptr->next;
+                              alloc_prev->next->prev = alloc_prev;
+                      } else { 
+                              alloc_prev->next = alloc_ptr->next;
+                              alloc_prev->next->prev = alloc_prev;
+                      }
+                      _used_heap -= alloc_ptr->size;
+              }       
+              
+              #if MEMORY_WIDTH == MW_32BIT
+              Heap_Manager * m_create_heap(uint32 size) {
+              #else
+              Heap_Manager * m_create_heap(uint16 size) {
+              #endif
+                      Heap_Manager * heap = m_alloc(sizeof(Heap_Manager) + size + sizeof(alloc_chain) + sizeof(alloc_chain) + s
+             -izeof(alloc_chain));
+                      heap->root = (alloc_chain *)((intptr)heap + sizeof(Heap_Manager));
+                      heap->size = (size - (size % 4)) + sizeof(Heap_Manager);
+                      
+                      heap->root->size = 0;           //chunkroot tidak bisa di s_free
+                      heap->root->prev = NULL;
+                      //tidak dialign 4 byte
+                      heap->root->next = (alloc_chain *)((intptr)heap->root + sizeof(alloc_chain) + (sizeof(alloc_chain) % 4));
+                      heap->root->next->next = NULL;
+                      //printf("%d\n", (intptr)heap->root->next);
+                      //align 4 byte (bisa jadi m_heap_alloc hang disini?? 
+                      //jika ukuran heap sama dengan jumlah yang dialokasikan dan memori direallocate)
+                      //heap->root->next = (alloc_chain *)((alloc_chain *)heap->root + (sizeof(alloc_chain) + (sizeof(alloc_cha
+             -in)%4)));
+                      //Uart_Printf("heap : %d\n", heap->size);
+                      return heap;
+              }
+              
+              void m_delete_heap(Heap_Manager * heap) {
+                      //because heap_manager is allocated using m_alloc then deallocating it with m_free
+                      alloc_chain * target;
+                      Heap_Manager * c_heap = heap;
+                      alloc_chain * alloc_ptr = heap->root;
+                      while(alloc_ptr != NULL)
+                      {
+                              _used_heap -= alloc_ptr->size;
+                              target = alloc_ptr;
+                              alloc_ptr = alloc_ptr->next;
+                              //nullifies all heap allocate variables (PATCH untuk m_heap_alloc??)
+                              //mirip garbage collector hanya untuk heap manager
+                              target->prev = NULL;
+                              target->size = 0;
+                              target->next = NULL;
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 7   
+
+                      }
+                      //printf("delete heap\n");
+                      m_free(heap);
+                      //chunkroot->next diset NULL 
+                      c_heap->root->next = NULL;
+                      //chunkroot baru diset NULL
+                      c_heap->root = NULL;
+              }
+              
+              uint32 m_heap_used(struct Heap_Manager * heap) {
+                      uint32 space = 0;
+                      uint32 size = 4;
+                      alloc_chain *alloc_ptr = heap->root;
+                      get_next_chain:
+                      //Uart_Printf("%d\n", alloc_ptr->next);
+                      if(alloc_ptr->next == (alloc_chain *)NULL) {            //allocate new chunk at the end of the heap
+                              //alloc_ptr->size = size + (size%4);
+                              //alloc_ptr->next = (alloc_chain *)((intptr)alloc_ptr + (intptr)sizeof(alloc_chain) + (intptr)size + ((s
+             -ize%4)>0));
+                              //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+                              //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+                              //space += alloc_ptr->size;
+                              return space;   //return pointer sekarang + ukuran header karena *[header]+[body]
+                      }
+                      //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+                      space += alloc_ptr->size;
+                      alloc_ptr = alloc_ptr->next;
+                      goto get_next_chain;
+              }
+              
+              uint32 m_used_space(void)
+              {
+                      uint32 space = 0;
+                      uint32 size = 4;
+                      alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer);
+                      get_next_chain:
+                      //Uart_Printf("%d\n", alloc_ptr->next);
+                      if(alloc_ptr->next == (alloc_chain *)NULL) {            //allocate new chunk at the end of the heap
+                              //alloc_ptr->size = size + (size%4);
+                              //alloc_ptr->next = (alloc_chain *)((intptr)alloc_ptr + (intptr)sizeof(alloc_chain) + (intptr)size + ((s
+             -ize%4)>0));
+                              //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+                              //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+                              //space += alloc_ptr->size;
+                              return space;   //return pointer sekarang + ukuran header karena *[header]+[body]
+                      }
+                      //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+                      space += alloc_ptr->size;
+                      alloc_ptr = alloc_ptr->next;
+                      goto get_next_chain;
+              }
+              
+              static uint32 m_shift(uchar *dst, uchar *src, uchar size)
+              {
+                      uchar i;
+                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                      //printf(" * chunk at %i shifted to %i\n", (int)src, (int)dst);
+                      #endif
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 8   
+
+                      while(i<size) {
+                              dst[i] = src[i];
+                              i++;
+                      }
+                      return (intptr)dst;
+              }
+              
+              void m_gc(void) {       
+                  alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer)->next;
+                      static alloc_chain *alloc_ptr_temp = NULL;
+                      alloc_ptr_temp = ((alloc_chain *)alloc_buffer);
+                      //alloc_chain *temp, *temp2;
+                      //alloc_ptr = _chunkroot;
+                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                      //printf(" * running garbage collector\n");
+                      #endif
+                      get_next_chain:
+                      if(alloc_ptr->prev != alloc_ptr_temp) { //chunk kosong
+                              //if(alloc_ptr->prev != _chunkroot) {
+                              alloc_ptr_temp->next = (alloc_chain *)m_shift((uchar *)alloc_ptr->prev, (uchar *)alloc_ptr, alloc_ptr->s
+             -ize + sizeof(alloc_chain));
+                              alloc_ptr = alloc_ptr_temp->next;
+                              //printf("alloc_temp : %i, alloc_ptr : %i\n", (intptr)alloc_ptr_temp, (intptr)alloc_ptr);
+                              //printf("alloc_temp->next : %i, alloc_ptr->next : %i\n", (intptr)alloc_ptr_temp->next, (intptr)alloc_pt
+             -r->next);
+                              //printf("alloc_temp->prev : %i, alloc_ptr->prev : %i\n", (intptr)alloc_ptr_temp->prev, (intptr)alloc_pt
+             -r->prev);
+                                      //getch();
+                              //}
+                      }
+                      if(alloc_ptr->next==NULL) {
+                              alloc_ptr->prev->next=NULL;
+                              return;
+                      }
+                      //isi dengan pointer chunk sebelumnya
+                      alloc_ptr_temp = alloc_ptr;
+                      alloc_ptr = alloc_ptr->next;
+                      goto get_next_chain;
+              }
+              
+              void m_mem_dump(void)
+              {
+                      alloc_chain *alloc_ptr = ((alloc_chain *)alloc_buffer);
+                      uchar i =0;
+                      uchar j;
+                      putchar(0x20);
+                      get_next_chain:
+                      if(alloc_ptr->next==NULL) {
+                              //printf("\n");
+                              return;
+                      }
+                      printf("[% 8x, % 3i]\xc4", (intptr)alloc_ptr, alloc_ptr->size);
+                      i++;
+                      if(i%4==0) {
+                              printf("\xbf\n\xda");
+                              for(j=0;j<0x20;j++) {
+                                      printf("\xc4\xc4");
+                              }
+                              printf("\xd9\n\xc0");
+                      }
+                      alloc_ptr = alloc_ptr->next;
+                      goto get_next_chain;
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 9   
+
+              }
+              
+              //allocate heap with address boundary (for structure like hcca on usb ohci)
+              #if MEMORY_WIDTH == MW_32BIT
+              void * m_heap_alloc_b(struct Heap_Manager * heap, uint32 size, uint16 bound) {
+              #else
+              void * m_heap_alloc_b(struct Heap_Manager * heap, uint16 size, uint16 bound) {
+              #endif
+                      //#ifdef OS_uCOS_II_H
+                      //heap used by several task simultaneously like sharing memory
+                      //#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register 
+             -*/
+                  //OS_CPU_SR  cpu_sr;
+                  //#endif
+                  //#endif
+                  uint32 addr;
+                  alloc_chain *alloc_ptr = heap->root;
+                      static alloc_chain *alloc_ptr_temp = (alloc_chain *)NULL;
+                      alloc_chain * candidate;
+                      //#ifdef OS_uCOS_II_H
+                      //OS_ENTER_CRITICAL();
+                      //#endif
+                      get_next_chain:
+                      //Uart_Printf("%d\n", alloc_ptr);
+                      //printf("%d %d\n", ((intptr)alloc_ptr + (intptr)size + ((size%4)>0)), ((intptr)heap + heap->size + sizeo
+             -f(alloc_chain)));
+                      addr = ((intptr)alloc_ptr + (intptr)size + (size % 4));
+                      addr = addr + (bound - (addr % bound));
+                      if(addr > ((intptr)heap + heap->size + sizeof(alloc_chain)))
+                      {
+                              //heap is already full, please allocate smaller size
+                              //printf("heap full\n");
+                              return NULL;
+                      }
+                      if(alloc_ptr->next==NULL) {             //allocate new chunk at the end of the heap
+                              #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf(" * creating new chunk with size %i\n", size);
+                              #endif
+                              addr = (intptr)alloc_ptr + sizeof(alloc_chain);
+                              addr = addr + (bound - (addr % bound));
+                              alloc_ptr_temp->next = (alloc_chain *)(addr - sizeof(alloc_chain));
+                              alloc_ptr = alloc_ptr_temp->next;
+                              alloc_ptr->size = size + (size % 4);
+                              addr = ((intptr)alloc_ptr + (intptr)sizeof(alloc_chain) + alloc_ptr->size);
+                              addr = addr + (bound - (addr % bound));
+                              alloc_ptr->next = (alloc_chain *)addr;
+                              //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+                              //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+                              alloc_ptr->prev = alloc_ptr_temp;
+                              alloc_ptr_temp = alloc_ptr->next;       //berubah fungsi untuk menjadi pointer chunk selanjutnya
+                              alloc_ptr_temp->prev = alloc_ptr;
+                              alloc_ptr_temp->size = 0;
+                              alloc_ptr_temp->next = NULL;
+                              //Uart_Printf("%d\n", alloc_ptr);
+                              //Uart_Printf("allocate at %x\n", ((intptr)alloc_ptr + (intptr)sizeof(alloc_chain)));
+                              //#ifdef OS_uCOS_II_H
+                              //Uart_Printf("exit\n");
+                              //OS_EXIT_CRITICAL();
+                              //#endif
+                              _used_heap += alloc_ptr->size;
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 10  
+
+                              return (void *)((intptr)alloc_ptr + sizeof(alloc_chain));       //return pointer sekarang + ukuran header kare
+             -na *[header]+[body]
+                      }
+                      //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+                      alloc_ptr_temp = alloc_ptr;
+                      alloc_ptr = alloc_ptr->next;
+                      addr = ((intptr)alloc_ptr_temp + alloc_ptr_temp->size + sizeof(alloc_chain) + sizeof(alloc_chain) + size)
+             -;
+                      addr = addr + (bound - (addr % bound));
+                      if((intptr)alloc_ptr >= addr) {
+                              //allocate new heap using FFA (First Fit Algorithm)
+                              addr = ((intptr)alloc_ptr_temp + alloc_ptr_temp->size + sizeof(alloc_chain)) + sizeof(alloc_chain);
+                              addr = addr + (bound - (addr % bound));
+                              candidate = (alloc_chain *)(addr - sizeof(alloc_chain));
+                              candidate->size = size + (size % 4);
+                              alloc_ptr_temp->next = candidate;
+                              alloc_ptr_temp->next->prev = alloc_ptr_temp;
+                              candidate->next = alloc_ptr;
+                              candidate->next->prev = candidate;
+                              //Uart_Printf("%d\n", candidate);
+                              //printf("%d\n", ((intptr)candidate + (intptr)sizeof(alloc_chain)));
+                              //#ifdef OS_uCOS_II_H
+                              //Uart_Printf("exit\n");
+                              //OS_EXIT_CRITICAL();
+                              //#endif
+                              _used_heap += candidate->size;
+                              return (void *)((intptr)candidate + sizeof(alloc_chain));
+                      }
+                      goto get_next_chain;
+              }
+              
+              #endif
+ 551          
+ 552          /*void main()
+ 553          {
+ 554                  Heap_Manager * h1;
+ 555                  Heap_Manager * h2;
+ 556                  m_init_alloc();
+ 557                  h1 = m_create_heap(20000);
+ 558                  h2 = m_create_heap(10000);
+ 559                  m_mem_dump();
+ 560                  m_heap_alloc(h1, 20000);
+ 561                  m_heap_alloc(h2, 10000);
+ 562                  m_mem_dump();
+ 563                  m_delete_heap(h1);
+ 564                  m_delete_heap(h2);
+ 565                  m_mem_dump();
+ 566                  
+ 567                  h1 = m_create_heap(20000);
+ 568                  h2 = m_create_heap(10000);
+ 569                  m_mem_dump();
+ 570                  if(m_heap_alloc(h1, 20000) == NULL) {
+ 571                          printf("success\n");
+ 572                  }
+ 573                  m_heap_alloc(h2, 10000);
+ 574          }*/
+ 575          
+ 576          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    800    ----
+C51 COMPILER V7.01  MIDGARD                                                                01/25/2014 09:07:15 PAGE 11  
+
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    256    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

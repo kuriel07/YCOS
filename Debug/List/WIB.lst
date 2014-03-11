@@ -1,0 +1,539 @@
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE WIB
+OBJECT MODULE PLACED IN .\Debug\Output\WIB.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\WIB.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\WIB.lst) OBJECT(.\Debug\Output\WIB.obj)
+
+stmt level    source
+
+   1          //#include "..\..\defs.h"
+   2          #include "..\midgard\midgard.h"
+   3          #include "..\asgard\file.h"
+   4          #include "..\liquid.h"
+   5          //#include "SAT.h"
+   6          #include "VAS.h"
+   7          #include "SMS.h"
+   8          #include <string.h>
+   9          
+  10          //#define FID_WIB                               0x2700
+  11          //#define FID_WTAR                              0x6F1A
+  12          //#define FID_WERRORTEXT                0x6F02
+  13          //#define FID_WBYTECODE                 0x6F03
+  14          //#define FID_WSMSHEADER                0x6F04
+  15          //#define FID_WSC                               0x6F1B
+  16          //#define FID_W0348CNTR                 0x6F06
+  17          //#define FID_WVERSION                  0x6F07
+  18          //#define FID_WIBCONF                   0x6F08
+  19          //#define FID_WEVTCONF                  0x6F0B
+  20          //#define FID_WTEXT                             0x6F1C
+  21          //#define FID_WMENU                             0x6F18
+  22          //#define FID_WSCRADDR                  0x6F1D
+  23          //#define FID_WMENUTITLE                0x6F1E
+  24          
+  25          #if VAS_ALLOCATED
+  26          extern uchar STK_buffer[];
+  27          
+  28          //load default menu
+  29          uint16 VAS_menu(void) _REENTRANT_ {
+  30   1              uint16 status = APDU_SUCCESS;
+  31   1              uchar j = 0, k = 0;
+  32   1              uchar i = 0;
+  33   1              uchar len;
+  34   1              uchar total_rec = 0;
+  35   1              fs_handle temp_fs;
+  36   1              ef_header * file;
+  37   1              //select EFmenutitle
+  38   1              _select(&temp_fs, FID_MF);
+  39   1              _select(&temp_fs, FID_WIB);     
+  40   1              if(_select(&temp_fs, FID_WMENUTITLE) < 0x9F00) goto exit_menu;          //EFsc not found
+  41   1              j += VAS_push_header(j, SET_UP_MENU, 0, STK_DEV_ME);
+  42   1              file = (ef_header *)file_get_current_header(&temp_fs);
+  43   1              _readrec(&temp_fs, 0, STK_buffer, file->rec_size);                      //read record #1 (EFmenutitle) 
+  44   1              m_free(file);
+  45   1              if(STK_buffer[2] == 0xFF) goto exit_menu;                                       //check menutitle
+  46   1              len = STK_buffer[2];
+  47   1              j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, STK_buffer + 3);             //menutitle
+  48   1              //select EFmenu
+  49   1              _select(&temp_fs, FID_WIB);     
+  50   1              if(_select(&temp_fs, FID_WMENU) < 0x9F00) goto exit_menu;               //EFsc not found
+  51   1              file = (ef_header *)file_get_current_header(&temp_fs);
+  52   1              total_rec = (file->size / file->rec_size);
+  53   1              k = 0;
+  54   1              _readrec(&temp_fs, k++, STK_buffer, file->rec_size);            //first record (ignore)
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 2   
+
+  55   1              while(k < total_rec) {
+  56   2                      _readrec(&temp_fs, k++, STK_buffer, file->rec_size);
+  57   2                      if(STK_buffer[0] == 0x02) {                                             //item status (02 = show, 00 = hidden)
+  58   3                              len = STK_buffer[5];                                            //item menutext length
+  59   3                              memcpy(STK_buffer+2, STK_buffer+6, len);        //[menu identifier->1][menutext->N], slide menutext to menu or
+             -dinal
+  60   3                              j += SAT_file_push(j, (STK_TAG_ITEM & 0x7F), len+1, STK_buffer+1);              //menutitle
+  61   3                      }       
+  62   2              }
+  63   1              //vas_state = VAS_STATE_MENU;                                                   //change VAS state to menu
+  64   1              //status = APDU_STK_RESPONSE | j;
+  65   1              status = SAT_file_flush(j);
+  66   1              m_free(file);
+  67   1              exit_menu:
+  68   1              return status;
+  69   1      }
+  70          
+  71          //set up event list
+  72          //extern uchar sat_init_state;
+  73          uint16 VAS_event(void) _REENTRANT_ {
+  74   1              uint16 status = APDU_SUCCESS;
+  75   1              uchar j = 0, k = 0;
+  76   1              uchar i = 0;
+  77   1              uchar len;
+  78   1              uchar total_rec = 0;
+  79   1              fs_handle temp_fs;
+  80   1              //ef_header * file;
+  81   1              //select EFmenutitle
+  82   1              _select(&temp_fs, FID_MF);
+  83   1              _select(&temp_fs, FID_WIB);     
+  84   1              if(_select(&temp_fs, FID_WEVTCONF) < 0x9F00) goto exit_event;           //EFsc not found
+  85   1              j += VAS_push_header(j, SET_UP_EVENT_LIST, 0, STK_DEV_ME);
+  86   1              k = 3;
+  87   1              i = 0;
+  88   1              while(1) {
+  89   2                      if(_readbin(&temp_fs, i, STK_buffer, 3) != APDU_SUCCESS) goto flush_event;
+  90   2                      i += 3;
+  91   2                      switch(STK_buffer[0]) {
+  92   3                              case EVENT_MT_CALL:
+  93   3                              case EVENT_CALL_CONNECTED:
+  94   3                              case EVENT_CALL_DISCONNECTED:
+  95   3                              case EVENT_LOCATION_STATUS:
+  96   3                              case EVENT_USER_ACTIVITY:
+  97   3                              case EVENT_IDLE_SCREEN_AVAIL:
+  98   3                              case EVENT_CARD_READER_STAT:
+  99   3                              case EVENT_LANGUAGE_SELECT:
+ 100   3                              case EVENT_BROWSER_TERMINATION:
+ 101   3                              case EVENT_DATA_AVAILABLE:
+ 102   3                              case EVENT_CHANNEL_STATUS:
+ 103   3                                      STK_buffer[k++] = STK_buffer[0];
+ 104   3                                      break;
+ 105   3                              case VAS_STARTUP_EVENT:
+ 106   3                                      //sat_init_state = SAT_STARTUP_INIT;
+ 107   3                                      break;
+ 108   3                              default:
+ 109   3                                      if(i == 0) goto exit_event;
+ 110   3                                      goto flush_event;
+ 111   3                      }
+ 112   2                      len = STK_buffer[2];
+ 113   2                      i += len;
+ 114   2              }
+ 115   1              flush_event:
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 3   
+
+ 116   1              j += SAT_file_push(j, (STK_TAG_EVENT_LIST & 0x7F), k - 3, STK_buffer + 3);
+ 117   1              //vas_state = VAS_STATE_MENU;                                                   //change VAS state to menu
+ 118   1              //status = APDU_STK_RESPONSE | j;
+ 119   1              status = SAT_file_flush(j);
+ 120   1              //m_free(file);
+ 121   1              exit_event:
+ 122   1              return status;
+ 123   1      }
+ 124          
+ 125          //set up and execute startup script
+ 126          uint16 VAS_startup(void) _REENTRANT_ {
+ 127   1              uint16 status = APDU_SUCCESS;
+ 128   1              if(VAS_invoke(VAS_SELECT_EVENT, VAS_STARTUP_EVENT) == TRUE) {
+ 129   2                      status = VAS_decode();
+ 130   2              }
+ 131   1              return status;
+ 132   1      }
+ 133          
+ 134          uchar VAS_invoke(uchar mode, uchar id) _REENTRANT_ {
+ 135   1              fs_handle temp_fs;
+ 136   1              ef_header * file;
+ 137   1              uchar rec_size = 0;
+ 138   1              uchar sid = 0, k;                                                       //script identifier, selalu mulai dari 1
+ 139   1              //uchar ord = 0;
+ 140   1              uint16 offset = 2, length;
+ 141   1              uchar fmask = 0;
+ 142   1              _select(&temp_fs, FID_MF);
+ 143   1              _select(&temp_fs, FID_WIB);
+ 144   1              if(mode == VAS_SELECT_MENU) {
+ 145   2                      if(_select(&temp_fs, FID_WMENU) <= 0x9F00) return FALSE;
+ 146   2                      file = (ef_header *)file_get_current_header(&temp_fs);
+ 147   2                      rec_size = file->rec_size;                              //record size
+ 148   2                      m_free(file);                                                   //freeup memory
+ 149   2                      if(_readrec(&temp_fs, id, STK_buffer, rec_size) != APDU_SUCCESS) return FALSE;
+ 150   2                      if(STK_buffer[0] == 0x02) {                                             //item status (02 = show, 00 = hidden)
+ 151   3                              sid = STK_buffer[1];                                            //item menutext length
+ 152   3                              //ord = STK_buffer[2];                                          //item ordinal (relative)
+ 153   3                      }
+ 154   2                      fmask = 0x02;                   //break;
+ 155   2              } else if(mode == VAS_SELECT_EVENT) {
+ 156   2                      if(_select(&temp_fs, FID_WEVTCONF) < 0x9F00) return FALSE;              //EFsc not found
+ 157   2                      k = TRUE;
+ 158   2                      offset = 0;
+ 159   2                      while(k) {
+ 160   3                              if(_readbin(&temp_fs, offset, STK_buffer, 3) != APDU_SUCCESS) return FALSE;
+ 161   3                              offset += 3;
+ 162   3                              switch(STK_buffer[0]) {
+ 163   4                                      case EVENT_MT_CALL:
+ 164   4                                      case EVENT_CALL_CONNECTED:
+ 165   4                                      case EVENT_CALL_DISCONNECTED:
+ 166   4                                      case EVENT_LOCATION_STATUS:
+ 167   4                                      case EVENT_USER_ACTIVITY:
+ 168   4                                      case EVENT_IDLE_SCREEN_AVAIL:
+ 169   4                                      case EVENT_CARD_READER_STAT:
+ 170   4                                      case EVENT_LANGUAGE_SELECT:
+ 171   4                                      case EVENT_BROWSER_TERMINATION:
+ 172   4                                      case EVENT_DATA_AVAILABLE:
+ 173   4                                      case EVENT_CHANNEL_STATUS:      
+ 174   4                                      case VAS_STARTUP_EVENT:
+ 175   4                                              if(STK_buffer[0] == id) {
+ 176   5                                                      sid = STK_buffer[1];
+ 177   5                                                      k = FALSE;
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 4   
+
+ 178   5                                              }
+ 179   4                                              break;
+ 180   4                                      default:
+ 181   4                                              return FALSE;
+ 182   4                              }
+ 183   3                              //len = STK_buffer[2];
+ 184   3                              offset += STK_buffer[2];
+ 185   3                      }               //break;//default: return FALSE;
+ 186   2              } else {
+ 187   2                      return FALSE;
+ 188   2              }
+ 189   1              offset = 2;
+ 190   1              if(sid != 0) {                                                          //menu script
+ 191   2                      _select(&temp_fs, FID_WIB);
+ 192   2                      if(_select(&temp_fs, FID_WSCRADDR) <= 0x9F00) return FALSE;
+ 193   2                      _readbin(&temp_fs, 0, STK_buffer, 2);
+ 194   2                      if(STK_buffer[0] & 0x02) {              //ABSOLUTE ADDRESSING
+ 195   3                              offset += (6 * (sid - 1));              //asumsi "Length of script address" selalu 2 bytes
+ 196   3                              _readbin(&temp_fs, offset, STK_buffer + 2, 6);
+ 197   3                              offset = *((uint16 *)(STK_buffer + 2 + 4));
+ 198   3                      } else {                                                //RELATIVE ADDRESSING
+ 199   3                              offset = 0;
+ 200   3                              _select(&temp_fs, FID_WIB);
+ 201   3                              if(_select(&temp_fs, FID_WBYTECODE) <= 0x9F00) return FALSE;
+ 202   3                              length = 0;
+ 203   3                              for(k=1;k<sid;k++) { 
+ 204   4                                      _readbin(&temp_fs, offset, &length, 2);
+*** WARNING C182 IN LINE 204 OF FRAMEWORK\WIB.C: pointer to different objects
+ 205   4                                      offset += (length + 2);
+ 206   4                              }
+ 207   3                      }
+ 208   2                      //got the script address of EFbytecode
+ 209   2                      return VAS_plugin_init(offset);
+ 210   2              }
+ 211   1              return FALSE;
+ 212   1              //VAS_SELECT_MENU
+ 213   1      }
+ 214          
+ 215          uchar VAS_set_tar(uchar * tar) _REENTRANT_ {
+ 216   1              uchar temp_fs;
+ 217   1              TARconfig tar_config;
+ 218   1              uchar i = 0;
+ 219   1              //temp_fs = m_alloc(sizeof(fs_handle));
+ 220   1              //if(temp_fs == NULL) return FALSE;
+ 221   1              _select(&temp_fs, FID_MF);
+*** WARNING C182 IN LINE 221 OF FRAMEWORK\WIB.C: pointer to different objects
+ 222   1              _select(&temp_fs, FID_WIB);
+*** WARNING C182 IN LINE 222 OF FRAMEWORK\WIB.C: pointer to different objects
+ 223   1              if(_select(&temp_fs, FID_WTAR) < 0x9F00) goto exit_get_config;          //EFtar not found
+*** WARNING C182 IN LINE 223 OF FRAMEWORK\WIB.C: pointer to different objects
+ 224   1              //status = file_readrec(&_liquid_fs, i++, &tar_config, 5);
+ 225   1              while(_readrec(&temp_fs, i++, &tar_config, 5) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 225 OF FRAMEWORK\WIB.C: pointer to different objects
+*** WARNING C182 IN LINE 225 OF FRAMEWORK\WIB.C: pointer to different objects
+ 226   2                      if(memcmp(tar_config.tar, tar, 3) == 0) {
+ 227   3                              vas_tar_mode = tar_config.type;
+ 228   3                              return TRUE;            
+ 229   3                      }
+ 230   2                      //status = file_readrec(&_liquid_fs, i++, &tar_config, 5);
+ 231   2              }
+ 232   1              exit_get_config:
+ 233   1              return FALSE;
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 5   
+
+ 234   1      }
+ 235          
+ 236          uchar VAS_get_security_config(uchar * tar, uchar mode, uchar index, uchar * buffer_out) _REENTRANT_ {
+ 237   1              uchar * temp_fs;
+ 238   1              TARconfig tar_config;
+ 239   1              uint16 i = 0;
+ 240   1              uchar j = 0, k = 0;
+ 241   1              uchar buffer[2];
+ 242   1              uchar status = FALSE;
+ 243   1              temp_fs = m_alloc(sizeof(fs_handle));
+ 244   1              if(temp_fs == NULL) return FALSE;
+ 245   1              _select(temp_fs, FID_MF);
+*** WARNING C182 IN LINE 245 OF FRAMEWORK\WIB.C: pointer to different objects
+ 246   1              _select(temp_fs, FID_WIB);
+*** WARNING C182 IN LINE 246 OF FRAMEWORK\WIB.C: pointer to different objects
+ 247   1              if(_select(temp_fs, FID_WTAR) < 0x9F00) goto exit_get_config;           //EFtar not found
+*** WARNING C182 IN LINE 247 OF FRAMEWORK\WIB.C: pointer to different objects
+ 248   1              //status = file_readrec(&_liquid_fs, i++, &tar_config, 5);
+ 249   1              while(_readrec(temp_fs, i++, &tar_config, 5) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 249 OF FRAMEWORK\WIB.C: pointer to different objects
+*** WARNING C182 IN LINE 249 OF FRAMEWORK\WIB.C: pointer to different objects
+ 250   2                      if(memcmp(tar_config.tar, tar, 3) == 0) goto start_get_config;
+ 251   2                      //status = file_readrec(&_liquid_fs, i++, &tar_config, 5);
+ 252   2              }
+ 253   1              goto exit_get_config;
+ 254   1              start_get_config:               //TAR checking success
+ 255   1              //#define OFFSCINDEX            4;
+ 256   1              _select(temp_fs, FID_WIB);
+*** WARNING C182 IN LINE 256 OF FRAMEWORK\WIB.C: pointer to different objects
+ 257   1              if(_select(temp_fs, FID_WSC) < 0x9F00) goto exit_get_config;            //EFsc not found
+*** WARNING C182 IN LINE 257 OF FRAMEWORK\WIB.C: pointer to different objects
+ 258   1              ////////////EF security configuration mechanism////////////////////////////     
+ 259   1              i = 0;                                                                                                                  //i = offset for current SC
+ 260   1              for(j = 0; j != (tar_config.sc_index - 1); j++) {                               //get TARsc index , j = index for current SC
+ 261   2                      _readbin(temp_fs, i, buffer, 2);
+*** WARNING C182 IN LINE 261 OF FRAMEWORK\WIB.C: pointer to different objects
+ 262   2                      if(buffer[0] != 0x30) goto exit_get_config;                     //invalid security configuration tag
+ 263   2                      i += buffer[1];                 //actual SC length
+ 264   2              }
+ 265   1              _readbin(temp_fs, i, buffer, 2);                                        //i = offset of current SC on TAR
+*** WARNING C182 IN LINE 265 OF FRAMEWORK\WIB.C: pointer to different objects
+ 266   1              if(buffer[0] != 0x30) goto exit_get_config;                                     //invalid security configuration tag
+ 267   1              switch(mode) {
+ 268   2                      case VAS_SC_OCNTR:
+ 269   2                              k = 0;
+ 270   2                              goto cntr_load;
+ 271   2                      case VAS_SC_ICNTR: 
+ 272   2                              k = 1;
+ 273   2                              cntr_load:
+ 274   2                              _readbin(temp_fs, i + 4, buffer, 2);                                    //i = offset of current SC on TAR
+*** WARNING C182 IN LINE 274 OF FRAMEWORK\WIB.C: pointer to different objects
+ 275   2                              _select(temp_fs, FID_WIB);
+*** WARNING C182 IN LINE 275 OF FRAMEWORK\WIB.C: pointer to different objects
+ 276   2                              if(_select(temp_fs, FID_W0348CNTR) < 0x9F00) goto exit_get_config;              //EFtar not found
+*** WARNING C182 IN LINE 276 OF FRAMEWORK\WIB.C: pointer to different objects
+ 277   2                              _readrec(temp_fs, buffer[k], buffer_out, 5);
+*** WARNING C182 IN LINE 277 OF FRAMEWORK\WIB.C: pointer to different objects
+ 278   2                              break;
+ 279   2                      case VAS_SC_OSPI:
+ 280   2                              _readbin(temp_fs, i + 8, buffer_out, 4);
+*** WARNING C182 IN LINE 280 OF FRAMEWORK\WIB.C: pointer to different objects
+ 281   2                              break;
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 6   
+
+ 282   2                      case VAS_SC_ISPI:
+ 283   2                      case VAS_SC_KID:
+ 284   2                      case VAS_SC_KIC:
+ 285   2                              i += 12;
+ 286   2                              while(_readbin(temp_fs, i, buffer, 2) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 286 OF FRAMEWORK\WIB.C: pointer to different objects
+ 287   3                                      i += 2;
+ 288   3                                      switch(buffer[0]) {
+ 289   4                                              case 0x82:              //SPI+KIc+KID list
+ 290   4                                                      if(mode != VAS_SC_ISPI) break;
+ 291   4                                                      k = index * 4;
+ 292   4                                                      if(k >= buffer[1] || buffer[1] == 0) goto exit_get_config;
+ 293   4                                                      _readbin(temp_fs, i + k, buffer_out, 4);
+*** WARNING C182 IN LINE 293 OF FRAMEWORK\WIB.C: pointer to different objects
+ 294   4                                                      status = TRUE;
+ 295   4                                                      goto exit_get_config;
+ 296   4                                              case 0x83:              //KIc list 
+ 297   4                                                      if(mode != VAS_SC_KIC) break;
+ 298   4                                                      k = index * 2;  
+ 299   4                                                      if(k >= buffer[1] || buffer[1] == 0) goto exit_get_config;
+ 300   4                                                      goto key_load;
+ 301   4                                              case 0x84:      
+ 302   4                                                      if(mode != VAS_SC_KID) break;
+ 303   4                                                      k = index * 2;  
+ 304   4                                                      if(k >= buffer[1] || buffer[1] == 0) goto exit_get_config;
+ 305   4                                                      key_load:
+ 306   4                                                      j = buffer[1];          //length
+ 307   4                                                      for(k = 0; k < j; k += 2) {
+ 308   5                                                              _readbin(temp_fs, i + k, buffer, 2);
+*** WARNING C182 IN LINE 308 OF FRAMEWORK\WIB.C: pointer to different objects
+ 309   5                                                              if(buffer[0] == index) {   
+ 310   6                                                                      _select(temp_fs, FID_MF);
+*** WARNING C182 IN LINE 310 OF FRAMEWORK\WIB.C: pointer to different objects
+ 311   6                                                                      _select(temp_fs, FID_LIQUID);
+*** WARNING C182 IN LINE 311 OF FRAMEWORK\WIB.C: pointer to different objects
+ 312   6                                                                      if(_select(temp_fs, FID_0348_KEY) < 0x9F00) goto exit_get_config;               //EFtar not found
+*** WARNING C182 IN LINE 312 OF FRAMEWORK\WIB.C: pointer to different objects
+ 313   6                                                                      _readrec(temp_fs, buffer[1], buffer_out, 16);
+*** WARNING C182 IN LINE 313 OF FRAMEWORK\WIB.C: pointer to different objects
+ 314   6                                                                      status = TRUE;
+ 315   6                                                                      goto exit_get_config;   
+ 316   6                                                              }       
+ 317   5                                                      }
+ 318   4                                                      break;
+ 319   4                                      }
+ 320   3                                      i += buffer[1];         //offset+length
+ 321   3                              }
+ 322   2                              break;
+ 323   2              }
+ 324   1              status = TRUE;
+ 325   1              exit_get_config:
+ 326   1              m_free(temp_fs);
+ 327   1              return status;
+ 328   1      }
+ 329          
+ 330          uchar VAS_replay_check(uchar mode, uchar * dcntr, uchar * scntr) _REENTRANT_ {
+ 331   1              uint32 dctr = *((uint32 *)(dcntr + 1));
+ 332   1              uint32 sctr = *((uint32 *)(scntr + 1));
+ 333   1              if(memcmp(scntr, "\xFF\xFF\xFF\xFF\xFF", 5) == 0) return TRUE;          //counter is blocked
+ 334   1              if(mode == VAS_CNTR_X_HIGHER) {
+ 335   2                      if(scntr[0] > dcntr[0]) return FALSE;
+ 336   2                      if(scntr[0] < dcntr[0]) return TRUE;
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 7   
+
+ 337   2                      return dctr > sctr;
+ 338   2              }
+ 339   1              if(mode == VAS_CNTR_1_HIGHER) {
+ 340   2                      if(scntr[0] > dcntr[0]) return FALSE;
+ 341   2                      if(dctr == 0 && (dcntr[0] == (scntr[0] + 1)) && sctr == 0xFFFFFFFFUL) return TRUE;                      //kasus khusus
+ 342   2                      if(scntr[0] < dcntr[0]) return FALSE;
+ 343   2                      return dctr == (sctr + 1);
+ 344   2              }
+ 345   1              return FALSE; 
+ 346   1      }
+ 347          
+ 348          /*#if 0
+ 349          uchar VAS_loadkey(vas_config * config, uchar mode, uchar index, uchar * buffer) _REENTRANT_ {
+ 350                  fs_handle temp_fs;
+ 351                  uchar k = 0;
+ 352                  uchar j = 0;
+ 353                  file_select(&temp_fs, FID_MF);
+ 354                  file_select(&temp_fs, FID_WIB); 
+ 355                  if(file_select(&temp_fs, FID_WSC) < 0x9F00) return FALSE;               //EFsc not found
+ 356                  file_readbin(&temp_fs, config->sc_offset + 12, buffer, 2);              //ignore spi+kic+kid list
+ 357                  k += buffer[1];         //k += length of spi+kic+kid list
+ 358                  file_readbin(&temp_fs, config->sc_offset + 12 + k, buffer, 2);          //kic keyset  
+ 359                  if(buffer[0] != 0x83) return FALSE;                                                             //invalid kic keyset
+ 360                  if(mode == VAS_LOAD_KID) {
+ 361                          k += buffer[1];  
+ 362                          file_readbin(&temp_fs, config->sc_offset + 12 + k, buffer, 2);          //kid keyset
+ 363                          if(buffer[0] != 0x84) return FALSE;                                                     //invalid kid keyset
+ 364                  }
+ 365                  for(j = 0; j < buffer[1]; j += 2) {
+ 366                          file_readbin(&temp_fs, config->sc_offset + 12 + k + j, buffer + 2, 2);          //kid keyset
+ 367                          if(buffer[2] == index) { index = buffer[3]; goto start_load; }          //load key index
+ 368                  }
+ 369                  return FALSE;
+ 370                  start_load:       
+ 371                  //kic/kid index + ref pair start from 0-15
+ 372                  file_select(&temp_fs, FID_MF);
+ 373                  file_select(&temp_fs, FID_LIQUID);
+ 374                  if(file_select(&temp_fs, FID_0348_KEY) < APDU_SUCCESS_RESPONSE) return FALSE;           //EFtar not found
+ 375                  if(file_readrec(&temp_fs, index, buffer, 0x10) == APDU_SUCCESS) return TRUE;
+ 376                  return FALSE; 
+ 377          }
+ 378          
+ 379          uchar VAS_loadcntr(vas_config * config, uchar index, uchar * buffer) _REENTRANT_ {      
+ 380                  fs_handle temp_fs;
+ 381                  file_select(&temp_fs, FID_MF);
+ 382                  file_select(&temp_fs, FID_WIB);
+ 383                  if(file_select(&temp_fs, FID_W0348CNTR) < APDU_SUCCESS_RESPONSE) return FALSE;          //EFtar not found
+ 384                  if(file_readrec(&temp_fs, index - 1, buffer, 5) == APDU_SUCCESS) return TRUE;
+ 385                  return FALSE; 
+ 386          }
+ 387          #endif*/
+ 388          
+ 389          vas_config * VAS_preprocess(command_packet * cmpkt) _REENTRANT_ {               //for incoming message
+ 390   1              fs_handle temp_fs;
+ 391   1              TARconfig tar_config;
+ 392   1              uchar buffer[12];
+ 393   1              uint16 i = 0;
+ 394   1              uchar j = 0, k = 0;
+ 395   1              vas_config * vc = NULL;
+ 396   1              uint16 status = APDU_SUCCESS;
+ 397   1              _select(&temp_fs, FID_MF);
+ 398   1              _select(&temp_fs, FID_WIB);
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 8   
+
+ 399   1              if(_select(&temp_fs, FID_WTAR) < 0x9F00) goto exit_preprocess;          //EFtar not found
+ 400   1              status = _readrec(&temp_fs, i++, &tar_config, 5);
+*** WARNING C182 IN LINE 400 OF FRAMEWORK\WIB.C: pointer to different objects
+ 401   1              while(status == APDU_SUCCESS) {
+ 402   2                      if(memcmp(tar_config.tar, cmpkt->tar, 3) == 0) goto start_preprocess;
+ 403   2                      status = _readrec(&temp_fs, i++, &tar_config, 5);
+*** WARNING C182 IN LINE 403 OF FRAMEWORK\WIB.C: pointer to different objects
+ 404   2              }
+ 405   1              goto exit_preprocess;
+ 406   1              start_preprocess:               //TAR checking success
+ 407   1              #define OFFSCINDEX              4;
+ 408   1              _select(&temp_fs, FID_WIB);
+ 409   1              if(_select(&temp_fs, FID_WSC) < 0x9F00) goto exit_preprocess;           //EFsc not found
+ 410   1              ////////////EF security configuration mechanism////////////////////////////     
+ 411   1              i = 0;                                                                                                                  //i = offset for current SC
+ 412   1              for(j = 0; j != (tar_config.sc_index - 1); j++) {                               //get TARsc index , j = index for current SC
+ 413   2                      _readbin(&temp_fs, i, buffer, 12);
+ 414   2                      if(buffer[0] != 0x30) goto exit_preprocess;                     //invalid security configuration tag
+ 415   2                      i += buffer[1];                 //actual SC length
+ 416   2              }
+ 417   1              _readbin(&temp_fs, i, buffer, 12);                                      //i = offset of current SC on TAR
+ 418   1              if(buffer[0] != 0x30) goto exit_preprocess;                     //invalid security configuration tag
+ 419   1              //temporary buffer format
+ 420   1              //[0] = outgoing cntr index
+ 421   1              buffer[0] = buffer[4];  //outgoing cntr index
+ 422   1              //[1] = incoming cntr index
+ 423   1              buffer[1] = buffer[5];  //incoming cntr index
+ 424   1              _readbin(&temp_fs, i + 12, buffer + 2, 2);                      //read SPI+KIc+KID list tag+length
+ 425   1              //[2] = spi list tag
+ 426   1              if(buffer[2] != 0x82) goto exit_preprocess;                     //invalid SPI+KIc+KID list tag
+ 427   1              //[3] = spi list length
+ 428   1              for(k = 0; k < buffer[3]; k += 4) {                                                              //k = offset for current operation from i
+ 429   2                      _readbin(&temp_fs, i + 14 + k, buffer + 4, 4);                  //iterate through all list, check for matched SC list
+ 430   2                      //[4-7] = SPI+KIc+KID
+ 431   2                      if(memcmp(buffer+4, cmpkt->spi, 4) == 0) goto start_preprocess_1;
+ 432   2              }
+ 433   1              goto exit_preprocess;
+ 434   1              start_preprocess_1:
+ 435   1              vc = m_alloc(sizeof(vas_config));
+ 436   1              vas_tar_mode = tar_config.type;                 //set current operation mode  (PULL, PUSH, ADMIN)
+ 437   1              vc->type = tar_config.type;
+ 438   1              vc->sc_offset = i;
+ 439   1              vc->ocntr_index = buffer[0];            //outgoing cntr index
+ 440   1              vc->icntr_index = buffer[1];            //incoming cntr index
+ 441   1              exit_preprocess:
+ 442   1              return vc;              
+ 443   1      }
+ 444          
+ 445          uchar VAS_load_text(uint16 fid, uchar id, uchar * buffer, uchar max_len) _REENTRANT_ {
+ 446   1              fs_handle temp_fs;
+ 447   1              uchar temp[2];
+ 448   1              uint16 i = 0;
+ 449   1              _select(&temp_fs, FID_MF);
+ 450   1              _select(&temp_fs, FID_WIB);
+ 451   1              if(_select(&temp_fs, fid) < 0x9F00) return 0;
+ 452   1              while(_readbin(&temp_fs, i, temp, 2) == APDU_SUCCESS) {
+ 453   2                      if(temp[0] == 0xFF) return 0;
+ 454   2                      if(temp[0] == id) {
+ 455   3                              if(temp[1] < max_len) {
+ 456   4                                      max_len = temp[1];
+ 457   4                              }
+ 458   3                              _readbin(&temp_fs, i + 2, buffer, max_len);     
+C51 COMPILER V7.01  WIB                                                                    01/25/2014 09:07:24 PAGE 9   
+
+ 459   3                              return max_len;
+ 460   3                      }
+ 461   2                      i += (temp[1] + 2);
+ 462   2              }
+ 463   1              return 0;
+ 464   1      }
+ 465          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3926    ----
+   CONSTANT SIZE    =      6    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  29 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1069 @@
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE SMS
+OBJECT MODULE PLACED IN .\Debug\Output\SMS.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\SMS.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\SMS.lst) OBJECT(.\Debug\Output\SMS.obj)
+
+stmt level    source
+
+   1          #include "..\liquid.h"
+   2          #include "..\yggdrasil\application.h"                   //user application callback      
+   3          #include "..\midgard\midgard.h"
+   4          #include "..\framework\rfm.h"
+   5          #include "..\framework\vas.h"
+   6          #include "..\auth\crc.h"
+   7          #include "..\framework\dcs.h"
+   8          #include "..\framework\des.h"
+   9          #include "SMS.h"
+  10          #include <string.h>
+  11          
+  12          static fs_handle _liquid_fs;
+  13          uint16 decode_SMSTPDU(uchar p2c, uchar * buffer) _REENTRANT_ {          //+16~21 bytes
+  14   1              uchar i = 0;//, j;
+  15   1              uint16 status = APDU_SUCCESS;
+  16   1              uchar type;
+  17   1              //uchar pid;
+  18   1              uchar dcs;
+  19   1              uchar udl; 
+  20   1              uchar addr_len;
+  21   1              uchar * originating_address = NULL;                     
+  22   1              //TP-MTI
+  23   1              type = buffer[i++];
+  24   1              switch(type & 0x03) {
+  25   2                      case 0:         //sms deliver                           //SMS-DELIVER - SMS-DELIVER_REPORT       
+  26   2                              //TP-MMS
+  27   2                              if(type & (1<<2)) { //no more messages
+  28   3                      
+  29   3                              }
+  30   2                              //TP-RP
+  31   2                              if(type & (1<<7)) {     //reply path is set
+  32   3                      
+  33   3                              }
+  34   2                              //TP-OA (Originating Address)           //4 bytes
+  35   2                              addr_len = (buffer[i] + 1) >> 1;                                                 //address length
+  36   2                              addr_len += 2;  
+  37   2                              //get TP-OA
+  38   2                              originating_address = (uchar *)m_alloc(addr_len);
+  39   2                              memcpy(originating_address, buffer + i, addr_len);
+  40   2                              i += addr_len;
+  41   2                              //TP-PID
+  42   2                              buffer[i++];
+*** WARNING C275 IN LINE 42 OF FRAMEWORK\SMS.C: expression with possibly no effect
+  43   2                              //TP-DCS
+  44   2                              dcs = buffer[i++];
+  45   2                              //TP-SCTS
+  46   2                              i += 7;                 //skip timestamp
+  47   2                              //TP-UDL
+  48   2                              udl = buffer[i++];
+  49   2                              break;
+  50   2                      case 1:         //sms submit
+  51   2                      case 2:         //sms command
+  52   2                      case 3:         //reserved
+  53   2                              return status;
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 2   
+
+  54   2              }
+  55   1              //process DCS first before decode any packet, UCS2 to 8, 7 to 8
+  56   1              switch(dcs >> 4) {
+  57   2                      case 0x08:      //reserved coding group
+  58   2                      case 0x09:
+  59   2                      case 0x0A:
+  60   2                      case 0x0B:
+  61   2                              break;
+  62   2                      case 0x0C:      //message waiting (discard message)
+  63   2                              break;
+  64   2                      case 0x0D:      //message waiting (store message)
+  65   2                              break;
+  66   2                      case 0x0E:      //message waiting (store message), UCS2 uncompressed
+  67   2                              break;
+  68   2                      case 0x00:      //general data coding information
+  69   2                      case 0x01:
+  70   2                      case 0x02:
+  71   2                      case 0x03:
+  72   2                      case 0x04:      //message marked for automatic deletion
+  73   2                      case 0x05:
+  74   2                      case 0x06:
+  75   2                      case 0x07:
+  76   2                      case 0x0F:      //data coding message class
+  77   2                              //buffer + i = pointer to user data length(2 bytes) + user data(variable)
+  78   2                              switch(dcs & 0x03) {
+  79   3                                      case 0x00:      break;  //class 0
+  80   3                                      case 0x01:      break;  //ME specific
+  81   3                                      case 0x02:                      //SIM specific
+  82   3                                              if((dcs & 0x04) == 0) {
+  83   4                                                      //decompacting sms user data (including headers) and update user data length
+  84   4                                                      udl = (uint16)decode_728(buffer + i, buffer + i, udl);  
+  85   4                                              } 
+  86   3                                              //decode user data       (SIM specific message) in 8 bit mode
+  87   3                                              if(p2c) {
+  88   4                                                      if((type & (1<<6)) == 0) { //contains header AND (U)SIM Data Download 
+  89   5                                                              //check sri and send feedback
+  90   5                                                              #if 1     
+  91   5                                                              status = user_packet_decode(buffer + i, originating_address, udl);
+  92   5                                                              #endif
+  93   5                                                              m_free(originating_address);
+  94   5                                                      } else {
+  95   5                                                              m_free(originating_address);
+  96   5                                                              status = decode_SMSPPPacket(buffer + i);
+  97   5                                                      }
+  98   4                                              } else {
+  99   4                                                      m_free(originating_address);
+ 100   4                                                      status = decode_SMSCBPacket(buffer + i);
+ 101   4                                                      //don't send any feedback to network
+ 102   4                                              }
+ 103   3                                              break;
+ 104   3                                      default: break; 
+ 105   3                              }
+ 106   2                              break;
+ 107   2              }
+ 108   1      
+ 109   1              //return tpdu; 
+ 110   1              //TP-SRI        (Status Report Indicator)
+ 111   1              if(type & (1<<5)) {     //a status report shall be returned to SME      return 9FXX on success and 9EXX on error  
+             - (target network)
+ 112   2      
+ 113   2              }
+ 114   1              //if(originating_address != NULL) {
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 3   
+
+ 115   1              //      m_free(originating_address);
+ 116   1              //}
+ 117   1              return status;
+ 118   1      }
+ 119          
+ 120          uint16 decode_SMSCBPacket(uchar * buffer) _REENTRANT_ {
+ 121   1              uint16 status = APDU_SUCCESS;
+ 122   1              uint16 sn;
+ 123   1              uint16 mid;
+ 124   1              //uchar dcs;
+ 125   1              //uchar pp;
+ 126   1              uchar i = 4;
+ 127   1              concat_property cp = {0, 0, 0, 0, 0xFF};                //TAG = 0xFF, invalid            
+ 128   1              //concat_property * cp = m_alloc(sizeof(concat_property));
+ 129   1              //memset(cp, 0, sizeof(concat_property));
+ 130   1              sn = *(uint16 *)buffer;
+ 131   1              mid = *(uint16 *)(buffer+2);
+ 132   1              #define OFFDCS          0
+ 133   1              #define OFFPP           1
+ 134   1              //dcs = buffer[OFFDCS];
+ 135   1              //pp = buffer[OFFPP];
+ 136   1              i += 2;
+ 137   1              //decode command packet (different temporary file)
+ 138   1              //status =
+ 139   1              _select(&_liquid_fs, FID_MF);
+ 140   1              _select(&_liquid_fs, FID_LIQUID);  
+ 141   1              _select(&_liquid_fs, FID_0348_IN);
+ 142   1              //if(allocate_liquid_space(&_liquid_fs, FID_LIQTEMP_IN, 153)) {            
+ 143   1                      //write to temporary file                                                                                                       
+ 144   1              _writebin(&_liquid_fs, sizeof(concat_property) + cp.offset, buffer + i, 82);    //fixed block 82 octet
+ 145   1                      //update concat property
+ 146   1              _writebin(&_liquid_fs, 0, (uchar *)&cp, sizeof(concat_property));               //update concat_property
+ 147   1              //}
+ 148   1              return p348_decode_command_packet();
+ 149   1      }
+ 150          
+ 151          uint16 decode_SMSPPPacket(uchar * buffer) _REENTRANT_ {    //+11-16 bytes
+ 152   1              uint16 status = APDU_SUCCESS;
+ 153   1              uchar i = 0, j = 0;
+ 154   1              uchar udhl = 0, iei = 0xFF, ieidl = 0, udl = 0;
+ 155   1      
+ 156   1              #if 0
+                      concat_property cp = {0, 0, 0, 0, 0xFF};                //TAG = 0xFF, invalid
+                      #endif
+ 159   1      
+ 160   1              uchar rec_size = 0;
+ 161   1              #define OFFUDL          0
+ 162   1              #define OFFUDHL         1
+ 163   1              //#define OFFIEI                (i)
+ 164   1              //#define OFFIEIDL              (i+1)  
+ 165   1              #define OFFREFNUM       (0)
+ 166   1              #define OFFTOTALNUM     (1)
+ 167   1              #define OFFSEQNUM       (2)
+ 168   1      
+ 169   1              uchar ref_num = 0, seq_num = 1, total_num = 1, tag = 0xFF;
+ 170   1              uchar * ied;    
+ 171   1      
+ 172   1              _select(&_liquid_fs, FID_MF);
+ 173   1              _select(&_liquid_fs, FID_LIQUID);  
+ 174   1              _select(&_liquid_fs, FID_SMS_PACKET);
+ 175   1              //get current file record size
+ 176   1              ied = file_get_current_header(&_liquid_fs);
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 4   
+
+ 177   1              rec_size = ((ef_header *)ied)->rec_size;
+ 178   1              m_free(ied);
+ 179   1      
+ 180   1              udl = buffer[i++];
+ 181   1              udhl = buffer[i++];             //udhl = header length + offset, end of header offset
+ 182   1              next_header:
+ 183   1              while(i != (udhl + 2)) {                  //decode each element data   
+ 184   2                      iei = buffer[i++];              //IEI           Information Element Identifier
+ 185   2                      ieidl = buffer[i++];    //information element identifier data length
+ 186   2                      
+ 187   2                      ied = (uchar *)m_alloc(ieidl);
+ 188   2                      if(ied != NULL) {
+ 189   3                              for(j=0;j<ieidl;j++) {
+ 190   4                                      ied[j] = buffer[i++];
+ 191   4                              }
+ 192   3                      }
+ 193   2                      //callback mechanism here
+ 194   2                      switch(iei) {
+ 195   3                              case 0x00:              //concatenated short message (8-bit)
+ 196   3                                      //#define SMSUD_REF_NUM         0
+ 197   3                                      ref_num = ied[OFFREFNUM];
+ 198   3                                      total_num = ied[OFFTOTALNUM];//buffer[OFFTOTALNUM]; 
+ 199   3                                      seq_num = ied[OFFSEQNUM];
+ 200   3      
+ 201   3                                      //if(allocate_liquid_space(&_liquid_fs, FID_LIQTEMP_IN, (uint16)(153 * buffer[OFFTOTALNUM]))) {
+ 202   3                                      #if 0
+                                              if(ied[OFFSEQNUM] == 1) {                                       //1st message, zeroing concat property
+                                                      cp.offset = 0;                                                                                    //reset concat property
+                                                      cp.counter = 0;
+                                                      cp.refnum = ied[OFFREFNUM];//buffer[OFFREFNUM];
+                                              } else {                                                        //1+n message, read concat property from file 
+                                                      file_readbin(&_liquid_fs, 0, (uchar *)&cp, sizeof(concat_property));
+                                              }
+                                              
+                                              //check for valid sequence number
+                                              if((cp.counter + 1) != ied[OFFSEQNUM]) { m_free(ied); status = APDU_STK_OVERLOAD; goto exit_decode; }   
+             -        //not a valid sequence                                  
+                                              if(cp.refnum != ied[OFFREFNUM]) { m_free(ied); status = APDU_STK_OVERLOAD; goto exit_decode; }                          //in
+             -valid refnum
+                                              #endif
+ 215   3                                      //}
+ 216   3                                      break;
+ 217   3                              case 0x70:              //SIM Toolkit security header (CPI)
+ 218   3                                      #if 0
+                                              cp.tag = 0x70;
+                                              #else
+ 221   3                                      tag = 0x70;
+ 222   3                                      #endif
+ 223   3                                      break;
+ 224   3                              //default:
+ 225   3                                      //buffer[OFFREFNUM] = 0;
+ 226   3                                      //buffer[OFFTOTALNUM] = 0; 
+ 227   3                                      //buffer[OFFSEQNUM] = 1;
+ 228   3                                      //goto exit_decode;
+ 229   3                      }
+ 230   2                      //i += buffer[OFFIEIDL];
+ 231   2                      //i += 2;               //sizeof(IEI) + sizeof(IEIDL)
+ 232   2                      //i += ieidl;
+ 233   2                      m_free(ied);
+ 234   2              }                  
+ 235   1              //write to temporary file
+ 236   1              buffer[udhl + 1] = (udl - udhl);                //size
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 5   
+
+ 237   1              _writerec(&_liquid_fs, (uint16)seq_num, buffer + 1 + udhl, rec_size); //value
+ 238   1              _readrec(&_liquid_fs, (uint16)0, buffer, rec_size);                                     //concat property
+ 239   1              buffer[seq_num] = ref_num;
+ 240   1              if(tag == 0x70) {                                                                                                               //command packet detected
+ 241   2                      buffer[total_num + 1] = ref_num;
+ 242   2                      buffer[0] = tag;
+ 243   2                      if(total_num == 1) goto start_copy_packet;                                              //single packet detected
+ 244   2              }
+ 245   1              _writerec(&_liquid_fs, (uint16)0, buffer, rec_size);                                    //concat property
+ 246   1              if(buffer[0] != 0x70) goto exit_decode;                 //not command packet
+ 247   1      
+ 248   1              #if 0
+                      _writebin(&_liquid_fs, sizeof(concat_property) + cp.offset, buffer + 2 + udhl, (uint16)(udl - udhl));
+                      //update concat property
+                      cp.offset += (uint16)(udl - udhl) - 1;
+                      cp.counter++;
+                      _writebin(&_liquid_fs, 0, (uchar *)&cp, sizeof(concat_property));               //update concat_property   */
+                      #endif
+ 255   1              //check if all reference existed in the buffer (including command packet reference)
+ 256   1              for(iei = 1; iei <= (total_num + 1); iei++) {
+ 257   2                      if(buffer[iei] != ref_num) goto exit_decode;    
+ 258   2              }
+ 259   1              //clear concat property
+ 260   1              buffer[0] = 0xFF;
+ 261   1              for(iei = 1; iei <= total_num; iei ++) {
+ 262   2                      buffer[iei] = iei;
+ 263   2              }
+ 264   1              buffer[total_num + 1] = 0;
+ 265   1              _writerec(&_liquid_fs, (uint16)0, buffer, rec_size);                                    //concat proper
+ 266   1              //concat all message to temporary in for 0348 processing
+ 267   1              start_copy_packet:
+ 268   1              status = sizeof(concat_property);                       //use status as offset
+ 269   1              for(iei = 1; iei <= total_num; iei++) {
+ 270   2                      _select(&_liquid_fs, FID_LIQUID);
+ 271   2                      _select(&_liquid_fs, FID_SMS_PACKET);           
+ 272   2                      _readrec(&_liquid_fs, iei, buffer, rec_size);  
+ 273   2                      _select(&_liquid_fs, FID_LIQUID);
+ 274   2                      _select(&_liquid_fs, FID_0348_IN);
+ 275   2                      _writebin(&_liquid_fs, status, buffer + 1, buffer[0]);
+ 276   2                      status += (buffer[0] - 1);              
+ 277   2              }
+ 278   1      
+ 279   1              #if 0
+                      if(cp.tag == 0x70 && cp.counter == total_num) {                                 //last message concatenated     
+                      #endif
+ 282   1                      status = p348_decode_command_packet();                  //03.48 command packet decoder
+ 283   1              #if 0
+                      } else {
+                                      
+                      }   
+                      #endif
+ 288   1              exit_decode:
+ 289   1              return status;
+ 290   1      }
+*** WARNING C280 IN LINE 182 OF FRAMEWORK\SMS.C: 'next_header': unreferenced label
+ 291          
+ 292          //#if ((SAT_MENU_MODE == SAT_MENU_VAS) && VAS_ALLOCATED)
+ 293          //uchar encode_SMSTPDU(uchar type, uchar length, response_packet * rspkt, uchar * buffer_out) _REENTRANT_ 
+             -{
+ 294          //#elif ((SAT_MENU_MODE == SAT_MENU_LIQUID) && LIQUID_ALLOCATED)
+ 295          uchar encode_SMSTPDU(uchar type, uchar pid, uchar dcs, uchar length, uchar * address, response_packet * rs
+             -pkt, uchar * buffer_out) _REENTRANT_ {
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 6   
+
+ 296   1      //#endif
+ 297   1              //read from rspkt pointer, encode to 7 bit, calculate the response size, add smstpdu header store result 
+             -to buffer_out, return SW 
+ 298   1              //message cannot be concatenated message!!
+ 299   1              uchar i = 0, j;
+ 300   1              uchar len = 0;
+ 301   1              //uchar data_offset = 0;
+ 302   1      //#if ((SAT_MENU_MODE == SAT_MENU_VAS) && VAS_ALLOCATED)
+ 303   1              
+ 304   1              
+ 305   1      //#elif ((SAT_MENU_MODE == SAT_MENU_LIQUID) && LIQUID_ALLOCATED)
+ 306   1              //response_tpdu * rstpdu;
+ 307   1              switch(type & 0x03) {
+ 308   2                      case 0:         //sms deliver                           //SMS-DELIVER
+ 309   2                              break;
+ 310   2                      case 1:         //sms submit
+ 311   2                              //TP-MTI
+ 312   2                              buffer_out[i] = (type & 0x03) | 0x20;   //bit 7 = TP-RP (reply path), bit 5 = TP-SRR (request status), bi
+             -t 4,3 = TP-VPF
+ 313   2                              if(type & SMS_TYPE_NOREPORT) {
+ 314   3                                      buffer_out[i] &= ~(SMS_TYPE_NOREPORT);
+ 315   3                              }
+ 316   2                              if((type & SMS_TYPE_NOHEADER) == 0) {
+ 317   3                                       buffer_out[i] |= 0x40;                         //bit 6 = TP-UDHI
+ 318   3                              }
+ 319   2                              i++;
+ 320   2                              //TP-MR
+ 321   2                              buffer_out[i++] = 0xFF;         //auto corrected by ME
+ 322   2                              //TP-DA
+ 323   2                              buffer_out[i++] = address[0];           //length
+ 324   2                              buffer_out[i++] = address[1];           //TON+NPI
+ 325   2                              //memcpy(buffer_out + i, address + 1, address[0]);
+ 326   2                              address[0] = (address[0]+1) >> 1;
+ 327   2                              for(j=0;j<address[0];j++) {
+ 328   3                                      buffer_out[i++] = address[j+2];
+ 329   3                              }
+ 330   2                              //i += address[0];                                 
+ 331   2                              //TP-PID
+ 332   2                              //buffer_out[i++] = 0x7C;               //ANSI136 R-DATA
+ 333   2                              buffer_out[i++] = pid;          //short message type 0
+ 334   2                              buffer_out[i++] = dcs;          //8bit, class 2 
+ 335   2      
+ 336   2                              //TP-UDL
+ 337   2                              //i += 2; 
+ 338   2                              buffer_out[i++] = length;
+ 339   2                              //buffer_out[i++] = length;     //user data length
+ 340   2                              //TP-UD
+ 341   2                              memcpy(buffer_out + i, rspkt, length);
+ 342   2                              i += length;
+ 343   2                              len = i;
+ 344   2                              break;
+ 345   2                      case 2:         //sms command
+ 346   2                      case 3:         //reserved
+ 347   2                              break;
+ 348   2              }
+ 349   1      //#endif
+ 350   1              return len;                     
+ 351   1      }
+ 352          
+ 353          
+ 354          //extern uint16 send_registration(uchar mode) _REENTRANT_;
+ 355          ///////////////////////////////////////////////////////////////////////////////////////////////////
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 7   
+
+ 356          ///                                                                     03.48 Implementation                                                                            ///
+ 357          //decode command packet here (SPI2,KIC,KID,TAR,CNTR,PCNTR)                                                                              ///
+ 358          ///////////////////////////////////////////////////////////////////////////////////////////////////
+ 359          uint16 p348_decode_command_packet(void) _REENTRANT_ {            //+36~41 bytes
+ 360   1              uint16 status = APDU_STK_RESPONSE;        //2byte
+ 361   1              uint16 i = 0, j = 0;                    //4byte
+ 362   1              uint16 length;                                  //2byte
+ 363   1              vas_config * vc = NULL;                 //3byte
+ 364   1              command_packet * cmpkt;                 //3byte
+ 365   1              //uchar rc_length = 0;          //no ciphering
+ 366   1              uint32 crc32;                                   //4byte
+ 367   1              uint32 crc32_2;                                 //4byte
+ 368   1              uchar auth_length = 0;                  //1byte
+ 369   1              //concat_property * cp = m_alloc(sizeof(concat_property));
+ 370   1              fs_handle temp_fs;                              //8byte
+ 371   1              uchar * key = NULL;                             //16byte                        -->47 byte      - 13 byte
+ 372   1              //static fs_handle dec_fs;
+ 373   1              //2 byte length                         --> total packet length
+ 374   1              //1 byte header length          --> CHL
+ 375   1              //2 byte SPI                            --> security parameter indication
+ 376   1              //1 byte KIc                            --> ciphering key
+ 377   1              //1 byte KID                            --> checksum
+ 378   1              //3 byte TAR                            --> toolkit application reference
+ 379   1              //5 byte CNTR
+ 380   1              //1 byte PCNTR
+ 381   1              //n byte RC/CC/DS
+ 382   1              //select KEY  
+ 383   1              //memset(cp, 0, sizeof(concat_property));
+ 384   1              start_decode:
+ 385   1              //select temporary file
+ 386   1      
+ 387   1              cmpkt = (command_packet *)STK_buffer;
+ 388   1              //03.48 HEADER PROCESSING
+ 389   1              _readbin(&_liquid_fs, sizeof(concat_property), STK_buffer, sizeof(command_packet_header));
+ 390   1              #if 0
+                      if(memcmp(STK_buffer, "$REG$", 5) == 0) {
+                              return send_registration(1);
+                      }
+                      #endif
+ 395   1      
+ 396   1              ///////////////////////////////////--------03.48 PACKET PREPROCESSSING--------///////////////////////////
+             -////////
+ 397   1              //TAR checking VAS or RFM        
+ 398   1              if(memcmp(cmpkt->tar, "\x0\x0\x0", 3) == 0) {           //use remote file management (OTA)
+ 399   2                      //RFM SETUP
+ 400   2                      //vc = m_alloc(sizeof(vas_config));
+ 401   2                      //END OF RFM SETUP
+ 402   2              } else {        
+ 403   2      #if VAS_ALLOCATED 
+ 404   2                      //VAS SETUP
+ 405   2                      //TAR/SC checking mechanism, verifying security configuration 
+ 406   2                      vc = VAS_preprocess(cmpkt);                        //VAS checking by TAR
+ 407   2                      if(vc == NULL) {                                         
+ 408   3                              //invalid TAR/SC, check if VAS config is valid
+ 409   3                              liquid_set_response_data(RESPONSE_PKT_TAR_UNKNOWN, STK_buffer, 0);                      //TAR unknown (key not found)
+ 410   3                              goto exit_decode;
+ 411   3                      }
+ 412   2                      //counter checking mechanism
+ 413   2      
+ 414   2                               
+ 415   2                      //END OF VAS SETUP
+ 416   2      #else
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 8   
+
+                              //VAS unallocated, immedietly quit
+                              liquid_set_response_data(RESPONSE_PKT_TAR_UNKNOWN, STK_buffer, 0);                      //TAR unknown (key not found)
+                              goto exit_decode;
+              #endif
+ 421   2              }
+ 422   1              ///////////////////////////////--------END OF 03.48 PACKET PREPROCESSSING--------////////////////////////
+             -///////
+ 423   1      
+ 424   1      
+ 425   1              /////////////////////////////////////--------03.48 HEADER PROCESSSING--------////////////////////////////
+             -/////////
+ 426   1              //calculate user data size from command_packet_header (0348_header)
+ 427   1              switch(cmpkt->spi[0] & 0x03) {
+ 428   2                      case 0x00:      
+ 429   2                              length = (cmpkt->cpl - cmpkt->chl) + 6;                 //8 = sizeof(cpl)+ sizeof(cntr)+ sizeof(pcntr) = 2+5+1
+ 430   2                              break;          //no RC,CC,DS, no ciphering
+ 431   2                      case 0x01:      //redundancy check              (use crc32, no need to check KID)
+ 432   2                              length = (cmpkt->cpl - cmpkt->chl) + 6;         //total packet length + CNTR + PCNTR + sizeof(CRC32)
+ 433   2                              break;
+ 434   2                      case 0x02:      //cryptography checksum   (check KID), use MD5 (128bit)
+ 435   2                              //rc_length = 16;
+ 436   2                              break;
+ 437   2                      case 0x03:      //digital signature        (check KID) , use RSA
+ 438   2                              //rc_length = 16;
+ 439   2                              break;
+ 440   2              }
+ 441   1              //length = length of additional user data + checksum
+ 442   1              //Set_Response(STK_buffer, length + sizeof(command_packet_header) + 10);
+ 443   1              //status = (0x9100 | (length + sizeof(command_packet_header))+10);
+ 444   1              //return status; 
+ 445   1              _select(&temp_fs, FID_MF);      
+ 446   1              _select(&temp_fs, FID_LIQUID);
+ 447   1              //03.48 DECODE CIPHER TEXT
+ 448   1              if(cmpkt->spi[0] | 0x04) {              //cipher text (user data is encrypted)
+ 449   2                      //check if remote file management (OTA)
+ 450   2                      if(memcmp(cmpkt->tar, "\x0\x0\x0", 3) == 0) {           //use remote file management (OTA)
+ 451   3                              //LOAD RFM key 
+ 452   3                              _select(&temp_fs, FID_RFMKEY);
+ 453   3                              key = m_alloc(0x10);
+ 454   3                              if(key == NULL) { status = APDU_STK_OVERLOAD; goto exit_decode; } 
+ 455   3                              _readbin(&temp_fs, 0, key, 0x10);       
+ 456   3      #if VAS_ALLOCATED
+ 457   3                      } else if(vc != NULL) {
+ 458   3                              //key load mechanism
+ 459   3                              key = m_alloc(0x10);
+ 460   3                              if(key == NULL) { status = APDU_STK_OVERLOAD; goto exit_decode; }
+ 461   3                              //if(VAS_loadkey(vc, VAS_LOAD_KIC, (cmpkt->kic >> 4), key) == FALSE) {          //load key failed (invalid key
+ 462   3                              //      m_free(key); goto exit_decode;                  
+ 463   3                              //}
+ 464   3                              VAS_get_security_config(cmpkt->tar, VAS_SC_KIC, (cmpkt->kic >> 4), key);
+ 465   3      #endif
+ 466   3                      } else {
+ 467   3                              //default action
+ 468   3                              goto exit_decode;
+ 469   3                      }
+ 470   2      
+ 471   2                      switch(cmpkt->kic & 0x0F) {
+ 472   3                              case 0x0C:
+ 473   3                              case 0x08:
+ 474   3                              case 0x04:
+ 475   3                              case 0x00:      break;  //known algorithm
+ 476   3                              case 0x0E:
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 9   
+
+ 477   3                              case 0x0A:
+ 478   3                              case 0x06:
+ 479   3                              case 0x02:      break;          //reserved
+ 480   3                              case 0x0F:
+ 481   3                              case 0x0B:
+ 482   3                              case 0x07:
+ 483   3                              case 0x03:      break;          //propietary implementation
+ 484   3                              case 0x01:      //DES in CBC mode
+ 485   3                                      #if 0
+                                              DES_Operation(length, DES_MODE_CBC, key, cmpkt->cntr, cmpkt->cntr);
+                                              #else
+ 488   3                                      DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_CBC, key, &_liquid_fs);
+ 489   3                                      #endif
+ 490   3                                      break;
+ 491   3                              case 0x0D:      //DES in ECB mode
+ 492   3                                      #if 0
+                                              DES_Operation(length, 0, vc->key, cmpkt->cntr, cmpkt->cntr); 
+                                              #else
+ 495   3                                      DES_FileOperation(length, sizeof(concat_property) + 10, 0, key, &_liquid_fs);
+ 496   3                                      #endif
+ 497   3                                      break;
+ 498   3                              case 0x05:      //3DES 2 key
+ 499   3                                      #if 0
+                                              DES_Operation(length, DES_MODE_TDES | DES_MODE_CBC, key, cmpkt->cntr, cmpkt->cntr);
+                                              #else
+ 502   3                                      DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_TDES | DES_MODE_CBC, key, &_liquid_fs
+             -);
+ 503   3                                      #endif
+ 504   3                                      break;
+ 505   3                              case 0x09:      //3DES 3 key
+ 506   3                                      //unsupported algorithm
+ 507   3                                      break;
+ 508   3                      }  
+ 509   2                      m_free(key);
+ 510   2              }
+ 511   1      
+ 512   1              //03.48 AUTHENTICATE COMMAND PACKET
+ 513   1              _readbin(&_liquid_fs, sizeof(concat_property),
+ 514   1                      STK_buffer, sizeof(command_packet_header) + 6);                 //6 = sizeof(cntr)+sizeof(pcntr)  
+ 515   1              length += cmpkt->pcntr; 
+ 516   1              //load WIB key for KID (only for cryptographic checksum)  , not implemented, only support crc32
+ 517   1              //VAS_loadkey(vc->kid_index, key);
+ 518   1              switch(cmpkt->spi[0] & 0x03) {
+ 519   2                      case 0x00:      break;          //no RC,CC,DS, no ciphering
+ 520   2                      case 0x01:      //redundancy check              (use crc32, no need to check KID)
+ 521   2                              #if 0
+                                      crc32 = *(uint32 *)(cmpkt->ud);
+                                      memcpy(cmpkt->ud, cmpkt->ud + 4, length - 4);           //compacting user data, removing checksum
+                                      //calculate crc32 from user data
+                                      auth_length = 4;
+                                      //calculated_size = length + 10 - auth_length;
+                                      //!!!!!!!!!!!!!!!MASALAH DISINI!!!!!!!!!!!       (CRC32 ga jalan)
+                                      if(CalCRC32(cmpkt, cmpkt->cpl - 2) != crc32) {          //skip cpl+chi from calculation
+                                              //CRC32 failed
+                                              status = APDU_SUCCESS;
+                                              liquid_set_response_data(RESPONSE_PKT_AUTH_FAIL, STK_buffer, 0);                        //RC/CC/DS failed
+                                              goto exit_decode;
+                                      } 
+                                      #else
+ 535   2                              _readbin(&_liquid_fs, sizeof(concat_property) + sizeof(command_packet_header), (uchar *)&crc32, 4);             //
+             -read crc32 value from temporary file
+ 536   2                              auth_length = 4;
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 10  
+
+ 537   2                              //shift packet to right by 4 bytes, and replace crc32 value, start calculating crc from there
+ 538   2                              _writebin(&_liquid_fs, sizeof(concat_property) + 4, (uchar *)cmpkt, sizeof(command_packet_header));
+ 539   2                              
+ 540   2                              //CPL+CHL included on CRC32 calculation (calculation length = CPL - 2)
+ 541   2                              crc32_2 = FileCRC32(&_liquid_fs, cmpkt->cpl - 2, sizeof(concat_property) + 4);
+ 542   2                              if(crc32_2 != crc32) {          //skip cpl+chi from calculation         
+ 543   3                                      _writebin(&_liquid_fs, sizeof(concat_property), (uchar *)&crc32_2, 4);
+ 544   3                                      _writebin(&_liquid_fs, sizeof(concat_property) + 4, (uchar *)&crc32, 4);
+ 545   3                                      //CRC32 failed
+ 546   3                                      //file_writebin(_liquid_fs, sizeof(concat_property) + 4, &crc32, 4);
+ 547   3                                      status = APDU_SUCCESS | (uchar)(length + 6);
+ 548   3                                      status = 0x9C00 | (uchar)(length + 6);
+ 549   3                                      //status = APDU_SUCCESS | cmpkt->pcntr;
+ 550   3                                      liquid_set_response_data(RESPONSE_PKT_AUTH_FAIL, STK_buffer, 0);                        //RC/CC/DS failed
+ 551   3                                      goto exit_decode;
+ 552   3                              }
+ 553   2                              #endif
+ 554   2                              break;
+ 555   2                      case 0x02:      //cryptography checksum   (check KID)
+ 556   2                              break;
+ 557   2                      case 0x03:      //digital signature        (check KID)
+ 558   2                              break;
+ 559   2              } 
+ 560   1              
+ 561   1              //prepare temporary out file before decoding running any service  
+ 562   1              //status = APDU_STK_RESPONSE | (uchar)length; 
+ 563   1              //m_free(cph);                          //free command packet header (packet configuration)
+ 564   1              length = length - auth_length;          //actual command without padding
+ 565   1              length = length - cmpkt->pcntr;         //actual command packet without padding
+ 566   1              //Set_Response(cmpkt->cntr, length);
+ 567   1              //status = (0x9100 | length);
+ 568   1              //return status;
+ 569   1              //save command packet, STK buffer will be used as copy temporary
+ 570   1              //allocate command packet, copy from STK_buffer to command_packet
+ 571   1              cmpkt = (command_packet *)m_alloc(sizeof(command_packet_header));
+ 572   1              memcpy(cmpkt, STK_buffer, sizeof(command_packet_header));
+ 573   1              //copy from liquidtempin to liquidtempout (STK_buffer freed here)
+ 574   1      #if 0
+              
+              #else 
+ 577   1              //copy concatenated message to temporary out
+ 578   1              //if(allocate_liquid_space(&temp_fs, FID_LIQTEMP_OUT, length + 128)) {
+ 579   1              //status = 0x9A00;
+ 580   1              //goto exit_decode;      
+ 581   1              _select(&temp_fs, FID_0348_OUT);                   
+ 582   1              for(i=0;i<length;i+=128) {
+ 583   2                      _readbin(&_liquid_fs, sizeof(concat_property) + auth_length + sizeof(command_packet_header) + i, STK_buf
+             -fer, 128);
+ 584   2                      _writebin(&temp_fs, i, STK_buffer, 128);        
+ 585   2              }
+ 586   1              //status = 0x9A00;
+ 587   1              //goto exit_process_packet;
+ 588   1              //} else {
+ 589   1                      //error allocating temporary out, not enough space
+ 590   1                      
+ 591   1              //}
+ 592   1      #endif
+ 593   1              liquid_set_response_data(RESPONSE_PKT_POR_OK, STK_buffer, 0);                   //clear response packet
+ 594   1              /////////////////////////////////--------END OF 03.48 HEADER PROCESSSING--------/////////////////////////
+             -////////
+ 595   1      
+ 596   1      
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 11  
+
+ 597   1              //------------------------------ START OF SELECT SERVICE ------------------------------
+ 598   1              //check TAR here, decide if it belong to RFM(OTA), VAS or other
+ 599   1              if(memcmp(cmpkt->tar, "\x0\x0\x0", 3) == 0) {           //check if RFM (OTA)
+ 600   2                      p348_set_tar(cmpkt->tar);                                               //set current 0348TAR for packet encoding
+ 601   2                      status = RFM_decode(&temp_fs, 0, length);
+ 602   2                      //restart SIM initialization sequence 
+ 603   2                      SAT_printf("cd", (REFRESH & 0x7F), STK_DEV_ME);
+ 604   2                      status = SAT_status();
+ 605   2      #if VAS_ALLOCATED 
+ 606   2              } else if(vc != NULL) {                                                                                 //use VAS(WIB)
+ 607   2                      switch(cmpkt->spi[0] >> 3) {
+ 608   3                              case 0x00: break;       //no counter, abort process mechanism
+ 609   3                              case 0x01: break;                                               //counter available, no checking
+ 610   3                              case 0x02:                                                              //counter available, checking mechanism
+ 611   3                              case 0x03: 
+ 612   3                                      if(VAS_get_security_config(cmpkt->tar, VAS_SC_ISPI, 0, STK_buffer) == FALSE) goto exit_process_packet;
+ 613   3                                      if(VAS_replay_check((cmpkt->spi[0] >> 3), cmpkt->cntr, STK_buffer) == FALSE) goto exit_process_packet;
+ 614   3                                      _select(&_liquid_fs, FID_MF);   
+ 615   3                                      _select(&_liquid_fs, FID_WIB); 
+ 616   3                                      _select(&_liquid_fs, FID_W0348CNTR);
+ 617   3                                      _writerec(&_liquid_fs, vc->icntr_index, cmpkt->cntr, 5);                //update counter
+ 618   3                                      break; 
+ 619   3                      }   
+ 620   2                      //select EF_tar
+ 621   2                      //VAS_init(cmpkt->ud + 2, *(uint16 *)cmpkt->ud);  
+ 622   2                      p348_set_tar(cmpkt->tar);                                               //set current 0348TAR for packet encoding
+ 623   2                      _readbin(&temp_fs, 0, &length, 2);
+*** WARNING C182 IN LINE 623 OF FRAMEWORK\SMS.C: pointer to different objects
+ 624   2                      if(VAS_init(&temp_fs, 2, length) == TRUE)                       //initialize VAS
+ 625   2                              status = VAS_decode();          //ignore CNTR and PCNTR, (also might checksum, implementation dependent) 
+ 626   2              }
+ 627   1      #else 
+                      }
+              #endif
+ 630   1              exit_process_packet:
+ 631   1              //------------------------------  END OF SELECT SERVICE  ------------------------------
+ 632   1      
+ 633   1      
+ 634   1              m_free(cmpkt);                          //free command packet, obsolote variable
+ 635   1              //memcpy(STK_buffer, "ABC", 3);
+ 636   1              //liquid_set_response_data(0, STK_buffer, 3);
+ 637   1              exit_decode:
+ 638   1              if(vc != NULL) {
+ 639   2                      m_free(vc);                                     //free key config (contain address + ota/wib key)
+ 640   2              }
+ 641   1              //push response TPDU as response so it can be fetched at the next instruction
+ 642   1              return status;
+ 643   1              //return cmpkt;
+ 644   1      }
+*** WARNING C280 IN LINE 384 OF FRAMEWORK\SMS.C: 'start_decode': unreferenced label
+ 645          
+ 646          uchar _tar_0348[3] = { 0, 0, 0} ;
+ 647          void p348_set_tar(uchar * tar) _REENTRANT_ {
+ 648   1              memcpy(_tar_0348, tar, 3);
+ 649   1              #if VAS_ALLOCATED
+ 650   1              VAS_set_tar(_tar_0348);
+ 651   1              #endif
+ 652   1      }
+ 653          
+ 654          uchar p348_create_header(uchar * buffer) _REENTRANT_ {
+ 655   1              //fs_handle temp_fs;
+ 656   1              TARconfig tar_config;
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 12  
+
+ 657   1              uchar length = 0;
+ 658   1              uint16 i = 0, j;
+ 659   1              //header->ppl = 0;
+ 660   1              //header->phl = sizeof(header_0348_packet) - 2;
+ 661   1              if(memcmp(_tar_0348, "\x0\x0\x0", 3) == 0) {
+ 662   2                      ((header_0348_packet *)buffer)->ppl = 0;
+ 663   2                      ((header_0348_packet *)buffer)->phl = sizeof(header_0348_packet) - 2 + 6;
+ 664   2                      memset(buffer + 3, 0, 12);
+ 665   2                      ((header_0348_packet *)buffer)->pcntr = 0;
+ 666   2                      length = sizeof(header_0348_packet);
+ 667   2              } else {
+ 668   2      #if VAS_ALLOCATED 
+ 669   2                      VAS_get_security_config(_tar_0348, VAS_SC_OSPI, 0, buffer + 12); 
+ 670   2                      memcpy(buffer + 16, _tar_0348, 3);                                              //copy application TAR
+ 671   2                      VAS_get_security_config(_tar_0348, VAS_SC_OCNTR, 0, buffer + 19);
+ 672   2                      //set command packet header
+ 673   2                      ((header_0348_packet *)buffer)->ppl = 0;                                        //packet length                                 (2byte)
+ 674   2                      ((header_0348_packet *)buffer)->phl = sizeof(header_0348_packet) - 2 + 6;       //header length (1byte)
+ 675   2                      memcpy(buffer + 3, buffer + 12, 12);                                            //spi+kic+kid+tar+cntr                  (4+3+5byte)
+ 676   2                      ((header_0348_packet *)buffer)->pcntr = 0;                                      //padding counter                               (1byte)
+ 677   2                      length = sizeof(header_0348_packet);
+ 678   2              }
+ 679   1      #else
+                              return 0;
+                      }
+              #endif
+ 683   1              exit_create_header:
+ 684   1              return length;
+ 685   1      }
+*** WARNING C280 IN LINE 656 OF FRAMEWORK\SMS.C: 'tar_config': unreferenced local variable
+*** WARNING C280 IN LINE 658 OF FRAMEWORK\SMS.C: 'j': unreferenced local variable
+*** WARNING C280 IN LINE 683 OF FRAMEWORK\SMS.C: 'exit_create_header': unreferenced label
+ 686          
+ 687          #if 0
+              //encode response packet using on data on EFres
+              uchar p348_encode_response_packet(response_packet * rspkt) _REENTRANT_ {
+                      //read response from EF_SATTempout, add response packet header based on cmpkt, use cipher, cc depend on s
+             -pi,kic,kid
+                      //return null on no response 
+                      //uint16 status = APDU_STK_RESPONSE;
+                      uint16 i = 0;                                   //2byte
+                      uchar j = 0;                                    //1byte
+                      uint16 length;                                  //1byte
+                      uchar pcntr = 0;                                        //1byte
+                      //vas_config * vc = NULL;                       //3byte
+                      //response_packet * rspkt = NULL;         //3byte
+                      //uchar rc_length = 0;                  //no ciphering
+                      uint32 crc32;                                   //4byte
+                      uchar auth_length = 0;                  //1byte
+                      uchar key[0x10];                                //16byte
+                      //concat_property cp = {0, 0, 0};
+                      //2 byte length                         --> total packet length
+                      //1 byte header length          --> CHL
+                      //2 byte SPI                            --> security parameter indication
+                      //1 byte KIc                            --> ciphering key
+                      //1 byte KID                            --> checksum
+                      //3 byte TAR                            --> toolkit application reference
+                      //5 byte CNTR
+                      //1 byte PCNTR
+                      //1 byte STATUS
+                      //n byte RC/CC/DS
+                      //select KEY
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 13  
+
+                      //vc = (vas_config *)m_alloc(sizeof(vas_config));
+                      //status = APDU_SUCCESS;                //no key available
+                      //goto exit_encode;
+                      start_encode: 
+                      switch(rspkt->spi[0] & 0x03) {                  //calculate auth_length first before allocating any response_packet
+                              case 0x00: break;                                               //no RC,CC,DS, no ciphering
+                              case 0x01: auth_length = 4; break;              //redundancy check (CRC32)
+                              case 0x02: break;                                               //cryptography checksum
+                              case 0x03: break;                                               //digital signature
+                              default: break;
+                      }
+                      
+                      //select temporary file
+                      _select(&_liquid_fs, FID_MF); 
+                      _select(&_liquid_fs, FID_LIQUID); 
+                      if(_select(&_liquid_fs, FID_RES) < 0x9F00) { goto exit_encode; }                //read temporary out, it should have be
+             -en filled with data
+                      //read temporary file, calculate it length, allocate memory based on response length for rspkt
+                      //...
+                      _readbin(&_liquid_fs, 0, (uchar *)&length, sizeof(uint16));  //get response size
+                      //if(length == 0) goto exit_encode;                                             //no response available         
+                      length += auth_length;          //add length with auth_length, userdata = auth code + additional code 
+                      if(rspkt->spi[0] & 0x04) { 
+                              pcntr = ((uint16)8 - ((length + 7) % 8)) % 8;
+                              //clear user data, also create padding
+                              memset(rspkt->ud, 0, length + pcntr);
+                              rspkt->pcntr = pcntr;                                                                                           //set padding counter
+                      } else { 
+                              memset(rspkt->ud, 0, length);
+                      }
+                      _readbin(&_liquid_fs, 2, &rspkt->status, 1);            //fill header->status 
+                      //fill user data with response data on temporary file
+                      _readbin(&_liquid_fs, 3, rspkt->ud, length - auth_length);      
+                      //calculate new RPL and RHL
+                      rspkt->rpl = length + (sizeof(response_packet_header) - 2) + pcntr;     //header+userdata+auth (RPL not inclu
+             -ded)
+                      rspkt->rhl = sizeof(response_packet_header) - 3;                        //RPL+RHL not included
+                      
+                      
+                      switch(rspkt->spi[0] & 0x03) {
+                              case 0x00:      
+                                      //length = cmpkt->cpl - (sizeof(command_packet_header) - 2);
+                                      break;          //no RC,CC,DS, no ciphering
+                              case 0x01:      //redundancy check              (use crc32, no need to check KID)
+                                      //calculate crc32 from user data
+                                      //auth_length = 4;
+                                      crc32 = CalCRC32((uchar *)rspkt, rspkt->rpl - (auth_length));
+                                      for(j=(length - auth_length);j!=0;j--) {
+                                              //memcpy(cmpkt->ud + 4, cmpkt->ud, (length - auth_length));
+                                              //cmpkt->ud[j + 4] = cmpkt->ud[j];
+                                              rspkt->ud[j + 3] = rspkt->ud[j - 1];
+                                      }
+                                      //memcpy(rspkt->ud + 4, rspkt->ud, (length - auth_length));
+                                      memcpy(rspkt->ud, &crc32, 4);                   //copy auth code to response packet
+                                      break;
+                              case 0x02:      //cryptography checksum   (check KID), use MD5 (128bit)
+                                      //rc_length = 16;
+                                      break;
+                              case 0x03:      //digital signature        (check KID) , use RSA
+                                      //rc_length = 16;
+                                      break;
+                      }
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 14  
+
+                      //return length + sizeof(response_packet_header);
+                      if(rspkt->spi[0] & 0x04) {              //cipher text
+                              //length = rspkt->rpl - 7; 
+                              //load configuration key
+                              if(VAS_get_security_config(_tar_0348, VAS_SC_KIC, (rspkt->kic >> 4), key) != TRUE) goto exit_encode;            //
+             -failed to load key
+                              switch(rspkt->kic & 0x0F) {
+                                      case 0x0C:
+                                      case 0x08:
+                                      case 0x04:
+                                      case 0x00:      break;  //known algorithm
+                                      case 0x0E:
+                                      case 0x0A:
+                                      case 0x06:
+                                      case 0x02:      break;          //reserved
+                                      case 0x0F:
+                                      case 0x0B:
+                                      case 0x07:
+                                      case 0x03:      break;          //propietary implementation
+                                      
+                                      case 0x01:      //DES in CBC mode
+                                              #if 1
+                                              DES_Operation(length, DES_MODE_CBC | DES_MODE_ENCRYPT, key, rspkt->cntr, rspkt->cntr);
+                                              #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_CBC, key, _liquid_fs);
+                                              #endif
+                                              break;
+                                      case 0x0D:      //DES in ECB mode
+                                              #if 1
+                                              DES_Operation(length, DES_MODE_ENCRYPT, key, rspkt->cntr, rspkt->cntr); 
+                                              #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, 0, key, _liquid_fs);
+                                              #endif
+                                              break;
+                                      case 0x05:      //3DES 2 key
+                                              #if 1
+                                              DES_Operation(length, DES_MODE_TDES | DES_MODE_CBC | DES_MODE_ENCRYPT, key, rspkt->cntr, rspkt->cntr);
+                                              #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_TDES | DES_MODE_CBC, key, _liquid_fs)
+             -;
+                                              #endif
+                                              break;
+                                      case 0x09:      //3DES 3 key
+                                              //unsupported algorithm
+                                              break;
+                              }
+                              //length = j;           //length automatically padded to 8 byte, might contain alloc_chain (memory allocator)
+                      }
+                      //status = APDU_STK_RESPONSE | (uchar)length; 
+                      //m_free(cph);                          //free command packet header (packet configuration)
+                      //check TAR here, decide if it belong to RFM(OTA), VAS or other
+                      exit_encode:
+                      //m_free(vc);                                   //free key config (contain address + ota/wib key)
+                      //STK buffer now contain CNTR, PCNTR, (might also checksum), Data
+                      //Set_Response(STK_buffer, length);
+                      //return rspkt;
+                      return length + sizeof(response_packet_header) + pcntr;
+              }
+              #endif
+ 832          
+ 833          #if 1
+ 834          uchar p348_encode_command_packet(command_packet * cmpkt) _REENTRANT_ {
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 15  
+
+ 835   1              //read response from EF_SATTempout, add response packet header based on cmpkt, use cipher, cc depend on s
+             -pi,kic,kid
+ 836   1              //return null on no response 
+ 837   1              //uint16 status = APDU_STK_RESPONSE;
+ 838   1              uint16 i = 0;                                   //2byte
+ 839   1              uchar j = 0;                                    //1byte
+ 840   1              uint16 length;                                  //1byte
+ 841   1              uchar pcntr = 0;                                        //1byte
+ 842   1              //vas_config * vc = NULL;                       //3byte
+ 843   1              //response_packet * cmpkt = NULL;         //3byte
+ 844   1              //uchar rc_length = 0;                  //no ciphering
+ 845   1              uint32 crc32;                                   //4byte
+ 846   1              uchar auth_length = 0;                  //1byte
+ 847   1              uchar key[0x10];                                //16byte
+ 848   1              //concat_property cp = {0, 0, 0};
+ 849   1              //2 byte length                         --> total packet length
+ 850   1              //1 byte header length          --> CHL
+ 851   1              //2 byte SPI                            --> security parameter indication
+ 852   1              //1 byte KIc                            --> ciphering key
+ 853   1              //1 byte KID                            --> checksum
+ 854   1              //3 byte TAR                            --> toolkit application reference
+ 855   1              //5 byte CNTR
+ 856   1              //1 byte PCNTR
+ 857   1              //1 byte STATUS
+ 858   1              //n byte RC/CC/DS
+ 859   1              //select KEY
+ 860   1              //vc = (vas_config *)m_alloc(sizeof(vas_config));
+ 861   1              //status = APDU_SUCCESS;                //no key available
+ 862   1              //goto exit_encode;
+ 863   1              start_encode: 
+ 864   1              switch(cmpkt->spi[0] & 0x03) {                  //calculate auth_length first before allocating any response_packet
+ 865   2                      case 0x00: break;                                               //no RC,CC,DS, no ciphering
+ 866   2                      case 0x01: auth_length = 4; break;              //redundancy check (CRC32)
+ 867   2                      case 0x02: break;                                               //cryptography checksum
+ 868   2                      case 0x03: break;                                               //digital signature
+ 869   2                      default: break;
+ 870   2              }
+ 871   1              
+ 872   1              //select temporary file
+ 873   1              _select(&_liquid_fs, FID_MF); 
+ 874   1              _select(&_liquid_fs, FID_LIQUID); 
+ 875   1              if(_select(&_liquid_fs, FID_RES) < 0x9F00) { goto exit_encode; }                //read temporary out, it should have be
+             -en filled with data
+ 876   1              //read temporary file, calculate it length, allocate memory based on response length for cmpkt
+ 877   1              //...
+ 878   1              _readbin(&_liquid_fs, 0, (uchar *)&length, sizeof(uint16));  //get response size
+ 879   1              //if(length == 0) goto exit_encode;                                             //no response available         
+ 880   1              length += auth_length;          //add length with auth_length, userdata = auth code + additional code 
+ 881   1              if(cmpkt->spi[0] & 0x04) {
+ 882   2                      pcntr = ((uint16)8 - ((length + 6) % 8)) % 8;
+ 883   2                      //clear user data, also create padding
+ 884   2                      memset(cmpkt->ud, 0, length + pcntr);
+ 885   2                      cmpkt->pcntr = pcntr;                                                                                           //set padding counter
+ 886   2              } else { 
+ 887   2                      memset(cmpkt->ud, 0, length);
+ 888   2              }
+ 889   1              //file_readbin(&_liquid_fs, 2, &cmpkt->status, 1);              //fill header->status 
+ 890   1              //fill user data with response data on temporary file
+ 891   1              _readbin(&_liquid_fs, 3, cmpkt->ud, length - auth_length);      
+ 892   1              //calculate new RPL and RHL
+ 893   1              cmpkt->cpl = length + (sizeof(command_packet_header) - 2) + pcntr;      //header+userdata+auth (RPL not includ
+             -ed)
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 16  
+
+ 894   1              cmpkt->chl = sizeof(command_packet_header) - 3;                 //RPL+RHL not included
+ 895   1              
+ 896   1              
+ 897   1              switch(cmpkt->spi[0] & 0x03) {
+ 898   2                      case 0x00:      
+ 899   2                              //length = cmpkt->cpl - (sizeof(command_packet_header) - 2);
+ 900   2                              break;          //no RC,CC,DS, no ciphering
+ 901   2                      case 0x01:      //redundancy check              (use crc32, no need to check KID)
+ 902   2                              //calculate crc32 from user data
+ 903   2                              //auth_length = 4;
+ 904   2                              crc32 = CalCRC32((uchar *)cmpkt, cmpkt->cpl - (auth_length));
+ 905   2                              for(j=(length - auth_length);j!=0;j--) {
+ 906   3                                      //memcpy(cmpkt->ud + 4, cmpkt->ud, (length - auth_length));
+ 907   3                                      //cmpkt->ud[j + 4] = cmpkt->ud[j];
+ 908   3                                      cmpkt->ud[j + 3] = cmpkt->ud[j - 1];
+ 909   3                              }
+ 910   2                              memcpy(cmpkt->ud, &crc32, 4);                   //copy auth code to response packet
+ 911   2                              break;
+ 912   2                      case 0x02:      //cryptography checksum   (check KID), use MD5 (128bit)
+ 913   2                              //rc_length = 16;
+ 914   2                              break;
+ 915   2                      case 0x03:      //digital signature        (check KID) , use RSA
+ 916   2                              //rc_length = 16;
+ 917   2                              break;
+ 918   2              }
+ 919   1              //return length + sizeof(response_packet_header);
+ 920   1              if(cmpkt->spi[0] & 0x04) {              //cipher text
+ 921   2                      //length = cmpkt->rpl - 7;
+ 922   2                      #if VAS_ALLOCATED
+ 923   2                      if(VAS_get_security_config(_tar_0348, VAS_SC_KIC, (cmpkt->kic >> 4), key) != TRUE) goto exit_encode;            //
+             -failed to load key
+ 924   2                      #endif
+ 925   2                      switch(cmpkt->kic & 0x0F) {
+ 926   3                              case 0x0C:
+ 927   3                              case 0x08:
+ 928   3                              case 0x04:
+ 929   3                              case 0x00:      break;  //known algorithm
+ 930   3                              case 0x0E:
+ 931   3                              case 0x0A:
+ 932   3                              case 0x06:
+ 933   3                              case 0x02:      break;          //reserved
+ 934   3                              case 0x0F:
+ 935   3                              case 0x0B:
+ 936   3                              case 0x07:
+ 937   3                              case 0x03:      break;          //propietary implementation
+ 938   3                              
+ 939   3                              case 0x01:      //DES in CBC mode
+ 940   3                                      #if 1
+ 941   3                                      DES_MemOperation(length, DES_MODE_CBC | DES_MODE_ENCRYPT, key, cmpkt->cntr, cmpkt->cntr);
+ 942   3                                      #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_CBC, key, _liquid_fs);
+                                              #endif
+ 945   3                                      break;
+ 946   3                              case 0x0D:      //DES in ECB mode
+ 947   3                                      #if 1
+ 948   3                                      DES_MemOperation(length, DES_MODE_ENCRYPT, key, cmpkt->cntr, cmpkt->cntr); 
+ 949   3                                      #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, 0, key, _liquid_fs);
+                                              #endif
+ 952   3                                      break;
+ 953   3                              case 0x05:      //3DES 2 key
+ 954   3                                      #if 1
+C51 COMPILER V7.01  SMS                                                                    01/25/2014 09:07:23 PAGE 17  
+
+ 955   3                                      DES_MemOperation(length, DES_MODE_TDES | DES_MODE_CBC | DES_MODE_ENCRYPT, key, cmpkt->cntr, cmpkt->cnt
+             -r);
+ 956   3                                      #else
+                                              DES_FileOperation(length, sizeof(concat_property) + 10, DES_MODE_TDES | DES_MODE_CBC, key, _liquid_fs)
+             -;
+                                              #endif
+ 959   3                                      break;
+ 960   3                              case 0x09:      //3DES 3 key
+ 961   3                                      //unsupported algorithm
+ 962   3                                      break;
+ 963   3                      }
+ 964   2                      //length = j;           //length automatically padded to 8 byte, might contain alloc_chain (memory allocator)
+ 965   2              }
+ 966   1              //status = APDU_STK_RESPONSE | (uchar)length; 
+ 967   1              //m_free(cph);                          //free command packet header (packet configuration)
+ 968   1              //check TAR here, decide if it belong to RFM(OTA), VAS or other
+ 969   1              exit_encode:
+ 970   1              //m_free(vc);                                   //free key config (contain address + ota/wib key)
+ 971   1              //STK buffer now contain CNTR, PCNTR, (might also checksum), Data
+ 972   1              //Set_Response(STK_buffer, length);
+ 973   1              //return cmpkt;
+ 974   1              return length + sizeof(command_packet_header) + pcntr;
+ 975   1      }
+*** WARNING C280 IN LINE 863 OF FRAMEWORK\SMS.C: 'start_encode': unreferenced label
+ 976          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4434    ----
+   CONSTANT SIZE    =     13    ----
+   XDATA SIZE       =     11    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  8 WARNING(S),  0 ERROR(S)

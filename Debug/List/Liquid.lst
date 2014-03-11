@@ -1,0 +1,155 @@
+C51 COMPILER V7.01  LIQUID                                                                 01/25/2014 09:07:23 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE LIQUID
+OBJECT MODULE PLACED IN .\Debug\Output\Liquid.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\Liquid.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG P
+                    -RINT(.\Debug\List\Liquid.lst) OBJECT(.\Debug\Output\Liquid.obj)
+
+stmt level    source
+
+   1          #include "liquid.h"     
+   2          #include "..\asgard\file.h"
+   3          #include "..\framework\SMS.h" 
+   4          #include "..\config.h"
+   5          //#include "services\RFM.h"
+   6          #include <string.h>
+   7          
+   8          uchar STK_buffer[256];
+   9          uchar _me_capabilities[STK_ME_CAPABILITY_SIZE];
+  10          #if LIQUID_ALLOCATED
+  11          uint16 _stk_menu_offset; 
+  12          uint16 _stk_menu_anchor;
+  13          uint16 _stk_menu_current;
+  14          #endif  
+  15          
+  16          void SAT_profile_download(uchar * buffer, uchar len) _REENTRANT_ {
+  17   1              memset(_me_capabilities, 0, STK_ME_CAPABILITY_SIZE);
+  18   1              if(len >= STK_ME_CAPABILITY_SIZE) {
+  19   2                      len = STK_ME_CAPABILITY_SIZE;
+  20   2              }
+  21   1              memcpy(_me_capabilities, buffer, len);
+  22   1      }
+  23          
+  24          uint16 liquid_error(uchar status) _REENTRANT_ {
+  25   1              uchar len = 0;
+  26   1              uchar i;
+  27   1              if(liquid_profile_check(TERMINAL_9EXX_RESPONSE) == 0) return APDU_SUCCESS;
+  28   1              
+  29   1              return APDU_STK_ERROR | (uint16)len;    
+  30   1      }
+*** WARNING C280 IN LINE 24 OF FRAMEWORK\LIQUID.C: 'status': unreferenced local variable
+*** WARNING C280 IN LINE 26 OF FRAMEWORK\LIQUID.C: 'i': unreferenced local variable
+  31          
+  32          
+  33          uchar liquid_profile_check(uchar cmd) _REENTRANT_ {
+  34   1              uchar i = (cmd >> 4);
+  35   1              return (_me_capabilities[i] & (1<< (cmd & 0x07)));
+  36   1      }
+  37          
+  38          uchar liquid_proactive_check(uchar cmd) _REENTRANT_ {
+  39   1              switch(cmd) {           
+  40   2      /* STK CMD DETAIL TYPE */
+  41   2                      case REFRESH :
+  42   2                              return (_me_capabilities[2]&0x80);
+  43   2                      case MORE_TIME :
+  44   2                              return (_me_capabilities[2]&0x08);
+  45   2                      case POLL_INTERVAL:
+  46   2                              return (_me_capabilities[2]&0x20);
+  47   2                      case POLLING_OFF:
+  48   2                              return (_me_capabilities[2]&0x40);
+  49   2                      case SET_UP_CALL:
+  50   2                              return (_me_capabilities[3]&0x10);
+  51   2                      case SEND_SS:
+  52   2                              return (_me_capabilities[3]&0x04);
+C51 COMPILER V7.01  LIQUID                                                                 01/25/2014 09:07:23 PAGE 2   
+
+  53   2      //- "12" = Reserved for SEND USSD;
+  54   2                      case SEND_SHORT_MESSAGE:
+  55   2                              return (_me_capabilities[3]&0x02);
+  56   2                      case PLAY_TONE:
+  57   2                      case DISPLAY_TEXT:
+  58   2                              return (_me_capabilities[2]&0x01);
+  59   2                      case GET_INKEY:
+  60   2                              return (_me_capabilities[2]&0x02);
+  61   2                      case GET_INPUT:
+  62   2                              return (_me_capabilities[2]&0x04);
+  63   2                      case SELECT_ITEM:
+  64   2                              return (_me_capabilities[3]&0x01);
+  65   2                      case SET_UP_MENU:
+  66   2                              return (_me_capabilities[3]&0x40);
+  67   2                      case PROVIDE_LOCAL_INFORMATION: 
+  68   2                              return (_me_capabilities[3]&0xc0);       
+  69   2                      default:
+  70   2                              return 1;
+  71   2              }
+  72   1      }
+  73          
+  74          #if LIQUID_ALLOCATED
+  75          extern fs_handle stk_fs;
+  76          uint16 liquid_profile(void) _REENTRANT_ {
+  77   1              uint16 status = APDU_SUCCESS;
+  78   1              uint16 len;
+  79   1              //fs_handle menu_fs;
+  80   1              /* Select EF STKMenu */ 
+  81   1              _select(&stk_fs, FID_MF);
+  82   1              _select(&stk_fs, FID_LIQUID); 
+  83   1              if(_select(&stk_fs, FID_STKMENU) < 0x9F00) return APDU_FATAL_ERROR;
+  84   1              /* read root menu configuration */
+  85   1              _stk_menu_offset = 0;
+  86   1              _stk_menu_anchor = 0;
+  87   1              _stk_menu_current = 0;
+  88   1              _readbin(&stk_fs, _stk_menu_anchor, STK_buffer, sizeof(stk_config));
+  89   1              if(SAT_init(0, 0) == 0) return APDU_STK_OVERLOAD;               //clear SAT temporary file and filled it with terminal
+             - response        
+  90   1              if(((stk_config *)STK_buffer)->parent == 0) {  
+  91   2                      len = ((stk_config *)STK_buffer)->length;
+  92   2                      _stk_menu_offset = ((stk_config *)STK_buffer)->sibling;
+  93   2                      _readbin(&stk_fs, sizeof(stk_config), STK_buffer, len);
+  94   2                      //len = SAT_push(command->bytes, FETCH_TAG_PROSIM, len, STK_buffer);
+  95   2                      //fetch_len = SAT_file_push(0, FETCH_TAG_PROSIM, len, STK_buffer);
+  96   2                      //status = APDU_STK_RESPONSE | fetch_len;       
+  97   2                      status = SAT_response(STK_buffer, len);
+  98   2              }
+  99   1              return status;
+ 100   1      } 
+ 101          #endif
+ 102          
+ 103          
+ 104          void liquid_set_response_data(uchar status, uchar * buffer, uint16 length) _REENTRANT_ {
+ 105   1              fs_handle temp;
+ 106   1              struct response_prop {
+ 107   1                uint16 length;
+ 108   1                uchar status;
+ 109   1              } prop;
+ 110   1              _select(&temp, FID_MF); 
+ 111   1              _select(&temp, FID_LIQUID); 
+ 112   1              if(_select(&temp, FID_RES) < 0x9F00) { goto exit_set_response; }
+ 113   1              prop.length = length;
+C51 COMPILER V7.01  LIQUID                                                                 01/25/2014 09:07:23 PAGE 3   
+
+ 114   1              prop.status = status;
+ 115   1              _writebin(&temp, 3, buffer, length);
+ 116   1              _writebin(&temp, 0, &prop, sizeof(struct response_prop));
+*** WARNING C182 IN LINE 116 OF FRAMEWORK\LIQUID.C: pointer to different objects
+ 117   1              exit_set_response:
+ 118   1              return;
+ 119   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    783    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    268    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  3 WARNING(S),  0 ERROR(S)

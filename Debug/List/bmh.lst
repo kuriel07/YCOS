@@ -1,0 +1,73 @@
+C51 COMPILER V7.01  BMH                                                                    01/12/2013 23:17:44 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE BMH
+OBJECT MODULE PLACED IN .\Debug\Output\bmh.obj
+COMPILER INVOKED BY: M:\Program Files\Keil\C51\BIN\C51.EXE misc\bmh.c LARGE OMF2 OPTIMIZE(SIZE) REGFILE(.\Debug\Output\Y
+                    -ggdrasil20.ORC) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\bmh.lst) OBJECT(.\Debug\Output\bmh.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+*** WARNING C245 IN LINE 4 OF MISC\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 5 OF MISC\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 6 OF MISC\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 7 OF MISC\..\DEFS.H: unknown #pragma, line ignored
+   2          void preKmp(char *x, int m, int kmpNext[]) {
+   3   1         int i, j;
+   4   1      
+   5   1         i = 0;
+   6   1         j = kmpNext[0] = -1;
+   7   1         while (i < m) {
+   8   2            while (j > -1 && x[i] != x[j])
+   9   2               j = kmpNext[j];
+  10   2            i++;
+  11   2            j++;
+  12   2            if (x[i] == x[j])
+  13   2               kmpNext[i] = kmpNext[j];
+  14   2            else
+  15   2               kmpNext[i] = j;
+  16   2         }
+  17   1      }
+  18          
+  19          
+  20          void KMP(char *x, int m, char *y, int n) {
+  21   1         int i, j, kmpNext[10];
+  22   1      
+  23   1         /* Preprocessing */
+  24   1         preKmp(x, m, kmpNext);
+  25   1      
+  26   1         /* Searching */
+  27   1         i = j = 0;
+  28   1         while (j < n) {
+  29   2            while (i > -1 && x[i] != y[j])
+  30   2               i = kmpNext[i];
+  31   2            i++;
+  32   2            j++;
+  33   2            if (i >= m) {
+  34   3               //OUTPUT(j - i);
+  35   3               i = kmpNext[i];
+  36   3            }
+  37   2         }
+  38   1      }
+  39          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    565    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      46
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+C51 COMPILER V7.01  BMH                                                                    01/12/2013 23:17:44 PAGE 2   
+
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,718 @@
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     1
+
+
+MACRO ASSEMBLER A51 V7.01
+OBJECT MODULE PLACED IN .\Debug\Output\YGGDRASIL_APIS.obj
+ASSEMBLER INVOKED BY: C:\Keil51\C51\BIN\A51.EXE 8051SYS\YGGDRASIL_APIS.A51 SET(LARGE) DEBUG PRINT(.\Debug\List\YGGDRASIL
+                      _APIS.lst) OBJECT(.\Debug\Output\YGGDRASIL_APIS.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ;EXTRN  CODE    (TMR0_ISR)
+                       2     EXTRN   CODE    (ISO7816_Main)
+  00A9                 3     IE_TMR0 BIT     0A8H.1
+  008D                 4     TCON_TF0        BIT     088H.5
+  0082                 5     DPL0    DATA    082H
+  0083                 6     DPH0    DATA    083H
+                       7     
+                       8     ;  Stack Space for reentrant functions in the LARGE model.      
+  0001                 9     XBPSTACK        EQU     1       ; set to 1 if large reentrant is used.
+  0800                10     XBPSTACKTOP     EQU     07FFH+1; set top of stack to highest location+1.
+                      11     
+                      12     
+                      13     
+                      14     ?STACK          SEGMENT   IDATA
+                      15             ;RSEG   ?STACK
+                      16             ;DS     40H
+                      17     ;=======================================================
+                      18     ;void * m_alloc(uint16 size), memory allocator API
+                      19     ;=======================================================
+                      20     EXTRN   CODE    (_?m_alloc)
+----                  21                     CSEG    AT      0x03B
+003B                  22     SERVICE0:
+003B 020000   F       23                     LJMP    _?m_alloc
+003E 22               24                     RET
+                      25     ;=======================================================
+                      26     ;void m_free(void * ptr), memory allocator API
+                      27     ;=======================================================
+                      28     EXTRN   CODE    (_?m_free)
+----                  29                     CSEG    AT      0x3F
+003F                  30     SERVICE1:
+003F 020000   F       31                     LJMP    _?m_free
+0042 22               32                     RET
+                      33     
+                      34     ;=======================================================
+                      35     
+                      36     ;=======================================================
+                      37     EXTRN   CODE    (_?_select)
+----                  38                     CSEG    AT      0x47
+0047                  39     SERVICE3:
+0047 020000   F       40                     LJMP    _?_select
+004A 22               41                     RET
+                      42     ;=======================================================
+                      43     
+                      44     ;=======================================================
+                      45     EXTRN   CODE    (_?_readbin)
+----                  46                     CSEG    AT      0x4B
+004B                  47     SERVICE4:
+004B 020000   F       48                     LJMP    _?_readbin
+004E 22               49                     RET
+                      50     ;=======================================================
+                      51     
+                      52     ;=======================================================
+                      53     EXTRN   CODE    (_?_writebin)
+----                  54                     CSEG    AT      0x4F
+004F                  55     SERVICE5:
+004F 020000   F       56                     LJMP    _?_writebin
+0052 22               57                     RET
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     2
+
+                      58     ;=======================================================
+                      59     
+                      60     ;=======================================================
+                      61     EXTRN   CODE    (_?_readrec)
+----                  62                     CSEG    AT      0x53
+0053                  63     SERVICE6:
+0053 020000   F       64                     LJMP    _?_readrec
+0056 22               65                     RET
+                      66     ;=======================================================
+                      67     
+                      68     ;=======================================================
+                      69     EXTRN   CODE    (_?_readrec_next)
+----                  70                     CSEG    AT      0x57
+0057                  71     SERVICE7:
+0057 020000   F       72                     LJMP    _?_readrec_next
+005A 22               73                     RET
+                      74     ;=======================================================
+                      75     
+                      76     ;=======================================================
+                      77     EXTRN   CODE    (_?_readrec_prev)
+----                  78                     CSEG    AT      0x5B
+005B                  79     SERVICE8:
+005B 020000   F       80                     LJMP    _?_readrec_prev
+005E 22               81                     RET
+                      82     ;=======================================================
+                      83     
+                      84     ;=======================================================
+                      85     EXTRN   CODE    (_?_writerec)
+----                  86                     CSEG    AT      0x5F
+005F                  87     SERVICE9:
+005F 020000   F       88                     LJMP    _?_writerec
+0062 22               89                     RET
+                      90     ;=======================================================
+                      91     
+                      92     ;=======================================================
+                      93     EXTRN   CODE    (_?_writerec_next)
+----                  94                     CSEG    AT      0x63
+0063                  95     SERVICE10:
+0063 020000   F       96                     LJMP    _?_writerec_next
+0066 22               97                     RET
+                      98     ;=======================================================
+                      99     
+                     100     ;=======================================================
+                     101     EXTRN   CODE    (_?_writerec_prev)
+----                 102                     CSEG    AT      0x67
+0067                 103     SERVICE11:
+0067 020000   F      104                     LJMP    _?_writerec_prev
+006A 22              105                     RET
+                     106     ;uint16 _seek(uchar type, uchar * buffer, uchar * pattern, uchar size);
+                     107     ;=======================================================
+                     108     
+                     109     ;=======================================================
+                     110     EXTRN   CODE    (_?_seek)
+----                 111                     CSEG    AT      0x6B
+006B                 112     SERVICE12:
+006B 020000   F      113                     LJMP    _?_seek
+006E 22              114                     RET
+                     115     ;uint16 _increase(uint32 ival, uchar * res, uchar size);
+                     116     ;=======================================================
+                     117     
+                     118     ;=======================================================
+                     119     EXTRN   CODE    (_?_increase)
+----                 120                     CSEG    AT      0x6F
+006F                 121     SERVICE13:
+006F 020000   F      122                     LJMP    _?_increase
+0072 22              123                     RET
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     3
+
+                     124     ;uint16 _createfilebin(uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, uchar ACC_
+                             INV, uchar ACC_RHB, uchar *buffer, uint16 size);
+                     125     ;=======================================================
+                     126     
+                     127     ;=======================================================
+                     128     EXTRN   CODE    (_?_createfilebin)
+----                 129                     CSEG    AT      0x73
+0073                 130     SERVICE14:
+0073 020000   F      131                     LJMP    _?_createfilebin
+0076 22              132                     RET
+                     133     ;uint16 _createfilerec(uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, uchar ACC_
+                             INV, uchar ACC_RHB, uchar total_rec, uchar rec_size);
+                     134     ;=======================================================
+                     135     
+                     136     ;=======================================================
+                     137     EXTRN   CODE    (_?_createfilerec)
+----                 138                     CSEG    AT      0x77
+0077                 139     SERVICE15:
+0077 020000   F      140                     LJMP    _?_createfilerec
+007A 22              141                     RET
+                     142     ;uint16 _createfilecyclic(uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, uchar A
+                             CC_INV, uchar ACC_RHB, uchar total_rec, uchar rec_size);
+                     143     ;=======================================================
+                     144     
+                     145     ;=======================================================
+                     146     EXTRN   CODE    (_?_createfilecyclic)
+----                 147                     CSEG    AT      0x7B
+007B                 148     SERVICE16:
+007B 020000   F      149                     LJMP    _?_createfilecyclic
+007E 22              150                     RET
+                     151     ;uint16 _createdirectory(uint16 fid, uchar *dirname, uchar len_name);
+                     152     ;=======================================================
+                     153     
+                     154     ;=======================================================
+                     155     EXTRN   CODE    (_?_createdirectory)
+----                 156                     CSEG    AT      0x7F
+007F                 157     SERVICE17:
+007F 020000   F      158                     LJMP    _?_createdirectory
+0082 22              159                     RET             
+                     160     ;uint16 _remove(uint16 file_id);
+                     161     ;=======================================================
+                     162     
+                     163     ;=======================================================
+                     164     EXTRN   CODE    (_?_remove)
+----                 165                     CSEG    AT      0x83
+0083                 166     SERVICE18:
+0083 020000   F      167                     LJMP    _?_remove
+0086 22              168                     RET
+                     169     ;uint16 _invalidate();
+                     170     ;=======================================================
+                     171     
+                     172     ;=======================================================
+                     173     EXTRN   CODE    (_?_invalidate)
+----                 174                     CSEG    AT      0x87
+0087                 175     SERVICE19:
+0087 020000   F      176                     LJMP    _?_invalidate
+008A 22              177                     RET
+                     178     ;uint16 _rehabilitate(); 
+                     179     ;=======================================================
+                     180     
+                     181     ;=======================================================
+                     182     EXTRN   CODE    (_?_rehabilitate)
+----                 183                     CSEG    AT      0x8B
+008B                 184     SERVICE20:
+008B 020000   F      185                     LJMP    _?_rehabilitate
+008E 22              186                     RET
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     4
+
+                     187     ;uint16 _check_access(); 
+                     188     ;=======================================================
+                     189     
+                     190     ;=======================================================
+                     191     EXTRN   CODE    (_?_check_access)
+----                 192                     CSEG    AT      0x8F
+008F                 193     SERVICE21:
+008F 020000   F      194                     LJMP    _?_check_access
+0092 22              195                     RET
+                     196     ;=======================================================
+                     197     ;uchar chv_verify(uchar chv_no, uchar *pin);
+                     198     ;=======================================================
+                     199     EXTRN   CODE    (_?chv_verify)
+----                 200                     CSEG    AT      0x93
+0093                 201     SERVICE22:
+0093 020000   F      202                     LJMP    _?chv_verify
+0096 22              203                     RET
+                     204     ;=======================================================
+                     205     ;uchar chv_enable(uchar chv_no, uchar *pin);
+                     206     ;=======================================================
+                     207     EXTRN   CODE    (_?chv_enable)
+----                 208                     CSEG    AT      0x97
+0097                 209     SERVICE23:
+0097 020000   F      210                     LJMP    _?chv_enable
+009A 22              211                     RET
+                     212     ;=======================================================
+                     213     ;uchar chv_disable(uchar chv_no, uchar *pin);
+                     214     ;=======================================================
+                     215     EXTRN   CODE    (_?chv_disable)
+----                 216                     CSEG    AT      0x9B
+009B                 217     SERVICE24:
+009B 020000   F      218                     LJMP    _?chv_disable
+009E 22              219                     RET
+                     220     ;=======================================================
+                     221     ;uchar chv_get_status(uchar chv_no);
+                     222     ;=======================================================
+                     223     EXTRN   CODE    (_?chv_get_status)
+----                 224                     CSEG    AT      0x9F
+009F                 225     SERVICE25:
+009F 020000   F      226                     LJMP    _?chv_get_status
+00A2 22              227                     RET
+                     228     
+                     229     ;=======================================================
+                     230     ;uchar chv_unblock(uchar chv_no, uchar *pin, uchar *puk);
+                     231     ;=======================================================
+                     232     EXTRN   CODE    (_?chv_unblock)
+----                 233                     CSEG    AT      0xA3
+00A3                 234     SERVICE26:
+00A3 020000   F      235                     LJMP    _?chv_unblock
+00A6 22              236                     RET
+                     237     ;=======================================================
+                     238     ;uchar chv_change(uchar chv_no, uchar *old, uchar *new)
+                     239     ;=======================================================
+                     240     EXTRN   CODE    (_?chv_change)
+----                 241                     CSEG    AT      0xA7
+00A7                 242     SERVICE27:
+00A7 020000   F      243                     LJMP    _?chv_change
+00AA 22              244                     RET
+                     245     ;=======================================================
+                     246     ;BYTE DES_Decrypt(BYTE mode, BYTE * key, BYTE * inbuf, BYTE * outbuf)
+                     247     ;=======================================================
+                     248     EXTRN   CODE    (_?DES_Decrypt)
+----                 249                     CSEG    AT      0xAB
+00AB                 250     SERVICE28:
+00AB 020000   F      251                     LJMP    _?DES_Decrypt
+00AE 22              252                     RET
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     5
+
+                     253     ;=======================================================
+                     254     ;BYTE DES_Encrypt(BYTE mode, BYTE * key, BYTE * inbuf, BYTE * outbuf)
+                     255     ;=======================================================
+                     256     EXTRN   CODE    (_?DES_Encrypt)
+----                 257                     CSEG    AT      0xAF
+00AF                 258     SERVICE29:
+00AF 020000   F      259                     LJMP    _?DES_Encrypt
+00B2 22              260                     RET
+                     261     ;=======================================================
+                     262     ;Random_Number_Generator(BYTE *RNGBuf, BYTE length)
+                     263     ;=======================================================
+                     264     EXTRN   CODE    (_?Random_Number_Generator)
+----                 265                     CSEG    AT      0xB3
+00B3                 266     SERVICE30:
+00B3 020000   F      267                     LJMP    _?Random_Number_Generator
+00B6 22              268                     RET
+                     269     ;=======================================================
+                     270     ;uint16 CalCRC(BYTE * SrcAddr, HALFW length)
+                     271     ;=======================================================
+                     272     EXTRN   CODE    (_?CalCRC)
+----                 273                     CSEG    AT      0xB7
+00B7                 274     SERVICE31:
+00B7 020000   F      275                     LJMP    _?CalCRC
+00BA 22              276                     RET     
+                     277     ;=======================================================
+                     278     ;uint16 Auth_COMP128(uchar * inbuf, uchar * outbuf)
+                     279     ;=======================================================
+                     280     EXTRN   CODE    (_?Auth_COMP128)
+----                 281                     CSEG    AT      0xBB
+00BB                 282     SERVICE32:
+00BB 020000   F      283                     LJMP    _?Auth_COMP128
+00BE 22              284                     RET     
+                     285     ;=======================================================
+                     286     ;void TDES_Decrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf)
+                     287     ;=======================================================
+                     288     EXTRN   CODE    (_?TDES_Decrypt)
+----                 289                     CSEG    AT      0xBF
+00BF                 290     SERVICE33:
+00BF 020000   F      291                     LJMP    _?TDES_Decrypt
+00C2 22              292                     RET     
+                     293     ;=======================================================
+                     294     ;void TDES_Encrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf)
+                     295     ;=======================================================
+                     296     EXTRN   CODE    (_?TDES_Encrypt)
+----                 297                     CSEG    AT      0xC3
+00C3                 298     SERVICE34:
+00C3 020000   F      299                     LJMP    _?TDES_Encrypt
+00C6 22              300                     RET             
+                     301     ;=======================================================
+                     302     ;void MAC_Algorithm3(uchar len, uchar * key, uchar * message, uchar * output)
+                     303     ;=======================================================
+                     304     EXTRN   CODE    (_?MAC_Algorithm3)
+----                 305                     CSEG    AT      0xC7
+00C7                 306     SERVICE35:
+00C7 020000   F      307                     LJMP    _?MAC_Algorithm3
+00CA 22              308                     RET     
+                     309                             
+                     310     ;=======================================================
+                     311     ;void * file_get_current_header(void)
+                     312     ;=======================================================
+                     313     EXTRN   CODE    (_?file_get_current_header)
+----                 314                     CSEG    AT      0xE3
+00E3                 315     SERVICE42:
+00E3 020000   F      316                     LJMP    _?file_get_current_header
+00E6 22              317                     RET     
+                     318     ;=======================================================
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     6
+
+                     319     ;chv_file * chv_get_config(uchar chv_no);
+                     320     ;=======================================================
+                     321     EXTRN   CODE    (_?chv_get_config)
+----                 322                     CSEG    AT      0xE7
+00E7                 323     SERVICE43:
+00E7 020000   F      324                     LJMP    _?chv_get_config
+00EA 22              325                     RET
+                     326     ;=======================================================
+                     327     
+                     328     ;=======================================================
+                     329     EXTRN   CODE    (_?Set_Response)
+----                 330                     CSEG    AT      0xF3
+00F3                 331     SERVICE46:
+00F3 020000   F      332                     LJMP    _?Set_Response
+00F6 22              333                     RET             
+                     334     ;=======================================================
+                     335     
+                     336     ;=======================================================
+                     337     EXTRN   CODE    (_?Get_Data)
+----                 338                     CSEG    AT      0xF7
+00F7                 339     SERVICE47:
+00F7 020000   F      340                     LJMP    _?Get_Data
+00FA 22              341                     RET
+                     342     
+                     343     ;=======================================================
+                     344     ;uint16 Write_Temp_Space(uint16 pos, ucharx * bytes, uint16 length), write program to tempo
+                             rary space
+                     345     ;=======================================================
+                     346     EXTRN   CODE    (_?Write_Temp_Space)
+----                 347                     CSEG    AT      0xFB
+00FB                 348     SERVICE48:
+00FB 020000   F      349                     LJMP    _?Write_Temp_Space
+00FE 22              350                     RET
+                     351     ;=======================================================
+                     352     ;uint16 Load_Temp_Space() , load program from temp space to program space
+                     353     ;=======================================================
+                     354     EXTRN   CODE    (_?Load_Temp_Space)
+----                 355                     CSEG    AT      0xFF
+00FF                 356     SERVICE49:
+00FF 020000   F      357                     LJMP    _?Load_Temp_Space
+0102 22              358                     RET
+                     359     ;=======================================================
+                     360     ;uint16 fs_format(uint32 size)
+                     361     ;=======================================================
+                     362     EXTRN   CODE    (_?fs_format)
+----                 363                     CSEG    AT      0x103
+0103                 364     SERVICE50:
+0103 020000   F      365                     LJMP    _?fs_format
+0106 22              366                     RET     
+                     367     ;=======================================================
+                     368     ;uint32 fs_freespace(void)
+                     369     ;=======================================================
+                     370     EXTRN   CODE    (_?fs_freespace)
+----                 371                     CSEG    AT      0x107
+0107                 372     SERVICE51:
+0107 020000   F      373                     LJMP    _?fs_freespace
+010A 22              374                     RET             
+                     375     ;=======================================================
+                     376     ;void lsprintf(uchar * str, uchar * fmt, ...)
+                     377     ;=======================================================
+                     378     EXTRN   CODE    (_?ls_printf)
+----                 379                     CSEG    AT      0x10B
+010B                 380     SERVICE52:
+010B 020000   F      381                     LJMP    _?ls_printf
+010E 22              382                     RET     
+010F 00              383                     NOP
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     7
+
+0110 00              384                     NOP
+0111 00              385                     NOP
+0112 00              386                     NOP
+                     387                                     
+                     388             
+                     389     ;EXTRN  CODE    (TMR0_ISR)
+                     390             ;CSEG   AT      0x200 
+                     391     
+                     392     ;==========================================================================
+                     393     ; User App Timeout mechanism
+                     394     ;==========================================================================
+0113                 395     INCREMENT_DX:
+0113 C5F0            396             XCH      A,B
+0115 F8              397             MOV      R0,A
+0116 A3              398             INC      DPTR
+0117 E0              399             MOVX     A,@DPTR
+0118 28              400             ADD      A,R0
+0119 F0              401             MOVX     @DPTR,A
+011A C5F0            402             XCH      A,B
+011C F8              403             MOV      R0,A
+011D E582            404             MOV      A,DPL0
+011F 1582            405             DEC      DPL0
+0121 7002            406             JNZ      INC_DX_0
+0123 1583            407             DEC      DPH0
+0125                 408     INC_DX_0:
+0125 E0              409             MOVX     A,@DPTR
+0126 38              410             ADDC     A,R0
+0127 F0              411             MOVX     @DPTR,A
+0128 22              412             RET      
+                     413             NAME    TMR0_ISR
+                     414             PUBLIC  TMR0_ISR 
+                     415     EXTRN   XDATA   (_tick_counter)
+                     416     EXTRN   XDATA   (_iso7816_state)
+                     417     ;?C_C51STARTUP  SEGMENT   CODE
+0129                 418     TMR0_ISR:
+0129 C0E0            419             PUSH    ACC
+012B C0F0            420             PUSH    B
+012D C083            421             PUSH    DPH
+012F C082            422             PUSH    DPL
+0131 C0D0            423             PUSH    PSW
+0133 75D000          424             MOV     PSW,#00H
+                     425             USING   0
+0136 C000            426             PUSH    AR0
+0138 C006            427             PUSH    AR6
+013A C007            428             PUSH    AR7
+                     429                             ; SOURCE LINE # 16
+                     430     ; {
+                     431     ;       IE_TMR0 = 0;
+                     432                             ; SOURCE LINE # 18
+013C C2A9            433             CLR     IE_TMR0
+                     434     ;       _tick_counter++;
+                     435                             ; SOURCE LINE # 19
+013E 900000   F      436             MOV     DPTR,#_tick_counter
+0141 E4              437             CLR     A
+0142 75F001          438             MOV     B,#01H
+0145 120113          439             LCALL   INCREMENT_DX
+                     440             ;LCALL  ?C?IILDX
+                     441     ;       if(_tick_counter < 300) { 
+                     442                             ; SOURCE LINE # 20
+0148 900000   F      443             MOV     DPTR,#_tick_counter
+014B E0              444             MOVX    A,@DPTR
+014C FE              445             MOV     R6,A
+014D A3              446             INC     DPTR
+014E E0              447             MOVX    A,@DPTR
+014F FF              448             MOV     R7,A
+0150 C3              449             CLR     C
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     8
+
+0151 EF              450             MOV     A,R7
+                     451             ;SUBB   A,#02CH   ;300d = 12Ch          --> lower byte
+                     452             ;SUBB   A,#058H   ;600d = 258h          --> lower byte
+0152 94B0            453             SUBB    A,#0B0H   ;1200d = 4B0h         --> lower byte
+0154 EE              454             MOV     A,R6
+                     455             ;SUBB   A,#01H    ;--> upper byte  
+                     456             ;SUBB   A,#02H    ;--> upper byte
+0155 9404            457             SUBB    A,#04H    ;--> upper byte
+0157 500C            458             JNC     EXIT_TMR0_ISR1
+                     459     ;               TH0 = 0xC3;                     //50000 clock, reload value
+                     460                             ; SOURCE LINE # 21
+0159 758CC3          461             MOV     TH0,#0C3H
+                     462     ;               TL0 = 0x50;             
+                     463                             ; SOURCE LINE # 22
+015C 758A50          464             MOV     TL0,#050H
+                     465     ;               TCON_TF0 = 0;           //clear flag
+                     466                             ; SOURCE LINE # 23
+015F C28D            467             CLR     TCON_TF0
+                     468     ;               IE_TMR0 = 1;
+                     469                             ; SOURCE LINE # 24
+0161 D2A9            470             SETB    IE_TMR0
+                     471     ;       } else {
+                     472                             ; SOURCE LINE # 25
+0163 8035            473             SJMP    EXIT_TMR0_ISR3
+0165                 474     EXIT_TMR0_ISR1:
+                     475     ;               _iso7816_state =  ISO7816_STOP;                 //cancel pending operation
+                     476                             ; SOURCE LINE # 26
+0165 900000   F      477             MOV     DPTR,#_iso7816_state
+0168 740D            478             MOV     A,#0DH
+016A F0              479             MOVX    @DPTR,A
+                     480     ;               //#pragma       asm
+                     481     ;               TH0 = 0x00;                     //50000 clock, reload value
+                     482                             ; SOURCE LINE # 28
+016B 758C00          483             MOV     TH0,#00H
+                     484     ;               TL0 = 0x00;             
+                     485                             ; SOURCE LINE # 29
+016E 758A00          486             MOV     TL0,#00H
+                     487     ;               TCON_TF0 = 0;           //clear flag
+                     488                             ; SOURCE LINE # 30
+0171 C28D            489             CLR     TCON_TF0
+                     490     ;               IE_TMR0 = 0;
+                     491                             ; SOURCE LINE # 31
+0173 C2A9            492             CLR     IE_TMR0
+                     493     ;               //SP = 0x23;
+                     494     ;               #pragma asm
+0175 D007            495             POP AR7;
+0177 D006            496             POP AR6;
+0179 D000            497             POP AR0;
+017B D0D0            498             POP PSW ;
+017D D082            499             POP DPL0;
+017F D083            500             POP DPH0;
+0181 D0F0            501             POP B;
+0183 D0E0            502             POP ACC;
+0185 D0E0            503             POP ACC; 
+0187 D0E0            504             POP ACC;
+                     505               ;MOV SP, #023h
+                     506               ;Timeout sequence, reset all stack to default, return to ISO7816_Main
+                     507             EXTRN DATA (?C_XBP)
+                     508             ;EXTRN DATA (?STACK)
+0189 758100   F      509             MOV     SP,#?STACK-1
+018C 750008   F      510             MOV     ?C_XBP,#HIGH XBPSTACKTOP
+018F 750000   F      511             MOV     ?C_XBP+1,#LOW XBPSTACKTOP
+0192 900000   F      512             MOV DPTR, #ISO7816_Main;
+0195 C082            513             PUSH DPL;
+0197 C083            514             PUSH DPH;
+0199 32              515             RETI
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE     9
+
+                     516     ;               //MOV SP, #023h;
+                     517               
+                     518     ;               //MOV PSW, #0;
+                     519               
+                     520     ;               //MOV A, #0;
+                     521               
+                     522     ;               //MOV B, #0;
+                     523               
+                     524     ;               //MOV   SP,#?STACK-1
+                     525               
+                     526     ;               //AJMP  ISO7816_Main;
+                     527               
+                     528     ;               //LJMP  MAIN
+                     529               
+                     530     ;               #pragma endasm
+                     531     ;               //*((uchar *)(SP - 8)) = 0x20;
+                     532     ;               //*((uchar *)(SP - 8 + 1)) = 0x00;
+                     533     ;               //PC = 0x2000;
+                     534     ;       }
+                     535                             ; SOURCE LINE # 59
+019A                 536     EXIT_TMR0_ISR2:
+                     537     ;       return;
+                     538     ; }
+                     539                             ; SOURCE LINE # 61
+019A                 540     EXIT_TMR0_ISR3:
+019A D007            541             POP     AR7
+019C D006            542             POP     AR6
+019E D000            543             POP     AR0
+01A0 D0D0            544             POP     PSW
+01A2 D082            545             POP     DPL
+01A4 D083            546             POP     DPH
+01A6 D0F0            547             POP     B
+01A8 D0E0            548             POP     ACC
+01AA 32              549             RETI    
+                     550     ; END OF TMR0_ISR
+                     551     
+                     552     ;Initialize_User_App
+----                 553                     CSEG    AT      0x8000 
+8000 22              554                     RET
+                     555     
+                     556                     END
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE    10
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E                    T Y P E  V A L U E   ATTRIBUTES
+
+?C_XBP. . . . . . . . . .  D ADDR   -----       EXT
+?STACK. . . . . . . . . .  I SEG    0000H       REL=UNIT
+ACC . . . . . . . . . . .  D ADDR   00E0H   A   
+AR0 . . . . . . . . . . .  D ADDR   0000H   A   
+AR6 . . . . . . . . . . .  D ADDR   0006H   A   
+AR7 . . . . . . . . . . .  D ADDR   0007H   A   
+B . . . . . . . . . . . .  D ADDR   00F0H   A   
+DPH . . . . . . . . . . .  D ADDR   0083H   A   
+DPH0. . . . . . . . . . .  D ADDR   0083H   A   
+DPL . . . . . . . . . . .  D ADDR   0082H   A   
+DPL0. . . . . . . . . . .  D ADDR   0082H   A   
+EXIT_TMR0_ISR1. . . . . .  C ADDR   0165H   A   
+EXIT_TMR0_ISR2. . . . . .  C ADDR   019AH   A   
+EXIT_TMR0_ISR3. . . . . .  C ADDR   019AH   A   
+IE_TMR0 . . . . . . . . .  B ADDR   00A8H.1 A   
+INCREMENT_DX. . . . . . .  C ADDR   0113H   A   
+INC_DX_0. . . . . . . . .  C ADDR   0125H   A   
+ISO7816_MAIN. . . . . . .  C ADDR   -----       EXT
+PSW . . . . . . . . . . .  D ADDR   00D0H   A   
+SERVICE0. . . . . . . . .  C ADDR   003BH   A   
+SERVICE1. . . . . . . . .  C ADDR   003FH   A   
+SERVICE10 . . . . . . . .  C ADDR   0063H   A   
+SERVICE11 . . . . . . . .  C ADDR   0067H   A   
+SERVICE12 . . . . . . . .  C ADDR   006BH   A   
+SERVICE13 . . . . . . . .  C ADDR   006FH   A   
+SERVICE14 . . . . . . . .  C ADDR   0073H   A   
+SERVICE15 . . . . . . . .  C ADDR   0077H   A   
+SERVICE16 . . . . . . . .  C ADDR   007BH   A   
+SERVICE17 . . . . . . . .  C ADDR   007FH   A   
+SERVICE18 . . . . . . . .  C ADDR   0083H   A   
+SERVICE19 . . . . . . . .  C ADDR   0087H   A   
+SERVICE20 . . . . . . . .  C ADDR   008BH   A   
+SERVICE21 . . . . . . . .  C ADDR   008FH   A   
+SERVICE22 . . . . . . . .  C ADDR   0093H   A   
+SERVICE23 . . . . . . . .  C ADDR   0097H   A   
+SERVICE24 . . . . . . . .  C ADDR   009BH   A   
+SERVICE25 . . . . . . . .  C ADDR   009FH   A   
+SERVICE26 . . . . . . . .  C ADDR   00A3H   A   
+SERVICE27 . . . . . . . .  C ADDR   00A7H   A   
+SERVICE28 . . . . . . . .  C ADDR   00ABH   A   
+SERVICE29 . . . . . . . .  C ADDR   00AFH   A   
+SERVICE3. . . . . . . . .  C ADDR   0047H   A   
+SERVICE30 . . . . . . . .  C ADDR   00B3H   A   
+SERVICE31 . . . . . . . .  C ADDR   00B7H   A   
+SERVICE32 . . . . . . . .  C ADDR   00BBH   A   
+SERVICE33 . . . . . . . .  C ADDR   00BFH   A   
+SERVICE34 . . . . . . . .  C ADDR   00C3H   A   
+SERVICE35 . . . . . . . .  C ADDR   00C7H   A   
+SERVICE4. . . . . . . . .  C ADDR   004BH   A   
+SERVICE42 . . . . . . . .  C ADDR   00E3H   A   
+SERVICE43 . . . . . . . .  C ADDR   00E7H   A   
+SERVICE46 . . . . . . . .  C ADDR   00F3H   A   
+SERVICE47 . . . . . . . .  C ADDR   00F7H   A   
+SERVICE48 . . . . . . . .  C ADDR   00FBH   A   
+SERVICE49 . . . . . . . .  C ADDR   00FFH   A   
+SERVICE5. . . . . . . . .  C ADDR   004FH   A   
+SERVICE50 . . . . . . . .  C ADDR   0103H   A   
+SERVICE51 . . . . . . . .  C ADDR   0107H   A   
+SERVICE52 . . . . . . . .  C ADDR   010BH   A   
+SERVICE6. . . . . . . . .  C ADDR   0053H   A   
+A51 MACRO ASSEMBLER  YGGDRASIL_APIS                                                       01/21/2014 14:00:42 PAGE    11
+
+SERVICE7. . . . . . . . .  C ADDR   0057H   A   
+SERVICE8. . . . . . . . .  C ADDR   005BH   A   
+SERVICE9. . . . . . . . .  C ADDR   005FH   A   
+SP. . . . . . . . . . . .  D ADDR   0081H   A   
+TCON_TF0. . . . . . . . .  B ADDR   0088H.5 A   
+TH0 . . . . . . . . . . .  D ADDR   008CH   A   
+TL0 . . . . . . . . . . .  D ADDR   008AH   A   
+TMR0_ISR. . . . . . . . .  C ADDR   0129H   A   
+XBPSTACK. . . . . . . . .  N NUMB   0001H   A   
+XBPSTACKTOP . . . . . . .  N NUMB   0800H   A   
+_?AUTH_COMP128. . . . . .  C ADDR   -----       EXT
+_?CALCRC. . . . . . . . .  C ADDR   -----       EXT
+_?CHV_CHANGE. . . . . . .  C ADDR   -----       EXT
+_?CHV_DISABLE . . . . . .  C ADDR   -----       EXT
+_?CHV_ENABLE. . . . . . .  C ADDR   -----       EXT
+_?CHV_GET_CONFIG. . . . .  C ADDR   -----       EXT
+_?CHV_GET_STATUS. . . . .  C ADDR   -----       EXT
+_?CHV_UNBLOCK . . . . . .  C ADDR   -----       EXT
+_?CHV_VERIFY. . . . . . .  C ADDR   -----       EXT
+_?DES_DECRYPT . . . . . .  C ADDR   -----       EXT
+_?DES_ENCRYPT . . . . . .  C ADDR   -----       EXT
+_?FILE_GET_CURRENT_HEADER  C ADDR   -----       EXT
+_?FS_FORMAT . . . . . . .  C ADDR   -----       EXT
+_?FS_FREESPACE. . . . . .  C ADDR   -----       EXT
+_?GET_DATA. . . . . . . .  C ADDR   -----       EXT
+_?LOAD_TEMP_SPACE . . . .  C ADDR   -----       EXT
+_?LS_PRINTF . . . . . . .  C ADDR   -----       EXT
+_?MAC_ALGORITHM3. . . . .  C ADDR   -----       EXT
+_?M_ALLOC . . . . . . . .  C ADDR   -----       EXT
+_?M_FREE. . . . . . . . .  C ADDR   -----       EXT
+_?RANDOM_NUMBER_GENERATOR  C ADDR   -----       EXT
+_?SET_RESPONSE. . . . . .  C ADDR   -----       EXT
+_?TDES_DECRYPT. . . . . .  C ADDR   -----       EXT
+_?TDES_ENCRYPT. . . . . .  C ADDR   -----       EXT
+_?WRITE_TEMP_SPACE. . . .  C ADDR   -----       EXT
+_?_CHECK_ACCESS . . . . .  C ADDR   -----       EXT
+_?_CREATEDIRECTORY. . . .  C ADDR   -----       EXT
+_?_CREATEFILEBIN. . . . .  C ADDR   -----       EXT
+_?_CREATEFILECYCLIC . . .  C ADDR   -----       EXT
+_?_CREATEFILEREC. . . . .  C ADDR   -----       EXT
+_?_INCREASE . . . . . . .  C ADDR   -----       EXT
+_?_INVALIDATE . . . . . .  C ADDR   -----       EXT
+_?_READBIN. . . . . . . .  C ADDR   -----       EXT
+_?_READREC. . . . . . . .  C ADDR   -----       EXT
+_?_READREC_NEXT . . . . .  C ADDR   -----       EXT
+_?_READREC_PREV . . . . .  C ADDR   -----       EXT
+_?_REHABILITATE . . . . .  C ADDR   -----       EXT
+_?_REMOVE . . . . . . . .  C ADDR   -----       EXT
+_?_SEEK . . . . . . . . .  C ADDR   -----       EXT
+_?_SELECT . . . . . . . .  C ADDR   -----       EXT
+_?_WRITEBIN . . . . . . .  C ADDR   -----       EXT
+_?_WRITEREC . . . . . . .  C ADDR   -----       EXT
+_?_WRITEREC_NEXT. . . . .  C ADDR   -----       EXT
+_?_WRITEREC_PREV. . . . .  C ADDR   -----       EXT
+_ISO7816_STATE. . . . . .  X ADDR   -----       EXT
+_TICK_COUNTER . . . . . .  X ADDR   -----       EXT
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

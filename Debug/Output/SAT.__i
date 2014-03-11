@@ -1,0 +1,1 @@
+"framework\SAT.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\SAT.lst) OBJECT(.\Debug\Output\SAT.obj)

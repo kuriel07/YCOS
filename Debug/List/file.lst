@@ -1,0 +1,1413 @@
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE FILE
+OBJECT MODULE PLACED IN .\Debug\Output\file.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE asgard\file.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(
+                    -.\Debug\List\file.lst) OBJECT(.\Debug\Output\file.obj)
+
+stmt level    source
+
+   1          /* An upper layer of Asgard File System, which provide API(s)
+   2           * for user application
+   3           *
+   4           * Copyright 2010, Agus Purwanto.
+   5           * All rights reserved.
+   6           *
+   7           * 
+   8           */
+   9          
+  10          
+  11          #include "file.h"
+  12          #include "..\defs.h"
+  13          #include "fs.h"
+  14          #include "..\midgard\midgard.h"
+  15          #include "security.h"
+  16          #include "..\misc\algorithm.h"
+  17          #include "..\misc\mem.h"        
+  18          #include <string.h>
+  19          
+  20          #if  ASGARD_VERSION == 3
+              #if USE_ENTRY_STACK
+              /* automatically push fs_file handle onto asgard_handle stack, use on file selection */
+              void as_push(asgard_handle * handle, fs_file * file) {
+                      if(handle->stack != MAX_STACK_HANDLE)
+                              handle->stack[handle->stack_index++] = file;
+              }
+              
+              /* return parent fs_file handle and freed the previous handle */
+              fs_file * as_pop(asgard_handle * handle) {
+                      if(handle->stack_index != 0) {
+                              free(handle->stack[handle->stack_index]);
+                              handle->stack[handle->stack_index--] = NULL;                            //clear handle
+                              return handle->stack[handle->stack];
+                      } 
+                      return NULL;                                                                                                    //stack cannot be popped
+              }
+              
+              /* peek asgard_handle current stack */
+              fs_file * as_peek(asgard_handle * handle) {
+                      if(handle->stack_index > 1 && handle->stack_index <=8)
+                              return handle->stack[handle->stack_index -1];
+                      return NULL;
+              }
+              
+              /* peek asgard_handle current stack */
+              fs_file * as_peek_parent(asgard_handle * handle) {
+                      if(handle->stack_index > 2 && handle->stack_index <=8)
+                              return handle->stack[handle->stack_index -2];
+                      return NULL;
+              }
+              
+              /* flush asgard_handle stack from memory, freed all references and nullifies stack_index */
+              void as_flush(asgard_handle * handle) {
+                      uchar i;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 2   
+
+                      for(i=0;i<handle->stack_index;i++) {
+                              free(handle->stack[i]);
+                      }
+                      handle->stack_index = 0;
+              }
+              
+              #endif
+              
+              fs_file * as_get_current_directory(asgard_handle * handle) {
+              #if USE_ENTRY_STACK
+                      return as_peek(handle);                                                                                 //temporaly use as_peek
+              #else
+                      //printf("current directory : %x\n", handle->cur_dir->entry.fid);
+                      return handle->cur_dir;
+              #endif
+              }
+              
+              void as_set_current_file(asgard_handle * handle, fs_file * file) {
+              #if USE_ENTRY_STACK
+                      as_push(handle, file);                                                                                  //temporaly use as_push
+              #else
+                      if(handle->cur_file != NULL) free(handle->cur_file);
+                      if(file->entry.type & FS_TYPE_DIR) handle->cur_dir = file;              //check if currently selected file is directo
+             -ry then set handle->cur_dir
+                      handle->cur_file = file;
+              #endif
+              }
+              
+              fs_file * as_get_current_file(asgard_handle * handle) {
+              #if USE_ENTRY_STACK
+                      return as_peek(handle);                                                                                 //temporaly use as_peek
+              #else
+                      return handle->cur_file;
+              #endif
+              }
+              
+              asgard_handle * as_create_handle(fs_handle * fs, uchar mode) {
+                      asgard_handle * handle = NULL;
+                      if(fs != NULL) {
+                              handle = (asgard_handle *)malloc(sizeof(asgard_handle));
+                              handle->fs = fs;                                                                                                //set current file system of asgard handle
+              #if USE_ENTRY_STACK
+                              uchar i = 0;
+                              for(i=0;i<MAX_STACK_HANDLE;i++) {                                                               //clear stack pointer
+                                      handle->stack[i] = NULL;
+                              }               
+                              handle->stack_index = 0;                                                                                //set stack index to 0
+              #else
+                              handle->cur_dir = NULL;
+                              handle->cur_file = NULL;
+              #endif
+                              handle->cur_rec_index = 0;                                                                              //current record index = 0
+                              handle->mode = mode;                                                                                    //set mode user/sys
+                              handle->num_of_df = 0;                                                                                  //
+                              handle->num_of_ef = 0;                                                                                  //
+                      }
+                      return handle;
+              }
+              
+              uint16 as_select(asgard_handle * handle, uint16 fid) {
+                      fs_file * cur_file = NULL;
+                      fs_file * root = NULL;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 3   
+
+              #if USE_ENTRY_STACK
+                      if(handle->stack_index > 2 && handle->stack_index <=8) {
+                              cur_file = handle->stack[handle->stack_index -2];                               //check for parent
+                              if(cur_file != NULL) {
+                                      if(cur_file->entry.fid == fid) {
+                                              as_pop(handle);                                                                                 //freed current file
+                                              goto as_select_finished;
+                                      }
+                              }
+                      }
+                      cur_file = fs_fopen(as_peek(handle), fid, handle->mode);                        //select child
+                      as_select_finished:
+                      if(cur_file != NULL) {
+                              as_push(handle, cur_file);
+                              return APDU_SUCCESS_RESPONSE;
+                      }
+                      cur_file = as_peek(handle);
+                      if(cur_file != NULL && (file->entry.type & FS_TYPE_DIR)) {                      //entry exist and type directory
+                              as_push(handle, NULL);                                                                                  //push no selected file
+                      }
+              #else
+                      //printf("select\n");
+                      if(fid == FID_MF) {
+                              root = fs_root(handle->fs);
+                              if(root == NULL) return APDU_FILE_NOT_FOUND;
+                              //printf("root : %x\n", root);
+                              cur_file = fs_fopen(root, FID_MF, handle->mode);
+                              if(handle->cur_dir != NULL) { free(handle->cur_dir); handle->cur_dir = NULL; }
+                              if(handle->cur_file != NULL && handle->cur_dir != handle->cur_file) { free(handle->cur_file); handle->cu
+             -r_file = NULL; }
+                              handle->cur_dir = cur_file;
+                              handle->cur_file = cur_file;
+                              free(root);                                                                                                     //prevent memory leakage
+                              if(cur_file != NULL) return APDU_SUCCESS_RESPONSE;                              //selection successful
+                      }
+                      if(handle->cur_dir != NULL && fid == handle->cur_dir->entry.fid) return APDU_SUCCESS_RESPONSE;
+                      if(handle->cur_file != NULL && fid == handle->cur_file->entry.fid) return APDU_SUCCESS_RESPONSE;
+                      //m_mem_dump();
+                      //printf("select : %x\n", handle->cur_dir->entry.fid);
+                      //printf("handle->cur_dir : %x\n", handle->cur_dir);
+                      cur_file = fs_fopen(handle->cur_dir, fid, handle->mode);
+                      //if(cur_file == NULL) printf("file not found\n");
+                      //getch();
+                      if(cur_file == NULL) return APDU_FILE_NOT_FOUND;
+                      if(cur_file->entry.type & FS_TYPE_DIR) {                                                //type is directory
+                              //printf("handle is directory\n");
+                              if(handle->cur_dir != NULL) { free(handle->cur_dir); handle->cur_dir = NULL; }
+                              if(handle->cur_file != NULL && handle->cur_dir != handle->cur_file) { free(handle->cur_file); handle->cu
+             -r_file = NULL; }
+                              handle->cur_dir = cur_file;
+                              handle->cur_file = cur_file;
+                              //getch();
+                              if(cur_file != NULL) return APDU_SUCCESS_RESPONSE;                      //selection successful
+                      } else {                                                                                                                //type is file
+                              //if(handle->cur_dir != NULL) { free(handle->cur_dir); handle->cur_dir = NULL; }
+                              if(handle->cur_file != NULL && handle->cur_dir != handle->cur_file) { free(handle->cur_file); handle->cu
+             -r_file = NULL; }
+                              handle->cur_file = cur_file;
+                              //getch();
+                              if(cur_file != NULL) return APDU_SUCCESS_RESPONSE;                      //selection successful
+                      }
+              #endif
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 4   
+
+                      return APDU_FILE_NOT_FOUND;
+              }
+              
+              uint16 as_read_binary(asgard_handle * handle, uint16 offset, uchar * buffer, uchar size) {
+                      ef_bin_header header;
+                      fs_file * file = as_get_current_file(handle);
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if(file->entry.type & FS_TYPE_DIR) return APDU_COMMAND_INVALID;
+                      fs_fseek(file, 0);
+                      fs_fread(file, &header, sizeof(ef_bin_header));                                 //getting ef information from ef header first
+                      if(header.structure == EF_TRANSPARENT) {
+                              return APDU_INSTRUCTION_INVALID;                                                        //wrong command
+                      }
+                      if(header.status != EF_VALID) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      if(offset + size <= (header.size + sizeof(ef_bin_header))) {
+                              fs_fseek(file, offset + sizeof(ef_bin_header));
+                              fs_fread(file, buffer, size);
+                              return APDU_SUCCESS;                                                                            //read success
+                      }
+                      return APDU_OUT_OF_RANGE;                                                                               //wrong offset and length
+              }
+              
+              uint16 as_write_binary(asgard_handle * handle, uint16 offset, uchar * buffer, uchar size) {
+                      ef_bin_header header;
+                      fs_file * file = as_get_current_file(handle);
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if(file->entry.type & FS_TYPE_DIR) return APDU_COMMAND_INVALID;
+                      fs_fseek(file, 0);
+                      fs_fread(file, &header, sizeof(ef_bin_header));                                 //getting ef information from ef header first
+                      if(header.structure == EF_TRANSPARENT) {
+                              return APDU_INSTRUCTION_INVALID;                                                        //wrong command
+                      }
+                      if(header.status != EF_VALID) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      if(offset + size <= (header.size + sizeof(ef_bin_header))) {
+                              fs_fseek(file, offset + sizeof(ef_bin_header));
+                              fs_fwrite(file, buffer, size);
+                              return APDU_SUCCESS;                                                                            //read success
+                      }
+                      return APDU_OUT_OF_RANGE;                                                                               //wrong offset and length       
+              }
+              
+              uint16 as_create_binary(asgard_handle * handle, uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, 
+             -uchar ACC_INV, uchar ACC_RHB, uchar * buffer, uint16 size) {
+                      ef_bin_header header;
+                      fs_file * file = as_get_current_directory(handle);                              //get currently selected directory
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if((file->entry.type & FS_TYPE_DIR) == 0) return APDU_COMMAND_INVALID;
+                      header.structure = EF_TRANSPARENT;
+                      header.size = size;
+                      header.status = EF_VALID;
+                      header.access_rw = ACC_READ << 4 | ACC_WRT;
+                      header.access_inc = ACC_INC;
+                      header.access_ri = ACC_RHB << 4 | ACC_INV;
+                      file = fs_fcreate(file, fid, handle->mode);
+                      fs_fwrite(file, &header, sizeof(ef_bin_header));                                //write header first
+                      fs_fwrite(file, buffer, size);                                                                  //write content (should i write content first to default??)
+                      as_set_current_file(handle, file);                                                              //automatically select new file
+                      return APDU_SUCCESS;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 5   
+
+              }
+              
+              //read record for cyclic and linier fixed
+              uint16 as_read_record(asgard_handle * handle, uint16 rec_no, uchar * buffer, uchar size) {
+                      ef_rec_header header;
+                      fs_file * file = as_get_current_file(handle);
+                      uchar bytes_readed;
+                      uint16 offset;
+                      //uchar actual_index;
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if(file->entry.type & FS_TYPE_DIR) return APDU_COMMAND_INVALID;
+                      fs_fseek(file, 0);
+                      fs_fread(file, (uchar *)&header, sizeof(ef_rec_header));                                                        //getting ef information from ef header fi
+             -rst
+                      if((header.structure == EF_LINFIX) || (header.structure == EF_CYCLIC)) {
+                              return APDU_INSTRUCTION_INVALID;                                                                        //wrong command
+                      }
+                      if(header.status != EF_VALID) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      if(size != header.rec_size) return APDU_OUT_OF_RANGE;                                   //check for record size
+                      if(header.structure == EF_LINFIX) {                                                                             //read operation for linier fixed
+                              offset = sizeof(ef_rec_header) + (header.rec_size * rec_no);            //calculate offset for linier fixed
+                              handle->cur_rec_index = rec_no;                                                                         //update handle current record
+                              fs_fseek(file, offset);
+                              bytes_readed = fs_fread(file, buffer, header.rec_size);
+                              if(bytes_readed == header.rec_size) return APDU_SUCCESS;
+                              //return APDU_FATAL_ERROR;
+                      } else if(header.structure == EF_CYCLIC) {                                                              //read operation for cyclic
+                              if(rec_no == 0xffff) rec_no = header.num_of_records - 1;                        //check if rec_no is negative
+                              rec_no = ((rec_no + header.first) % header.num_of_records);                     //calculate modded record number
+                              handle->cur_rec_index = rec_no;                                                                         //update handle current record
+                              offset = sizeof(ef_rec_header) + (header.rec_size * rec_no);            //calculate offset for cyclic
+                              fs_fseek(file, offset);
+                              bytes_readed = fs_fread(file, buffer, header.rec_size);
+                              if(bytes_readed == header.rec_size) return APDU_SUCCESS;
+                              //return APDU_FATAL_ERROR;
+                      }
+                      return APDU_FATAL_ERROR;
+              }
+              
+              uint16 as_read_record_next(asgard_handle * handle, uchar *buffer, uchar size) {
+                      return as_read_record(handle, ++handle->cur_rec_index, buffer, size);
+              }
+              
+              uint16 as_read_record_prev(asgard_handle * handle, uchar *buffer, uchar size) {
+                      return as_read_record(handle, --handle->cur_rec_index, buffer, size);
+              }
+              
+              //uint16 _write_new_rec(uint16 rec_no, uchar size, uchar *buffer);
+              uint16 as_write_record(asgard_handle * handle, uint16 rec_no, uchar *buffer, uchar size) {
+                      ef_rec_header header;
+                      fs_file * file = as_get_current_file(handle);
+                      uchar bytes_wrote;
+                      uint16 offset;
+                      //uchar actual_index;
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if(file->entry.type & FS_TYPE_DIR) return APDU_COMMAND_INVALID;
+                      fs_fseek(file, 0);
+                      fs_fread(file, &header, sizeof(ef_rec_header));                                                 //getting ef information from ef header first
+                      if(header.structure == EF_LINFIX || header.structure == EF_CYCLIC) {
+                              return APDU_INSTRUCTION_INVALID;                                                                        //wrong command
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 6   
+
+                      }
+                      if(header.status != EF_VALID) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      if(size != header.rec_size) return APDU_OUT_OF_RANGE;                                   //check for record size
+                      if(header.structure == EF_LINFIX) {                                                                             //read operation for linier fixed
+                              offset = sizeof(ef_rec_header) + (header.rec_size * rec_no);            //calculate offset for linier fixed
+                              handle->cur_rec_index = rec_no;                                                                         //update handle current record
+                              fs_fseek(file, offset);
+                              bytes_wrote = fs_fwrite(file, buffer, header.rec_size);
+                              if(bytes_wrote == header.rec_size) return APDU_SUCCESS;
+                              //return APDU_FATAL_ERROR;
+                      } else if(header.structure == EF_CYCLIC) {                                                              //read operation for cyclic
+                              if(rec_no == 0xffff) rec_no = header.num_of_records - 1;                        //check if rec_no is negative
+                              rec_no = ((rec_no + header.first) % header.num_of_records);                     //calculate modded record number
+                              handle->cur_rec_index = rec_no;                                                                         //update handle current record
+                              offset = sizeof(ef_rec_header) + (header.rec_size * rec_no);            //calculate offset for cyclic
+                              fs_fseek(file, offset);
+                              bytes_wrote = fs_fwrite(file, buffer, header.rec_size);
+                              if(bytes_wrote == header.rec_size) { 
+                                      header.first = rec_no;
+                                      fs_fseek(file, 0);
+                                      fs_fwrite(file, &header, sizeof(ef_rec_header));                                //set new ef information
+                                      //handle->cur_rec_index = 0;                                                                    //should current record index set to 0 for relative positioning
+                                      return APDU_SUCCESS;
+                              }
+                              //return APDU_FATAL_ERROR;
+                      }
+                      return APDU_FATAL_ERROR;
+              }
+              
+              uint16 as_write_record_next(asgard_handle * handle, uchar *buffer, uchar size) {
+                      return as_write_record(handle, ++handle->cur_rec_index, buffer, size);
+              }
+              
+              uint16 as_write_record_prev(asgard_handle * handle, uchar *buffer, uchar size) {
+                      return as_write_record(handle, --handle->cur_rec_index, buffer, size);
+              }
+              
+              uint16 as_create_record(asgard_handle * handle, uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, 
+             -uchar ACC_INV, uchar ACC_RHB, uchar total_rec, uchar rec_size) {
+                      ef_rec_header header;
+                      uchar * buffer;
+                      uchar i;
+                      fs_file * file = as_get_current_directory(handle);                              //get currently selected directory
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if((file->entry.type & FS_TYPE_DIR) == 0) return APDU_COMMAND_INVALID;
+                      header.structure = EF_LINFIX;
+                      header.status = EF_VALID;
+                      header.access_rw = ACC_READ << 4 | ACC_WRT;
+                      header.access_inc = ACC_INC;
+                      header.access_ri = ACC_RHB << 4 | ACC_INV;
+                      header.num_of_records = total_rec;
+                      header.rec_size = rec_size;
+                      header.first = 0;
+                      file = fs_fcreate(file, fid, handle->mode);
+                      fs_fwrite(file, &header, sizeof(ef_rec_header));                                //write header first
+                      buffer = (uchar *)malloc(rec_size);
+                      memset(buffer, 0xff, rec_size);
+                      for(i=0;i<total_rec;i++) {
+                              fs_fwrite(file, buffer, rec_size);
+                      }
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 7   
+
+                      free(buffer);
+                      as_set_current_file(handle, file);                                                              //automatically select new file
+                      return APDU_SUCCESS;
+              }
+              
+              uint16 as_create_cyclic(asgard_handle * handle, uint16 fid, uchar ACC_READ, uchar ACC_WRT, uchar ACC_INC, 
+             -uchar ACC_INV, uchar ACC_RHB, uchar total_rec, uchar rec_size) {
+                      ef_rec_header header;
+                      uchar * buffer;
+                      uchar i;
+                      fs_file * file = as_get_current_directory(handle);                              //get currently selected directory
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if((file->entry.type & FS_TYPE_DIR) == 0) return APDU_COMMAND_INVALID;
+                      header.structure = EF_CYCLIC;
+                      header.status = EF_VALID;
+                      header.access_rw = ACC_READ << 4 | ACC_WRT;
+                      header.access_inc = ACC_INC;
+                      header.access_ri = ACC_RHB << 4 | ACC_INV;
+                      header.num_of_records = total_rec;
+                      header.rec_size = rec_size;
+                      header.first = 0;
+                      file = fs_fcreate(file, fid, handle->mode);
+                      fs_fwrite(file, &header, sizeof(ef_rec_header));                                //write header first
+                      buffer = (uchar *)malloc(rec_size);
+                      memset(buffer, 0xff, rec_size);
+                      for(i=0;i<total_rec;i++) {
+                              fs_fwrite(file, buffer, rec_size);
+                      }
+                      free(buffer);
+                      as_set_current_file(handle, file);                                                              //automatically select new file
+                      return APDU_SUCCESS;
+              }
+              
+              uint16 as_create_directory(asgard_handle * handle, uint16 fid) {
+                      fs_file * file = as_get_current_directory(handle);                              //get currently selected directory (for use as pare
+             -nt directory)
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      if((file->entry.type & FS_TYPE_DIR) == 0) return APDU_COMMAND_INVALID;
+                      //printf("parent directory : %x > %x\n", file->entry.fid, fid);
+                      //getch();
+                      file = fs_mkdir(file, fid, handle->mode);
+                      as_set_current_file(handle, file);                                                              //also automatically set current directory
+                      return APDU_SUCCESS;
+              }
+              
+              /* remove currently selected file */
+              uint16 as_remove(asgard_handle * handle) {
+                      fs_file * file = as_get_current_file(handle);
+                      fs_rmfile(file, handle->mode);
+                      file = as_get_current_directory(handle);                                                //get current directory
+                      as_set_current_file(handle, file);                                                              //automatically select parent directory
+                      return APDU_SUCCESS;
+              }
+              
+              /* invalidate currently selected file */
+              uint16 as_invalidate(asgard_handle * handle) {
+                      ef_bin_header header;                                                                                                           //standard ef header
+                      uchar bytes_wrote = 0;
+                      fs_file * file = as_get_current_file(handle);
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      fs_fseek(file, 0);
+                      fs_fread(file, &header, sizeof(ef_bin_header));                                                         //getting ef information from ef header first
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 8   
+
+                      if(header.status != EF_VALID) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      header.status &= ~EF_VALID;
+                      fs_fseek(file, 0);
+                      bytes_wrote = fs_fwrite(file, &header, sizeof(ef_bin_header));                          //set new ef information
+                      if(bytes_wrote != sizeof(ef_bin_header)) return APDU_FATAL_ERROR;
+                      return APDU_SUCCESS;
+              }
+              
+              /* rehabilitate currently selected file */
+              uint16 as_rehabilitate(asgard_handle * handle) {
+                      ef_bin_header header;                                                                                                           //standard ef header
+                      uchar bytes_wrote = 0;
+                      fs_file * file = as_get_current_file(handle);
+                      if(file == NULL) return APDU_NO_EF_SELECTED;
+                      fs_fseek(file, 0);
+                      fs_fread(file, &header, sizeof(ef_bin_header));                                                         //getting ef information from ef header first
+                      if((header.status & EF_VALID) == 0) {
+                              return APDU_INVALID_STATUS;
+                      }
+                      header.status |= EF_VALID;
+                      fs_fseek(file, 0);
+                      bytes_wrote = fs_fwrite(file, &header, sizeof(ef_bin_header));                          //set new ef information
+                      if(bytes_wrote != sizeof(ef_bin_header)) return APDU_FATAL_ERROR;
+                      return APDU_SUCCESS;
+              }
+              #endif
+ 446          
+ 447          #if ASGARD_VERSION == 4
+ 448          #include "..\drivers\ioman.h"
+ 449          
+ 450          /*#if FS_ADDRESS_WIDTH == AW_32BIT
+ 451          uint32 _cur_ptr = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 452          uint32 _cur_dir = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 453          int16 _cur_wr_rec;
+ 454          int16 _cur_rd_rec;
+ 455          #else
+ 456          uint16 _cur_ptr = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 457          uint16 _cur_dir = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 458          int16 _cur_wr_rec;
+ 459          int16 _cur_rd_rec;
+ 460          #endif*/
+ 461          
+ 462          //fungsi file_get_header paling sering diakses
+ 463          #if FS_ADDRESS_WIDTH == AW_32BIT
+              f_header * file_get_header(uint32 address) _REENTRANT_ {
+              #else
+ 466          f_header * file_get_header(uint16 address) _REENTRANT_ {
+ 467   1      #endif
+ 468   1              f_header *newfile;
+ 469   1              newfile = (f_header *) m_alloc (sizeof(f_header));
+ 470   1              ioman_read_buffer(address, newfile, sizeof(f_header));
+*** WARNING C182 IN LINE 470 OF ASGARD\FILE.C: pointer to different objects
+ 471   1              return newfile; //jangan dihapus karena akan dipakai
+ 472   1      }
+ 473          
+ 474          /*#if FS_ADDRESS_WIDTH == AW_32BIT
+ 475          void file_get_header_buffer(uint32 address, f_header * header) _REENTRANT_ {
+ 476          #else
+ 477          void file_get_header_buffer(uint16 address, f_header * header) _REENTRANT_ {
+ 478          #endif
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 9   
+
+ 479                  ioman_read_buffer(address, newfile, sizeof(f_header));  
+ 480          }*/
+ 481          
+ 482          #if FS_ADDRESS_WIDTH == AW_32BIT
+              df_header * file_get_dfheader(uint32 address) _REENTRANT_ {
+              #else
+ 485          df_header * file_get_dfheader(uint16 address) _REENTRANT_ {
+ 486   1      #endif
+ 487   1              df_header *newfile;
+ 488   1              newfile = (df_header *) m_alloc (sizeof(df_header));
+ 489   1              ioman_read_buffer(address, newfile, sizeof(df_header));
+*** WARNING C182 IN LINE 489 OF ASGARD\FILE.C: pointer to different objects
+ 490   1              return newfile; //jangan dihapus karena akan dipakai
+ 491   1      }
+ 492          
+ 493          #if FS_ADDRESS_WIDTH == AW_32BIT
+              ef_header * file_get_efheader(uint32 address) _REENTRANT_ {
+              #else
+ 496          ef_header * file_get_efheader(uint16 address) _REENTRANT_ {
+ 497   1      #endif
+ 498   1              ef_header *newfile;
+ 499   1              newfile = (ef_header *) m_alloc (sizeof(ef_header));
+ 500   1              ioman_read_buffer(address, newfile, sizeof(ef_header));
+*** WARNING C182 IN LINE 500 OF ASGARD\FILE.C: pointer to different objects
+ 501   1              return newfile; //jangan dihapus karena akan dipakai
+ 502   1      } 
+ 503          
+ 504          void * file_get_current_header(fs_handle * handle) _REENTRANT_ {
+ 505   1              if(handle->cur_ptr == handle->cur_dir) {
+ 506   2                      return (void *)file_get_dfheader(handle->cur_ptr); 
+ 507   2              }
+ 508   1              return (void *)file_get_efheader(handle->cur_ptr);
+ 509   1      }
+ 510          
+ 511          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint16 file_add_entry(fs_handle * handle, uint32 address) _REENTRANT_ {
+                      uint32 ptr;
+              #else
+ 515          uint16 file_add_entry(fs_handle * handle, uint16 address) _REENTRANT_ {
+ 516   1              uint16 ptr;
+ 517   1      #endif  
+ 518   1              uint16 status = APDU_SUCCESS;
+ 519   1              f_header * head;
+ 520   1              f_header * temp;
+ 521   1              temp = file_get_header(address);
+ 522   1              head = file_get_header(handle->cur_dir);
+ 523   1              if(head->child == 0) { 
+ 524   2                      //printf("add entry to child\n");
+ 525   2                      head->child = address; 
+ 526   2                      status = ioman_write_buffer(handle->cur_dir, head, sizeof(f_header)); 
+*** WARNING C182 IN LINE 526 OF ASGARD\FILE.C: pointer to different objects
+ 527   2                      m_free(head); 
+ 528   2                      m_free(temp);
+ 529   2                      return status; 
+ 530   2              }
+ 531   1              ptr = head->child;
+ 532   1              while(ptr != 0) {
+ 533   2                      m_free(head);
+ 534   2                      head = file_get_header(ptr);
+ 535   2                      if(head->sibling == 0) {
+ 536   3                              //printf("add entry as sibling\n");
+ 537   3                              head->sibling = address;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 10  
+
+ 538   3                              status = ioman_write_buffer(ptr, head, sizeof(f_header)); 
+*** WARNING C182 IN LINE 538 OF ASGARD\FILE.C: pointer to different objects
+ 539   3                              m_free(head); 
+ 540   3                              m_free(temp);
+ 541   3                              return status;
+ 542   3                      }
+ 543   2                      ptr = head->sibling;
+ 544   2              }               
+ 545   1              m_free(head);
+ 546   1              m_free(temp);
+ 547   1              return status;
+ 548   1      }
+ 549          
+ 550          
+ 551          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint16 file_remove_entry(fs_handle * handle, uint32 address) _REENTRANT_ {
+                      uint32 ptr;
+              #else
+ 555          uint16 file_remove_entry(fs_handle * handle, uint16 address) _REENTRANT_ {
+ 556   1              uint16 ptr;
+ 557   1      #endif  
+ 558   1              register uint16 status = APDU_SUCCESS;
+ 559   1              f_header * head;
+ 560   1              f_header * temp;
+ 561   1              temp = file_get_header(address);
+ 562   1              head = file_get_header(handle->cur_dir);
+ 563   1              if(head->child == address) { 
+ 564   2                      head->child = temp->sibling;
+ 565   2                      status = ioman_write_buffer(handle->cur_dir, head, sizeof(f_header)); 
+*** WARNING C182 IN LINE 565 OF ASGARD\FILE.C: pointer to different objects
+ 566   2                      m_free(head); 
+ 567   2                      m_free(temp); 
+ 568   2                      return status; 
+ 569   2              }
+ 570   1              ptr = head->child;
+ 571   1              while(ptr != 0) {
+ 572   2                      m_free(head);
+ 573   2                      head = file_get_header(ptr);
+ 574   2                      if(head->sibling == address) {
+ 575   3                              head->sibling = temp->sibling; 
+ 576   3                              status = ioman_write_buffer(ptr, head, sizeof(f_header)); 
+*** WARNING C182 IN LINE 576 OF ASGARD\FILE.C: pointer to different objects
+ 577   3                              m_free(head); 
+ 578   3                              m_free(temp); 
+ 579   3                              return status;
+ 580   3                      }
+ 581   2                      ptr = head->sibling;
+ 582   2              }               
+ 583   1              m_free(head);
+ 584   1              m_free(temp); 
+ 585   1              return status;
+ 586   1      }
+ 587          
+ 588          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint32 file_find_entry(fs_handle * handle, uint16 fid) _REENTRANT_ {
+                      uint32 ptr;
+              #else
+ 592          uint16 file_find_entry(fs_handle * handle, uint16 fid) _REENTRANT_ {
+ 593   1              uint16 ptr;
+ 594   1      #endif
+ 595   1              f_header * head;
+ 596   1              head = file_get_header(handle->cur_dir);
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 11  
+
+ 597   1              ptr = head->child;
+ 598   1              while(ptr != 0) {
+ 599   2                      m_free(head);
+ 600   2                      head = file_get_header(ptr);
+ 601   2                      if(head->fid == fid) {
+ 602   3                              m_free(head);
+ 603   3                              return ptr;
+ 604   3                      }
+ 605   2                      ptr = head->sibling;
+ 606   2              }               
+ 607   1              m_free(head);
+ 608   1              return 0;
+ 609   1      }
+ 610          
+ 611          //recursively deallocating all childs at specified header address, added : may 01 2013
+ 612          void file_dealloc_all_child(uint16 address) _REENTRANT_ {
+ 613   1              uint16 temp_address;
+ 614   1              #if USE_FAST_SELECT     
+*** WARNING C322 IN LINE 614 OF asgard\file.c: unknown identifier
+                      f_header temp;
+                      #else
+ 617   1              f_header * temp;
+ 618   1              #endif
+ 619   1              //f_header * head = (f_header *)file_get_header(address);
+ 620   1              #if USE_FAST_SELECT
+*** WARNING C322 IN LINE 620 OF asgard\file.c: unknown identifier
+                      ioman_read_buffer(address, &temp, sizeof(f_header));
+                      temp_address = temp.child;
+                      #else
+ 624   1              temp = (f_header *)file_get_header(address);
+ 625   1              temp_address = temp->child;
+ 626   1              #endif
+ 627   1              //if(temp_address != NULL) {
+ 628   1              while(temp_address != 0) {
+ 629   2                      #if USE_FAST_SELECT
+*** WARNING C322 IN LINE 629 OF asgard\file.c: unknown identifier
+                              ioman_read_buffer(temp_address, &temp, sizeof(f_header)); 
+                              if(temp.child != 0) {
+                              #else
+ 633   2                      temp = (f_header *)file_get_header(temp_address);
+ 634   2                      if(temp->child != 0) {
+ 635   3                      #endif
+ 636   3                              file_dealloc_all_child(temp_address);
+ 637   3                      }
+ 638   2                      fs_dealloc(temp_address);
+ 639   2                      #if USE_FAST_SELECT     
+*** WARNING C322 IN LINE 639 OF asgard\file.c: unknown identifier
+                              temp_address = temp.sibling;
+                              #else
+ 642   2                      temp_address = temp->sibling;
+ 643   2                      m_free(temp);
+ 644   2                      #endif
+ 645   2              }       
+ 646   1              //}
+ 647   1      }
+ 648          
+ 649          uint16 file_check_status(ef_header * head, uchar op) _REENTRANT_ {
+ 650   1              uchar chv_no;
+ 651   1              if(head->type != T_EF) return APDU_NO_EF_SELECTED;
+ 652   1              switch(op) {                            //get chv no
+ 653   2                      case FILE_READ:
+ 654   2                              chv_no = ((head->acc_rw >> 4) & 0x0f);
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 12  
+
+ 655   2                              if(head->status == STAT_INVALID) return APDU_INVALID_STATUS;
+ 656   2                              break;
+ 657   2                      case FILE_WRITE:
+ 658   2                              chv_no = (head->acc_rw & 0x0f);
+ 659   2                              if(head->status == STAT_INVALID) return APDU_INVALID_STATUS;
+ 660   2                              break;
+ 661   2                      case FILE_INCREASE:
+ 662   2                              chv_no = (head->acc_inc & 0x0f);
+ 663   2                              if(head->inc == 0) return APDU_FILE_INCONSISTENT;                       //check for increase access
+ 664   2                              if(head->status == STAT_INVALID) return APDU_INVALID_STATUS;
+ 665   2                              break;
+ 666   2                      case FILE_INVALIDATE:
+ 667   2                              if(head->status == STAT_INVALID) return APDU_INVALID_STATUS;
+ 668   2                              chv_no = (head->acc_ri & 0x0f);
+ 669   2                              break;
+ 670   2                      case FILE_REHABILITATE:
+ 671   2                              chv_no = ((head->acc_ri >> 4) & 0x0f);
+ 672   2                              if(head->status == STAT_VALID) return APDU_INVALID_STATUS;
+ 673   2                              break;
+ 674   2              }
+ 675   1              switch(chv_no) {
+ 676   2                      case 0: break;          //always
+ 677   2                      case 0xf: return APDU_INCONTRADICTION_W_CHV;            //never
+ 678   2                      case 1:
+ 679   2                      case 2:
+ 680   2                      case 3:
+ 681   2                      case 4:
+ 682   2                      case 5:
+ 683   2                      case 6:
+ 684   2                              if(_chv_status[chv_no - 1] & CHV_BLOCKED) return APDU_INVALID_STATUS;           //status is invalid
+ 685   2                              if(_chv_status[chv_no - 1] & CHV_ENABLED && (_chv_status[chv_no - 1] & CHV_VERIFIED) == 0) return APDU_
+             -INCONTRADICTION_W_CHV;                //status is invalid
+ 686   2                              break;
+ 687   2                      default: return APDU_INCONTRADICTION_W_CHV;             //never
+ 688   2              }
+ 689   1              return APDU_SUCCESS;
+ 690   1      }
+ 691          
+ 692          /* added, fast select mode may 01 2013 */
+ 693          #define USE_FAST_SELECT                 1
+ 694          uint16 _select(fs_handle * handle, uint16 fid) _REENTRANT_ {
+ 695   1              #if USE_FAST_SELECT
+ 696   1              f_header head;
+ 697   1              #else
+                      f_header * head;
+                      #endif
+ 700   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 ptr;
+                      uint32 cptr;
+                      uint32 cparent;
+                      #else
+ 705   1              uint16 ptr;
+ 706   1              uint16 cptr;
+ 707   1              uint16 cparent;
+ 708   1              #endif
+ 709   1              #define SELECT_TYPE_ALL                 3
+ 710   1              #define SELECT_TYPE_DF                  2
+ 711   1              #define SELECT_TYPE_EF                  1
+ 712   1              uchar select_type = SELECT_TYPE_ALL;
+ 713   1              handle->cur_rd_rec = -1;
+ 714   1              handle->cur_wr_rec = 0;
+ 715   1              if(fid == FID_MF) {
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 13  
+
+ 716   2                      handle->cur_ptr = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 717   2                      handle->cur_dir = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 718   2                      return APDU_SUCCESS_RESPONSE | 0x17;
+ 719   2              }
+ 720   1              cptr = handle->cur_dir;
+ 721   1              re_select:
+ 722   1              #if USE_FAST_SELECT
+ 723   1              ioman_read_buffer(cptr, &head, sizeof(f_header));
+*** WARNING C182 IN LINE 723 OF ASGARD\FILE.C: pointer to different objects
+ 724   1              cparent = head.parent;
+ 725   1              if(head.fid == fid) { handle->cur_ptr = cptr; return APDU_SUCCESS_RESPONSE | 0x17; }
+ 726   1              ptr = head.child;
+ 727   1              #else
+                      head = (f_header *)file_get_header(cptr);
+                      cparent = head->parent;
+                      if(head->fid == fid) { m_free(head); handle->cur_ptr = cptr; return APDU_SUCCESS_RESPONSE | 0x17; }
+                      ptr = head->child;
+                      #endif
+ 733   1              /*if(head->parent != 0) {
+ 734   1                      //m_free(head);
+ 735   1                      head = file_get_header(head->parent);
+ 736   1                      if(head->fid = fid) { m_free(head); return APDU_SUCCESS_RESPONSE | 0x17; }
+ 737   1              }*/
+ 738   1              while(ptr != 0) {
+ 739   2                      #if USE_FAST_SELECT
+ 740   2                      ioman_read_buffer(ptr, &head, sizeof(f_header));
+*** WARNING C182 IN LINE 740 OF ASGARD\FILE.C: pointer to different objects
+ 741   2                      #else
+                              m_free(head);
+                              head = file_get_header(ptr);
+                              #endif
+ 745   2      
+ 746   2                      #if USE_FAST_SELECT
+ 747   2                      if(head.fid == fid) {
+ 748   3                      #else
+                              if(head->fid == fid) {
+                              #endif
+ 751   3                              //printf("fid %x ketemu\n", fid);
+ 752   3                              #if USE_FAST_SELECT     
+ 753   3                              //switch(head.type) {
+ 754   3                              if(head.type == T_EF) {
+ 755   4                              #else
+                                      if(head->type == T_EF) {
+                                      //switch(head->type) {
+                                      #endif 
+ 759   4                                      //case T_EF: 
+ 760   4                                              #if !USE_FAST_SELECT
+                                                      m_free(head);
+                                                      #endif
+ 763   4                                              if(select_type & SELECT_TYPE_EF) {
+ 764   5                                                      handle->cur_ptr = ptr;
+ 765   5                                                      return APDU_SUCCESS_RESPONSE | 0x0F;
+ 766   5                                              } else return APDU_FILE_NOT_FOUND; 
+ 767   4                                              //break;
+ 768   4                              #if USE_FAST_SELECT     
+ 769   4                              } else if(head.type == T_DF) {
+ 770   4                              #else
+                                      } else if(head->type == T_DF) {
+                                      #endif
+ 773   4                                      //case T_MF:
+ 774   4                                      //case T_DF: 
+ 775   4                                              #if !USE_FAST_SELECT    
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 14  
+
+                                                      m_free(head);
+                                                      #endif
+ 778   4                                              if(select_type & SELECT_TYPE_DF) {
+ 779   5                                                      handle->cur_ptr = ptr;  
+ 780   5                                                      handle->cur_dir = ptr;
+ 781   5                                                      return APDU_SUCCESS_RESPONSE | 0x17;
+ 782   5                                              } else return APDU_FILE_NOT_FOUND;
+ 783   4                                              //break;
+ 784   4                              } else {
+ 785   4                                      //case T_CHV:
+ 786   4                                      //case T_RFU:
+ 787   4                                      //default:
+ 788   4                                              #if !USE_FAST_SELECT
+                                                      m_free(head);
+                                                      #endif
+ 791   4                                              return APDU_FILE_NOT_FOUND;             //the file is invalid
+ 792   4                              }
+ 793   3                      }
+ 794   2                      #if USE_FAST_SELECT 
+ 795   2                      ptr = head.sibling;
+ 796   2                      #else
+                              ptr = head->sibling;
+                              #endif
+ 799   2              }
+ 800   1              /* fixed bug, on file select, selecting sibling directory january,23,2013 */
+ 801   1              /* fixed bug, on file select, selecting sibling directory only may 02 2013 */
+ 802   1              if(handle->cur_dir == cptr && handle->cur_dir != (ALLOCATION_DATA_OFFSET + sizeof(fs_chain))) {         //file n
+             -ot found and current file is directory
+ 803   2                      cptr = cparent;
+ 804   2                      select_type = SELECT_TYPE_DF;
+ 805   2                      #if !USE_FAST_SELECT
+                              m_free(head);
+                              #endif
+ 808   2                      goto re_select;                         
+ 809   2              }
+ 810   1              #if !USE_FAST_SELECT            
+                      m_free(head);
+                      #endif
+ 813   1      
+ 814   1              return APDU_FILE_NOT_FOUND; 
+ 815   1      } 
+ 816          
+ 817          uint16 _check_access(fs_handle * handle, uchar mode) _REENTRANT_ {
+ 818   1              ef_header * head;
+ 819   1              uint16 status = APDU_SUCCESS;
+ 820   1              head = (ef_header *)file_get_efheader(handle->cur_ptr); 
+ 821   1              status = file_check_status(head, mode);
+ 822   1              m_free(head);
+ 823   1              return status;
+ 824   1      }
+ 825          
+ 826          uint16 _readbin(fs_handle * handle, uint16 offset, uchar *buffer, uint16 size) _REENTRANT_ {
+ 827   1              register uint16 status = APDU_SUCCESS;
+ 828   1              ef_header * head;
+ 829   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+ 830   1              //status = file_check_status(head, FILE_READ);
+ 831   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+ 832   1              if((offset + size) > head->size) { m_free(head); return APDU_WRONG_LENGTH; }
+ 833   1              ioman_read_buffer(handle->cur_ptr + offset + sizeof(ef_header), buffer, size);
+ 834   1              m_free(head);
+ 835   1              return status;
+ 836   1      }
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 15  
+
+ 837          
+ 838          uint16 _readrec(fs_handle * handle, uint16 rec_no, uchar *buffer, uchar size) _REENTRANT_ {
+ 839   1              register uint16 status = APDU_SUCCESS;
+ 840   1              uint16 total_rec;
+ 841   1              ef_header * head;
+ 842   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+ 843   1              //status = file_check_status(head, FILE_READ);
+ 844   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+ 845   1              if(size != head->rec_size) { m_free(head); status = APDU_WRONG_LENGTH; return status; }
+ 846   1              total_rec = (head->size/head->rec_size);
+ 847   1              switch(head->structure) {
+ 848   2                      case EF_LINIER:
+ 849   2                              if(rec_no < total_rec) {
+ 850   3                                      rec_no = ((rec_no + head->child) % total_rec);
+ 851   3                                      ioman_read_buffer(handle->cur_ptr + (head->rec_size * rec_no ) + sizeof(ef_header), buffer, size);
+ 852   3                                      handle->cur_rd_rec = rec_no;
+ 853   3                                      handle->cur_wr_rec = rec_no;
+ 854   3                                      break;
+ 855   3                              }
+ 856   2                              status = APDU_OUT_OF_RANGE;
+ 857   2                              break;
+ 858   2                      case EF_CYCLIC: 
+ 859   2                              //_cur_rd_rec = rec_no; 
+ 860   2                              handle->cur_rd_rec = ((rec_no + total_rec) % total_rec);
+ 861   2                              rec_no = ((handle->cur_rd_rec + head->child) % total_rec);
+ 862   2                              ioman_read_buffer(handle->cur_ptr + (head->rec_size * rec_no ) + sizeof(ef_header), buffer, size);
+ 863   2                              //_cur_rd_rec = rec_no;
+ 864   2                              break;
+ 865   2                      default:
+ 866   2                              status = APDU_FILE_INCONSISTENT;
+ 867   2                              break;
+ 868   2              }
+ 869   1              m_free(head);
+ 870   1              return status;
+ 871   1      }
+ 872          
+ 873          uint16 _readrec_next(fs_handle * handle, uchar *buffer, uchar size) _REENTRANT_ {
+ 874   1              int16 rec_no = handle->cur_rd_rec;      
+ 875   1              rec_no += 1;
+ 876   1              return _readrec(handle, rec_no, buffer, size);
+ 877   1      }
+ 878          
+ 879          uint16 _readrec_prev(fs_handle * handle, uchar *buffer, uchar size) _REENTRANT_ {
+ 880   1              int16 rec_no = handle->cur_rd_rec;      
+ 881   1              rec_no -= 1;
+ 882   1              return _readrec(handle, rec_no, buffer, size);
+ 883   1      }
+ 884          
+ 885          uint16 _writebin(fs_handle * handle, uint16 offset, uchar *buffer, uint16 size) _REENTRANT_ {
+ 886   1              register uint16 status = APDU_SUCCESS;
+ 887   1              ef_header * head;
+ 888   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+ 889   1              //status = file_check_status(head, FILE_WRITE);
+ 890   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+ 891   1              if((offset + size) > head->size) { m_free(head); return APDU_WRONG_LENGTH; }
+ 892   1              status = ioman_write_buffer(handle->cur_ptr + offset + sizeof(ef_header), buffer, size);
+ 893   1              m_free(head);
+ 894   1              return status;
+ 895   1      }
+ 896          
+ 897          uint16 _writerec(fs_handle * handle, uint16 rec_no, uchar *buffer, uchar size) _REENTRANT_ {
+ 898   1              register uint16 status = APDU_SUCCESS;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 16  
+
+ 899   1              uint16 total_rec;
+ 900   1              ef_header * head;
+ 901   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+ 902   1              //status = file_check_status(head, FILE_WRITE);
+ 903   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+ 904   1              if(size != head->rec_size) { m_free(head); return APDU_WRONG_LENGTH; }
+ 905   1              switch(head->structure) {
+ 906   2                      case EF_LINIER:
+ 907   2                              total_rec = (head->size/head->rec_size);
+ 908   2                              if(rec_no < total_rec) {
+ 909   3                                      status = ioman_write_buffer(handle->cur_ptr + (head->rec_size * rec_no) + sizeof(ef_header), buffer, s
+             -ize);
+ 910   3                                      handle->cur_rd_rec = rec_no;
+ 911   3                                      handle->cur_wr_rec = rec_no;
+ 912   3                              } else {
+ 913   3                                      status = APDU_OUT_OF_RANGE;
+ 914   3                              }
+ 915   2                              break;
+ 916   2                      case EF_CYCLIC:
+ 917   2                              total_rec = (head->size/head->rec_size);
+ 918   2                              rec_no = (rec_no + head->child + total_rec) % total_rec;
+ 919   2                              if(rec_no == ((total_rec + head->child - 1) % total_rec)) {
+ 920   3                                      status = ioman_write_buffer(handle->cur_ptr + (head->rec_size * rec_no) + sizeof(ef_header), buffer, s
+             -ize);
+ 921   3                                      if(status == APDU_SUCCESS) {
+ 922   4                                      head->child = rec_no;                                                                                                   //update first record index
+ 923   4                                              handle->cur_wr_rec = 0;
+ 924   4                                              handle->cur_rd_rec = 0;
+ 925   4                                              status = ioman_write_buffer(handle->cur_ptr, head, sizeof(ef_header));
+*** WARNING C182 IN LINE 925 OF ASGARD\FILE.C: pointer to different objects
+ 926   4                                      }
+ 927   3                              } else {        
+ 928   3                                      status = APDU_WRONG_PARAMETER;
+ 929   3                              }
+ 930   2                              break;
+ 931   2                      default: 
+ 932   2                              status = APDU_FILE_INCONSISTENT;
+ 933   2                              break;
+ 934   2              }
+ 935   1              m_free(head);
+ 936   1              return status;
+ 937   1      }
+ 938          
+ 939          uint16 _writerec_next(fs_handle * handle, uchar *buffer, uchar size) _REENTRANT_ {
+ 940   1              int16 rec_no = handle->cur_wr_rec;      
+ 941   1              rec_no += 1;
+ 942   1              return _writerec(handle, rec_no, buffer, size);
+ 943   1      }
+ 944          
+ 945          uint16 _writerec_prev(fs_handle * handle, uchar *buffer, uchar size) _REENTRANT_ {
+ 946   1              int16 rec_no = handle->cur_wr_rec;      
+ 947   1              rec_no -= 1;
+ 948   1              return _writerec(handle, rec_no, buffer, size);
+ 949   1      }
+ 950          
+ 951          uint16 _seek(fs_handle * handle, uchar type, uchar * buffer, uchar * pattern, uchar size) _REENTRANT_ {
+ 952   1              register uint16 status = APDU_SUCCESS;
+ 953   1              register uint16 total_rec;
+ 954   1              static uint16 rec_no = 0;
+ 955   1              int16 * kmpstates = NULL;
+ 956   1              uchar * temp = NULL;
+ 957   1              //int16 index;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 17  
+
+ 958   1              ef_header * head;
+ 959   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+ 960   1              //status = file_check_status(head, FILE_READ);
+ 961   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+ 962   1              if(head->structure != EF_LINIER && head->structure != EF_CYCLIC) { m_free(head); return APDU_FILE_INCONSI
+             -STENT; }
+ 963   1              if(size >= head->rec_size) { m_free(head); status = APDU_WRONG_LENGTH; return status; }
+ 964   1              total_rec = (head->size/head->rec_size);                                                
+ 965   1              kmpstates = (int16 *)m_alloc((size + 1) * sizeof(int16));        //temporary buffer for kmpstates                                
+ 966   1              if(kmpstates == NULL) { m_free(head); return APDU_MEMORY_PROBLEM; }                     //check for allocated heap
+ 967   1              temp = (uchar *)m_alloc(size);          //temporary buffer for pattern
+ 968   1              if(temp == NULL) { m_free(kmpstates); m_free(head); return APDU_MEMORY_PROBLEM; }       //check for allocated h
+             -eap
+ 969   1              memcpy(temp, pattern, size);
+ 970   1              KMP_preprocess(pattern, size, kmpstates);               //preprocess KMP
+ 971   1              switch((type & 0x0f)) {
+ 972   2                      case 0:         //begining forward
+ 973   2                              rec_no = 0;
+ 974   2                              while(rec_no < total_rec) {
+ 975   3                                      ioman_read_buffer(handle->cur_ptr + (head->rec_size * ((rec_no + head->child) % total_rec) ) + sizeof(
+             -ef_header), buffer, head->rec_size);
+ 976   3                                      //index = KMP_search(temp, kmpstates, size, buffer, head->rec_size);
+ 977   3                                      if(KMP_search(temp, kmpstates, size, buffer, head->rec_size) != -1) { status = (APDU_SUCCESS_RESPONSE 
+             -| (uchar)(rec_no+1)); goto seek_exit; }
+ 978   3                                      rec_no++;
+ 979   3                              }
+ 980   2                              rec_no = 0;
+ 981   2                              status = APDU_FILE_NOT_FOUND;
+ 982   2                              break;
+ 983   2                      case 1:         //end backward
+ 984   2                              rec_no = total_rec - 1;
+ 985   2                              while(rec_no != 0xFFFF ) {
+ 986   3                                      ioman_read_buffer(handle->cur_ptr + (head->rec_size * ((rec_no + head->child) % total_rec) ) + sizeof(
+             -ef_header), buffer, head->rec_size);
+ 987   3                                      if(KMP_search(temp, kmpstates, size, buffer, head->rec_size) != -1) { status = (APDU_SUCCESS_RESPONSE 
+             -| (uchar)(rec_no+1)); goto seek_exit; }
+ 988   3                                      rec_no--;
+ 989   3                              }
+ 990   2                              rec_no = total_rec - 1;
+ 991   2                              status = APDU_FILE_NOT_FOUND;
+ 992   2                              break;
+ 993   2                      case 2:         //next location backward
+ 994   2                              rec_no++;
+ 995   2                              while(rec_no < total_rec) {
+ 996   3                                      ioman_read_buffer(handle->cur_ptr + (head->rec_size * ((rec_no + head->child) % total_rec) ) + sizeof(
+             -ef_header), buffer, head->rec_size);
+ 997   3                                      if(KMP_search(temp, kmpstates, size, buffer, head->rec_size) != -1) { status = (APDU_SUCCESS_RESPONSE 
+             -| (uchar)(rec_no+1)); goto seek_exit; }
+ 998   3                                      rec_no++;
+ 999   3                              }
+1000   2                              rec_no = 0;
+1001   2                              status = APDU_FILE_NOT_FOUND;
+1002   2                              break;
+1003   2                      case 3:         //previous location backward
+1004   2                              rec_no--;
+1005   2                              while(rec_no != 0xFFFF ) {
+1006   3                                      ioman_read_buffer(handle->cur_ptr + (head->rec_size * ((rec_no + head->child) % total_rec) ) + sizeof(
+             -ef_header), buffer, head->rec_size);
+1007   3                                      if(KMP_search(temp, kmpstates, size, buffer, head->rec_size) != -1) { status = (APDU_SUCCESS_RESPONSE 
+             -| (uchar)(rec_no+1)); goto seek_exit; }
+1008   3                                      rec_no--;
+1009   3                              }
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 18  
+
+1010   2                              rec_no = total_rec - 1;
+1011   2                              status = APDU_FILE_NOT_FOUND;
+1012   2                              break;
+1013   2                      default: 
+1014   2                              status = APDU_WRONG_PARAMETER;
+1015   2                              break;
+1016   2              }
+1017   1              /*if(rec_no < total_rec) {
+1018   1                      ioman_read_buffer(_cur_ptr + (head->rec_size * ((rec_no + head->child) % total_rec) ) + sizeof(ef_header
+             -), buffer, size);
+1019   1                      _cur_rec = rec_no;
+1020   1                      m_free(head);
+1021   1                      return status;
+1022   1              } */
+1023   1              seek_exit:
+1024   1              m_free(temp);
+1025   1              m_free(kmpstates);
+1026   1              m_free(head);
+1027   1              //status = APDU_OUT_OF_RANGE;
+1028   1              return status;
+1029   1      }
+1030          
+1031          uint16 _increase(fs_handle * handle, uint32 ival, uchar * res, uchar size) _REENTRANT_ {
+1032   1              register uint16 status = APDU_SUCCESS;
+1033   1              //register uint16 total_rec;
+1034   1              uint32 value = 0;
+1035   1              //uchar buffer[3];
+1036   1              //uchar * buffer = &value;
+1037   1              //int16 index;
+1038   1              ef_header * head;
+1039   1              value = 0;
+1040   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+1041   1              //status = file_check_status(head, FILE_READ);
+1042   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+1043   1              if(head->structure != EF_CYCLIC) { m_free(head); return APDU_FILE_INCONSISTENT; }
+1044   1              if(size != 3) { m_free(head); status = APDU_WRONG_LENGTH; return status; }
+1045   1              if(head->inc == 0 || head->rec_size != 3) { m_free(head); return APDU_ACCESS_DENIED; }
+1046   1              //total_rec = (head->size/head->rec_size);
+1047   1              if((status = _readrec(handle, 0, res+3, 3)) != APDU_SUCCESS) { m_free(head); return status; }
+1048   1              value = ((uint32)res[3] << 16) + ((uint32)res[4] << 8) + res[5];
+1049   1              value = value + ival;
+1050   1              if(value >= 0x1000000) { m_free(head); return APDU_MAX_VALUE_REACHED; }
+1051   1              res[0] = (uchar)(value >> 16) ;
+1052   1              res[1] = (uchar)(value >> 8) ;
+1053   1              res[2] = (uchar)(value) ;
+1054   1              if((status = _writerec_prev(handle, res, 3)) != APDU_SUCCESS) { m_free(head); return status; } 
+1055   1              m_free(head);
+1056   1              //status = APDU_OUT_OF_RANGE;
+1057   1              return APDU_SUCCESS_RESPONSE | 6;
+1058   1      }
+1059          
+1060          uint16 _createfilebin(fs_handle * handle, uint16 fid, uchar acc_rw, uchar acc_io, acc_ri, uint16 size) _RE
+             -ENTRANT_ {
+1061   1              uint16 status;
+1062   1              ef_header * head;
+1063   1              df_header * dir;
+1064   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+1067   1              uint16 address;
+1068   1              #endif
+1069   1              address = fs_alloc(size + sizeof(ef_header));                           //allocate new fs linked list
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 19  
+
+1070   1              if(address == 0) return APDU_NO_AVAILABLE_SPACE;                        //exceed file system limitation
+1071   1              dir = (df_header *)file_get_dfheader(handle->cur_dir);
+1072   1              head = (ef_header *)m_alloc(sizeof(ef_header));
+1073   1              head->parent = handle->cur_dir;
+1074   1              head->sibling = 0;
+1075   1              head->child = 0;                                                                                        //not use, only for cyclic
+1076   1              head->fid = fid;
+1077   1              head->type = T_EF;
+1078   1              head->size = size;
+1079   1              head->inc = 0;
+1080   1              head->status = STAT_VALID;
+1081   1              head->acc_rw = acc_rw;
+1082   1              head->acc_inc = acc_io;
+1083   1              head->acc_ri = acc_ri;
+1084   1              head->length = 2;                                                                                       //length of the following data
+1085   1              head->structure = EF_TRANSPARENT;
+1086   1              head->rec_size = 0x00;
+1087   1              status = ioman_write_buffer(address, head, sizeof(ef_header));          //write the specified allocated address
+*** WARNING C182 IN LINE 1087 OF ASGARD\FILE.C: pointer to different objects
+1088   1              if(status != APDU_SUCCESS) goto exit_create;
+1089   1              dir->num_of_ef += 1;
+1090   1              status = ioman_write_buffer(handle->cur_dir, dir, sizeof(df_header));           //
+*** WARNING C182 IN LINE 1090 OF ASGARD\FILE.C: pointer to different objects
+1091   1              if(status != APDU_SUCCESS) goto exit_create; 
+1092   1              status = file_add_entry(handle, address);                                                                       //create new file entry for current directory
+1093   1              exit_create: 
+1094   1              m_free(head);                                                                                           //freed all temporary variable
+1095   1              m_free(dir);
+1096   1              return status;
+1097   1      }
+1098          
+1099          uint16 _createfilerec(fs_handle * handle, uint16 fid, uchar acc_rw, uchar acc_io, uchar acc_ri, uchar tota
+             -l_rec, uchar rec_size) _REENTRANT_ {
+1100   1              uint16 status;
+1101   1              ef_header * head;
+1102   1              df_header * dir;
+1103   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+1106   1              uint16 address;
+1107   1              #endif
+1108   1              address = fs_alloc((total_rec * rec_size) + sizeof(ef_header));                         //allocate new fs linked list
+1109   1              if(address == 0) return APDU_NO_AVAILABLE_SPACE;                        //exceed file system limitation
+1110   1              dir = (df_header *)file_get_dfheader(handle->cur_dir);
+1111   1              head = (ef_header *)m_alloc(sizeof(ef_header));
+1112   1              head->parent = handle->cur_dir;
+1113   1              head->sibling = 0;
+1114   1              head->child = 0;                                                                                        //not use, only for cyclic
+1115   1              head->fid = fid;
+1116   1              head->type = T_EF;
+1117   1              head->size = (total_rec * rec_size);
+1118   1              head->inc = 0;                                                                                          //no increase allowed
+1119   1              head->acc_rw = acc_rw;
+1120   1              head->acc_inc = acc_io;
+1121   1              head->acc_ri = acc_ri;
+1122   1              head->status = STAT_VALID;
+1123   1              head->length = 2;                       //length of the following data
+1124   1              head->structure = EF_LINIER;
+1125   1              head->rec_size = rec_size;
+1126   1              status = ioman_write_buffer(address, head, sizeof(ef_header));          //write the specified allocated address
+*** WARNING C182 IN LINE 1126 OF ASGARD\FILE.C: pointer to different objects
+1127   1              if(status != APDU_SUCCESS) goto exit_create;
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 20  
+
+1128   1              dir->num_of_ef += 1;
+1129   1              status = ioman_write_buffer(handle->cur_dir, dir, sizeof(df_header));           //
+*** WARNING C182 IN LINE 1129 OF ASGARD\FILE.C: pointer to different objects
+1130   1              if(status != APDU_SUCCESS) goto exit_create;
+1131   1              status = file_add_entry(handle, address);                                                                       //create new file entry for current directory
+1132   1              exit_create:
+1133   1              m_free(head);                                                                                           //freed all temporary variable
+1134   1              m_free(dir);                                                                                            //freed all temporary variable
+1135   1              return status;
+1136   1      }
+1137          
+1138          uint16 _createfilecyclic(fs_handle * handle, uint16 fid, uchar acc_rw, uchar acc_io, uchar acc_ri, uchar t
+             -otal_rec, uchar rec_size) _REENTRANT_ {
+1139   1              uint16 status;
+1140   1              ef_header * head;
+1141   1              df_header * dir;
+1142   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+1145   1              uint16 address;
+1146   1              #endif
+1147   1              address = fs_alloc((total_rec * rec_size) + sizeof(ef_header));                         //allocate new fs linked list
+1148   1              if(address == 0) return APDU_NO_AVAILABLE_SPACE;                        //exceed file system limitation
+1149   1              dir = (df_header *)file_get_dfheader(handle->cur_dir);
+1150   1              head = (ef_header *)m_alloc(sizeof(ef_header));
+1151   1              head->parent = handle->cur_dir;
+1152   1              head->sibling = 0;
+1153   1              head->child = 0;                                                                                        //not use, only for cyclic
+1154   1              head->fid = fid;
+1155   1              head->type = T_EF;
+1156   1              head->size = total_rec * rec_size;
+1157   1              head->inc = 1;                                                                                          //no increase allowed
+1158   1              head->status = STAT_VALID;
+1159   1              head->acc_rw = acc_rw;
+1160   1              head->acc_inc = acc_io;
+1161   1              head->acc_ri = acc_ri;
+1162   1              head->length = 2;                       //length of the following data
+1163   1              head->structure = EF_CYCLIC;
+1164   1              head->rec_size = rec_size;
+1165   1              status = ioman_write_buffer(address, head, sizeof(ef_header));          //write the specified allocated address
+*** WARNING C182 IN LINE 1165 OF ASGARD\FILE.C: pointer to different objects
+1166   1              if(status != APDU_SUCCESS) goto exit_create;
+1167   1              dir->num_of_ef += 1;
+1168   1              status = ioman_write_buffer(handle->cur_dir, dir, sizeof(df_header));           //
+*** WARNING C182 IN LINE 1168 OF ASGARD\FILE.C: pointer to different objects
+1169   1              if(status != APDU_SUCCESS) goto exit_create;
+1170   1              status = file_add_entry(handle, address);                                                                       //create new file entry for current directory
+1171   1              exit_create:
+1172   1              m_free(head);                                                                                           //freed all temporary variable
+1173   1              m_free(dir);                                                                                            //freed all temporary variable
+1174   1              return status;
+1175   1      }
+1176          
+1177          uint16 _createdirectory(fs_handle * handle, uint16 fid, uchar filechar) _REENTRANT_ {
+1178   1              register uint16 status;
+1179   1              df_header * head;
+1180   1              df_header * dir;
+1181   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+1184   1              uint16 address;
+1185   1              #endif
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 21  
+
+1186   1              address = fs_alloc(sizeof(df_header));                                          //allocate new fs linked list
+1187   1              if(address == 0) return APDU_NO_AVAILABLE_SPACE;                        //exceed file system limitation
+1188   1              dir = (df_header *)file_get_dfheader(handle->cur_dir);  
+1189   1              head = (df_header *)m_alloc(sizeof(df_header));
+1190   1              head->parent = handle->cur_dir;
+1191   1              head->sibling = 0;
+1192   1              head->child = 0;                                                                                        //not use, only for cyclic
+1193   1              head->fid = fid;
+1194   1              head->type = T_DF;
+1195   1              head->length = 9;                                                                                       //length of the following data
+1196   1              head->file_char = filechar;                                                                             //not clarified
+1197   1              head->num_of_df = 0;
+1198   1              head->num_of_ef = 0;
+1199   1              head->num_of_chv = 2;                                                                           //just set to 2
+1200   1              status = ioman_write_buffer(address, head, sizeof(df_header));          //write the specified allocated address
+*** WARNING C182 IN LINE 1200 OF ASGARD\FILE.C: pointer to different objects
+1201   1              if(status != APDU_SUCCESS) goto exit_create;
+1202   1              dir->num_of_df += 1;
+1203   1              status = ioman_write_buffer(handle->cur_dir, dir, sizeof(df_header));           //
+*** WARNING C182 IN LINE 1203 OF ASGARD\FILE.C: pointer to different objects
+1204   1              if(status != APDU_SUCCESS) goto exit_create;
+1205   1              status = file_add_entry(handle, address);                                                                       //create new file entry for current directory
+1206   1              exit_create:    
+1207   1              m_free(head);                                                                                           //freed all temporary variable
+1208   1              m_free(dir);
+1209   1              return status;
+1210   1      }
+1211          
+1212          uint16 _remove(fs_handle * handle, uint16 file_id) _REENTRANT_ {
+1213   1              register uint16 status;
+1214   1              f_header * head;
+1215   1              df_header * dir;
+1216   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+1219   1              uint16 address;
+1220   1              #endif
+1221   1              if(file_id == FID_MF) return APDU_FUNCTION_INVALID;             //check if MF
+1222   1              head = (f_header *)file_get_header(handle->cur_ptr);    //delete current selected
+1223   1              if(head->fid == file_id) {
+1224   2                      handle->cur_dir = head->parent;
+1225   2                      m_free(head);
+1226   2              }
+1227   1              handle->cur_ptr = handle->cur_dir;
+1228   1              dir = (df_header *)file_get_dfheader(handle->cur_dir);
+1229   1              address = file_find_entry(handle, file_id);
+1230   1              if(address == 0) { m_free(dir); return APDU_FILE_NOT_FOUND; } 
+1231   1              head = (f_header *)file_get_header(address);
+1232   1              switch(head->type) {
+1233   2                      case T_DF:
+1234   2                              dir->num_of_df -= 1;
+1235   2                              //deallocating all childs
+1236   2                              /* fixed bug when deleting all childs on the DF */
+1237   2                              /* added childs deallocator may 01 2013 */
+1238   2                              file_dealloc_all_child(address);
+1239   2                              break;
+1240   2                      case T_EF:
+1241   2                              dir->num_of_ef -= 1;
+1242   2                              break;
+1243   2                      default:
+1244   2                              break;
+1245   2              }
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 22  
+
+1246   1              if(head->parent != 0) handle->cur_dir = head->parent;           //set current directory to the specified entry par
+             -ent
+1247   1              status = ioman_write_buffer(handle->cur_dir, dir, sizeof(df_header));           //
+*** WARNING C182 IN LINE 1247 OF ASGARD\FILE.C: pointer to different objects
+1248   1              if(status != APDU_SUCCESS) goto exit_remove;
+1249   1              status = file_remove_entry(handle, address);                                            //remove entry from file tree
+1250   1              if(status != APDU_SUCCESS) goto exit_remove;
+1251   1              status = fs_dealloc(address);                                                   //dealloc entry from fs linked list
+1252   1              exit_remove:
+1253   1              m_free(head);                                                                                           //freed all temporary variable
+1254   1              m_free(dir);
+1255   1              return status;
+1256   1      }
+1257          
+1258          uint16 _invalidate(fs_handle * handle) _REENTRANT_ {
+1259   1              register uint16 status = APDU_SUCCESS;
+1260   1              ef_header * head;
+1261   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+1262   1              //status = file_check_status(head, FILE_INVALIDATE);
+1263   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+1264   1              head->status = STAT_INVALID;
+1265   1              status = ioman_write_buffer(handle->cur_ptr, head, sizeof(ef_header));
+*** WARNING C182 IN LINE 1265 OF ASGARD\FILE.C: pointer to different objects
+1266   1              m_free(head);                                                                                           //freed all temporary variable
+1267   1              return status;
+1268   1      }
+1269          
+1270          uint16 _rehabilitate(fs_handle * handle) _REENTRANT_ {
+1271   1              register uint16 status = APDU_SUCCESS;
+1272   1              ef_header * head;
+1273   1              head = (ef_header *)file_get_efheader(handle->cur_ptr);
+1274   1              //status = file_check_status(head, FILE_REHABILITATE);
+1275   1              //if(status != APDU_SUCCESS) { m_free(head); return status; }
+1276   1              head->status = STAT_VALID;
+1277   1              status = ioman_write_buffer(handle->cur_ptr, head, sizeof(ef_header));
+*** WARNING C182 IN LINE 1277 OF ASGARD\FILE.C: pointer to different objects
+1278   1              m_free(head);                                                                                           //freed all temporary variable
+1279   1              return status;
+1280   1      }
+1281          #endif
+1282          
+1283          
+1284          
+1285          
+1286          
+1287          
+1288          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   6921    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      2    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+C51 COMPILER V7.01  FILE                                                                   01/25/2014 09:07:12 PAGE 23  
+
+
+C51 COMPILATION COMPLETE.  25 WARNING(S),  0 ERROR(S)

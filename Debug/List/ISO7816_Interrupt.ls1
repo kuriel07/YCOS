@@ -1,0 +1,867 @@
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     1
+
+
+MACRO ASSEMBLER A51 V7.01
+OBJECT MODULE PLACED IN .\Debug\Output\ISO7816_Interrupt.OBJ
+ASSEMBLER INVOKED BY: C:\Keil51\C51\BIN\A51.EXE .\Debug\Output\ISO7816_Interrupt.src PR(.\Debug\List\ISO7816_Interrupt.l
+                      s1) EP DEBUG
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ; .\Debug\Output\ISO7816_Interrupt.SRC generated from: ISO7816\ISO7816_Interrupt.c
+                       2     ; COMPILER INVOKED BY:
+                       3     ;        C:\Keil51\C51\BIN\C51.EXE ISO7816\ISO7816_Interrupt.c LARGE OMF2 OPTIMIZE(0,SIZE) 
+                             BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\ISO7816_Interrupt.lst) SRC(.\Debug\Output\ISO7816_Interrupt.SRC)
+                       4     
+                       5     $nomod51 
+                       6     
+                       7     NAME    ISO7816_INTERRUPT
+                       8     
+  00DC                 9     UIMSK   DATA    0DCH
+  00E9                10     FL_SDP1 DATA    0E9H
+  00EA                11     FL_SDP2 DATA    0EAH
+  0083                12     DPH0    DATA    083H
+  00AB                13     IE_INT3 BIT     0A8H.3
+  00A8                14     IE      DATA    0A8H
+  0085                15     DPH1    DATA    085H
+  00AD                16     IE_INT5 BIT     0A8H.5
+  0082                17     DPL0    DATA    082H
+  0084                18     DPL1    DATA    084H
+  00A9                19     IE_TMR0 BIT     0A8H.1
+  00C3                20     DES_END BIT     0C0H.3
+  00B8                21     IP      DATA    0B8H
+  00DE                22     UCR2    DATA    0DEH
+  00DD                23     UCR3    DATA    0DDH
+  00EA                24     FL_STS_F_CHKFF_ERR      BIT     0E8H.2
+  0081                25     SP      DATA    081H
+  00C5                26     DES_DATEN       BIT     0C0H.5
+  00AA                27     IE_UART BIT     0A8H.2
+  00DA                28     UBRC    DATA    0DAH
+  0087                29     PCON    DATA    087H
+  00E8                30     FL_STS_F_OVER   BIT     0E8H.0
+  00C2                31     CRCDAT  DATA    0C2H
+  00D9                32     UBUF    DATA    0D9H
+  0089                33     TMOD    DATA    089H
+  0088                34     TCON    DATA    088H
+  00C3                35     MMU_SEL DATA    0C3H
+  00D8                36     USR_TBE BIT     0D8H.0
+  0086                37     CLKCON  DATA    086H
+  00DB                38     CHIPSC  DATA    0DBH
+  008F                39     CLKSEL  DATA    08FH
+  00C0                40     DESCTL  DATA    0C0H
+  00F0                41     B       DATA    0F0H
+  00E2                42     RNGDAT  DATA    0E2H
+  00E0                43     ACC     DATA    0E0H
+  00A8                44     IE_DES  BIT     0A8H.0
+  00E1                45     RNGCTL  DATA    0E1H
+  008C                46     TH0     DATA    08CH
+  00C0                47     DES_START       BIT     0C0H.0
+  008A                48     TL0     DATA    08AH
+  00A5                49     WDTCON  DATA    0A5H
+  00F8                50     DESD0   DATA    0F8H
+  00F9                51     DESD1   DATA    0F9H
+  00FA                52     DESD2   DATA    0FAH
+  00EB                53     FL_CON  DATA    0EBH
+  00FB                54     DESD3   DATA    0FBH
+  0080                55     SFR80   DATA    080H
+  00FC                56     DESD4   DATA    0FCH
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     2
+
+  0090                57     SFR90   DATA    090H
+  0081                58     SFR81   DATA    081H
+  00FD                59     DESD5   DATA    0FDH
+  0091                60     SFR91   DATA    091H
+  0082                61     SFR82   DATA    082H
+  00FE                62     DESD6   DATA    0FEH
+  0092                63     SFR92   DATA    092H
+  0083                64     SFR83   DATA    083H
+  00FF                65     DESD7   DATA    0FFH
+  0093                66     SFR93   DATA    093H
+  0084                67     SFR84   DATA    084H
+  0094                68     SFR94   DATA    094H
+  0085                69     SFR85   DATA    085H
+  0095                70     SFR95   DATA    095H
+  0086                71     SFR86   DATA    086H
+  0096                72     SFR96   DATA    096H
+  0087                73     SFR87   DATA    087H
+  0083                74     DPH     DATA    083H
+  0097                75     SFR97   DATA    097H
+  0088                76     SFR88   DATA    088H
+  00A0                77     SFRA0   DATA    0A0H
+  0098                78     SFR98   DATA    098H
+  0089                79     SFR89   DATA    089H
+  00E9                80     FL_STS_F_OP_ERR BIT     0E8H.1
+  00AC                81     IE_FLASH        BIT     0A8H.4
+  00AE                82     IE_WDT  BIT     0A8H.6
+  00B0                83     SFRB0   DATA    0B0H
+  00A1                84     SFRA1   DATA    0A1H
+  0099                85     SFR99   DATA    099H
+  00C0                86     SFRC0   DATA    0C0H
+  00B1                87     SFRB1   DATA    0B1H
+  00A2                88     SFRA2   DATA    0A2H
+  008D                89     TCON_TF0        BIT     088H.5
+  0082                90     DPL     DATA    082H
+  00D0                91     SFRD0   DATA    0D0H
+  00C1                92     SFRC1   DATA    0C1H
+  00B2                93     SFRB2   DATA    0B2H
+  00A3                94     SFRA3   DATA    0A3H
+  00E0                95     SFRE0   DATA    0E0H
+  00D1                96     SFRD1   DATA    0D1H
+  00C2                97     SFRC2   DATA    0C2H
+  00B3                98     SFRB3   DATA    0B3H
+  00A4                99     SFRA4   DATA    0A4H
+  00EF               100     BANK_SEL        DATA    0EFH
+  00F0               101     SFRF0   DATA    0F0H
+  00E1               102     SFRE1   DATA    0E1H
+  00D2               103     SFRD2   DATA    0D2H
+  00C3               104     SFRC3   DATA    0C3H
+  00B4               105     SFRB4   DATA    0B4H
+  00A5               106     SFRA5   DATA    0A5H
+  00C1               107     DES_MODE        BIT     0C0H.1
+  00F1               108     SFRF1   DATA    0F1H
+  00E2               109     SFRE2   DATA    0E2H
+  00D3               110     SFRD3   DATA    0D3H
+  00C4               111     SFRC4   DATA    0C4H
+  00B5               112     SFRB5   DATA    0B5H
+  00A6               113     SFRA6   DATA    0A6H
+  00E7               114     FL_PATCH        DATA    0E7H
+  00F2               115     SFRF2   DATA    0F2H
+  00E3               116     SFRE3   DATA    0E3H
+  00D4               117     SFRD4   DATA    0D4H
+  00C5               118     SFRC5   DATA    0C5H
+  00B6               119     SFRB6   DATA    0B6H
+  00A7               120     SFRA7   DATA    0A7H
+  00F3               121     SFRF3   DATA    0F3H
+  00E4               122     SFRE4   DATA    0E4H
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     3
+
+  00D5               123     SFRD5   DATA    0D5H
+  00C6               124     SFRC6   DATA    0C6H
+  00B7               125     SFRB7   DATA    0B7H
+  00A8               126     SFRA8   DATA    0A8H
+  008A               127     SFR8A   DATA    08AH
+  00F4               128     SFRF4   DATA    0F4H
+  00E5               129     SFRE5   DATA    0E5H
+  00D6               130     SFRD6   DATA    0D6H
+  00C7               131     SFRC7   DATA    0C7H
+  00B8               132     SFRB8   DATA    0B8H
+  00A9               133     SFRA9   DATA    0A9H
+  009A               134     SFR9A   DATA    09AH
+  008B               135     SFR8B   DATA    08BH
+  00A2               136     DPS     DATA    0A2H
+  00F5               137     SFRF5   DATA    0F5H
+  00E6               138     SFRE6   DATA    0E6H
+  00D7               139     SFRD7   DATA    0D7H
+  00C8               140     SFRC8   DATA    0C8H
+  00B9               141     SFRB9   DATA    0B9H
+  009B               142     SFR9B   DATA    09BH
+  008C               143     SFR8C   DATA    08CH
+  00F6               144     SFRF6   DATA    0F6H
+  00E7               145     SFRE7   DATA    0E7H
+  00D8               146     SFRD8   DATA    0D8H
+  00C9               147     SFRC9   DATA    0C9H
+  009C               148     SFR9C   DATA    09CH
+  008D               149     SFR8D   DATA    08DH
+  00F7               150     SFRF7   DATA    0F7H
+  00E8               151     SFRE8   DATA    0E8H
+  00D9               152     SFRD9   DATA    0D9H
+  009D               153     SFR9D   DATA    09DH
+  008E               154     SFR8E   DATA    08EH
+  00A6               155     WDTRST  DATA    0A6H
+  00DF               156     UCR     DATA    0DFH
+  00F8               157     SFRF8   DATA    0F8H
+  00E9               158     SFRE9   DATA    0E9H
+  009E               159     SFR9E   DATA    09EH
+  008F               160     SFR8F   DATA    08FH
+  00E3               161     FDCON   DATA    0E3H
+  00F9               162     SFRF9   DATA    0F9H
+  009F               163     SFR9F   DATA    09FH
+  00C6               164     DES_KEY1EN      BIT     0C0H.6
+  008C               165     TCON_TR0        BIT     088H.4
+  00C7               166     DES_KEY2EN      BIT     0C0H.7
+  00E8               167     FL_STS  DATA    0E8H
+  00C2               168     DES_TDES        BIT     0C0H.2
+  00EE               169     BANK_NUM        DATA    0EEH
+  00AA               170     SFRAA   DATA    0AAH
+  00BA               171     SFRBA   DATA    0BAH
+  00AB               172     SFRAB   DATA    0ABH
+  00CA               173     SFRCA   DATA    0CAH
+  00BB               174     SFRBB   DATA    0BBH
+  00AC               175     SFRAC   DATA    0ACH
+  00DA               176     SFRDA   DATA    0DAH
+  00CB               177     SFRCB   DATA    0CBH
+  00BC               178     SFRBC   DATA    0BCH
+  00AD               179     SFRAD   DATA    0ADH
+  0080               180     rP0     DATA    080H
+  00EA               181     SFREA   DATA    0EAH
+  00DB               182     SFRDB   DATA    0DBH
+  00CC               183     SFRCC   DATA    0CCH
+  00BD               184     SFRBD   DATA    0BDH
+  00AE               185     SFRAE   DATA    0AEH
+  0090               186     rP1     DATA    090H
+  00FA               187     SFRFA   DATA    0FAH
+  00EB               188     SFREB   DATA    0EBH
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     4
+
+  00DC               189     SFRDC   DATA    0DCH
+  00CD               190     SFRCD   DATA    0CDH
+  00BE               191     SFRBE   DATA    0BEH
+  00AF               192     SFRAF   DATA    0AFH
+  00AF               193     IE_EA   BIT     0A8H.7
+  00A0               194     rP2     DATA    0A0H
+  00FB               195     SFRFB   DATA    0FBH
+  00EC               196     SFREC   DATA    0ECH
+  00DD               197     SFRDD   DATA    0DDH
+  00CE               198     SFRCE   DATA    0CEH
+  00BF               199     SFRBF   DATA    0BFH
+  00B0               200     rP3     DATA    0B0H
+  00FC               201     SFRFC   DATA    0FCH
+  00ED               202     SFRED   DATA    0EDH
+  00DE               203     SFRDE   DATA    0DEH
+  00CF               204     SFRCF   DATA    0CFH
+  00FD               205     SFRFD   DATA    0FDH
+  00EE               206     SFREE   DATA    0EEH
+  00DF               207     SFRDF   DATA    0DFH
+  00FE               208     SFRFE   DATA    0FEH
+  00EF               209     SFREF   DATA    0EFH
+  00FF               210     SFRFF   DATA    0FFH
+  00D8               211     USR     DATA    0D8H
+  0097               212     SLEEP   DATA    097H
+  00D0               213     PSW     DATA    0D0H
+  00DB               214     VDCON   DATA    0DBH
+                     215     ?PR?DES_ISR?ISO7816_INTERRUPT            SEGMENT CODE 
+                     216     ?PR?UART_ISR?ISO7816_INTERRUPT           SEGMENT CODE 
+                     217     ?PR?INT3_ISR?ISO7816_INTERRUPT           SEGMENT CODE 
+                     218     ?PR?FLASH_ISR?ISO7816_INTERRUPT          SEGMENT CODE 
+                     219     ?PR?INT5_ISR?ISO7816_INTERRUPT           SEGMENT CODE 
+                     220     ?PR?WDT_ISR?ISO7816_INTERRUPT            SEGMENT CODE 
+                     221     ?C_INITSEG           SEGMENT CODE 
+                     222     ?XD?ISO7816_INTERRUPT                    SEGMENT XDATA 
+                     223             EXTRN   XDATA (iso7816_buffer)
+                     224             EXTRN   XDATA (_iso7816_state)
+                     225             EXTRN   CODE (_?ISO_AutoTxNULL)
+                     226             PUBLIC  WDT_ISR
+                     227             PUBLIC  INT5_ISR
+                     228             PUBLIC  FLASH_ISR
+                     229             PUBLIC  INT3_ISR
+                     230             PUBLIC  UART_ISR
+                     231             PUBLIC  DES_ISR
+                     232     
+----                 233             RSEG  ?XD?ISO7816_INTERRUPT
+0000                 234           rcv_index:   DS   1
+                     235     
+----                 236             RSEG  ?C_INITSEG
+0000 41              237             DB      041H
+0001 0000     F      238             DW      rcv_index
+0003 00              239             DB      000H
+                     240     
+                     241     ; 
+                     242     ; #include      "_17BD_UserCode.h"  
+                     243     ; #include      "defs.h"
+                     244     ; #include      "..\ISO7816\ISO7816.h"
+                     245     ; #include      "..\NORFlash\NORFlash.h"
+                     246     ; #include      "..\yggdrasil\yggdrasil.h"
+                     247     ; #include      <intrins.h>
+                     248     ; 
+                     249     ; //====================================================
+                     250     ; //    DES finish interrutp service routine
+                     251     ; void  DES_ISR(void)   interrupt 0
+                     252     
+----                 253             RSEG  ?PR?DES_ISR?ISO7816_INTERRUPT
+                     254             USING   0
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     5
+
+0000                 255     DES_ISR:
+                     256             USING   0
+                     257                             ; SOURCE LINE # 11
+                     258     ; {
+                     259     ;       IE_DES = 0;
+                     260                             ; SOURCE LINE # 13
+0000 C2A8            261             CLR     IE_DES
+                     262     ;       return;
+                     263     ; }
+                     264                             ; SOURCE LINE # 15
+0002                 265     ?C0001:
+0002 32              266             RETI    
+                     267     ; END OF DES_ISR
+                     268     
+                     269     ; 
+                     270     ; //uint16 _tick_counter;
+                     271     ; static uchar rcv_index = 0;
+                     272     ; #define apdu_data_buffer (iso7816_buffer+5)
+                     273     ; #define apdu_le_value *(iso7816_buffer+262)
+                     274     ; //====================================================
+                     275     ; //    UART interrutp service routine
+                     276     ; void  UART_ISR(void)  interrupt 2
+                     277     
+----                 278             RSEG  ?PR?UART_ISR?ISO7816_INTERRUPT
+                     279             USING   0
+0000                 280     UART_ISR:
+0000 C0E0            281             PUSH    ACC
+0002 C083            282             PUSH    DPH
+0004 C082            283             PUSH    DPL
+0006 C0D0            284             PUSH    PSW
+0008 75D000          285             MOV     PSW,#00H
+000B C006            286             PUSH    AR6
+000D C007            287             PUSH    AR7
+                     288             USING   0
+                     289                             ; SOURCE LINE # 23
+                     290     ; {
+                     291     ;       IE_UART = 0;  
+                     292                             ; SOURCE LINE # 25
+000F C2AA            293             CLR     IE_UART
+                     294     ;       //switch(_iso7816_state) {
+                     295     ;               //case ISO7816_RECEIVE_CMD:     
+                     296     ;       if(_iso7816_state == ISO7816_RECEIVE_CMD) { 
+                     297                             ; SOURCE LINE # 28
+0011 900000   F      298             MOV     DPTR,#_iso7816_state
+0014 E0              299             MOVX    A,@DPTR
+0015 FF              300             MOV     R7,A
+0016 EF              301             MOV     A,R7
+0017 6403            302             XRL     A,#03H
+0019 7049            303             JNZ     ?C0002
+                     304     ;                       iso7816_buffer[rcv_index++] = UBUF;
+                     305                             ; SOURCE LINE # 29
+001B 900000   F      306             MOV     DPTR,#rcv_index
+001E E0              307             MOVX    A,@DPTR
+001F FF              308             MOV     R7,A
+0020 04              309             INC     A
+0021 F0              310             MOVX    @DPTR,A
+0022 7400     F      311             MOV     A,#LOW (iso7816_buffer)
+0024 2F              312             ADD     A,R7
+0025 F582            313             MOV     DPL,A
+0027 E4              314             CLR     A
+0028 3400     F      315             ADDC    A,#HIGH (iso7816_buffer)
+002A F583            316             MOV     DPH,A
+002C E5D9            317             MOV     A,UBUF
+002E F0              318             MOVX    @DPTR,A
+                     319     ;                       if(rcv_index == 5) {
+                     320                             ; SOURCE LINE # 30
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     6
+
+002F 900000   F      321             MOV     DPTR,#rcv_index
+0032 E0              322             MOVX    A,@DPTR
+0033 FF              323             MOV     R7,A
+0034 EF              324             MOV     A,R7
+0035 B4050B          325             CJNE    A,#05H,?C0003
+                     326     ;                               //_iso7816_case = 1;                    //command only     
+                                           
+                     327     ;                               /*_iso7816_cla = iso7816_buffer[0];
+                     328     ;                               _iso7816_ins = iso7816_buffer[1];
+                     329     ;                               if(ISO7816_case() > 1) {                //check for command
+                              with data
+                     330     ;                                       _iso7816_state = ISO7816_SEND_ACK;
+                     331     ;                                       rcv_index =0;
+                     332     ;                               } else {
+                     333     ;                                       _iso7816_state = ISO7816_RUNNING;
+                     334     ;                                       rcv_index=0;
+                     335     ;                               }*/
+                     336     ;                               rcv_index=0; 
+                     337                             ; SOURCE LINE # 41
+0038 900000   F      338             MOV     DPTR,#rcv_index
+003B E4              339             CLR     A
+003C F0              340             MOVX    @DPTR,A
+                     341     ;                               //apdu_le_value = 0;
+                     342     ;                               _iso7816_state = ISO7816_RUNNING;
+                     343                             ; SOURCE LINE # 43
+003D 900000   F      344             MOV     DPTR,#_iso7816_state
+0040 7404            345             MOV     A,#04H
+0042 F0              346             MOVX    @DPTR,A
+                     347     ;                       } 
+                     348                             ; SOURCE LINE # 44
+0043                 349     ?C0003:
+                     350     ;                       if(iso7816_buffer[0] == 0xff && rcv_index == 4) {       //pps
+                     351                             ; SOURCE LINE # 45
+0043 900000   F      352             MOV     DPTR,#iso7816_buffer
+0046 E0              353             MOVX    A,@DPTR
+0047 FF              354             MOV     R7,A
+0048 EF              355             MOV     A,R7
+0049 64FF            356             XRL     A,#0FFH
+004B 704D            357             JNZ     ?C0005
+004D 900000   F      358             MOV     DPTR,#rcv_index
+0050 E0              359             MOVX    A,@DPTR
+0051 FF              360             MOV     R7,A
+0052 EF              361             MOV     A,R7
+0053 6404            362             XRL     A,#04H
+0055 7043            363             JNZ     ?C0005
+                     364     ;                               rcv_index=0;  
+                     365                             ; SOURCE LINE # 46
+0057 900000   F      366             MOV     DPTR,#rcv_index
+005A E4              367             CLR     A
+005B F0              368             MOVX    @DPTR,A
+                     369     ;                               _iso7816_state = ISO7816_RUNNING;       
+                     370                             ; SOURCE LINE # 47
+005C 900000   F      371             MOV     DPTR,#_iso7816_state
+005F 7404            372             MOV     A,#04H
+0061 F0              373             MOVX    @DPTR,A
+                     374     ;                       }  
+                     375                             ; SOURCE LINE # 48
+0062                 376     ?C0004:
+                     377     ;                       //break;
+                     378     ;       } else if(_iso7816_state == ISO7816_RECEIVE_DATA) {
+                     379                             ; SOURCE LINE # 50
+0062 8036            380             SJMP    ?C0005
+0064                 381     ?C0002:
+0064 900000   F      382             MOV     DPTR,#_iso7816_state
+0067 E0              383             MOVX    A,@DPTR
+0068 FF              384             MOV     R7,A
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     7
+
+0069 EF              385             MOV     A,R7
+006A B4072D          386             CJNE    A,#07H,?C0005
+                     387     ;               //case ISO7816_RECEIVE_DATA:      
+                     388     ;                       apdu_data_buffer[rcv_index++] = UBUF;
+                     389                             ; SOURCE LINE # 52
+006D 900000   F      390             MOV     DPTR,#rcv_index
+0070 E0              391             MOVX    A,@DPTR
+0071 FF              392             MOV     R7,A
+0072 04              393             INC     A
+0073 F0              394             MOVX    @DPTR,A
+0074 7400     F      395             MOV     A,#LOW (iso7816_buffer+05H)
+0076 2F              396             ADD     A,R7
+0077 F582            397             MOV     DPL,A
+0079 E4              398             CLR     A
+007A 3400     F      399             ADDC    A,#HIGH (iso7816_buffer+05H)
+007C F583            400             MOV     DPH,A
+007E E5D9            401             MOV     A,UBUF
+0080 F0              402             MOVX    @DPTR,A
+                     403     ;                       if(rcv_index == iso7816_buffer[4]) {
+                     404                             ; SOURCE LINE # 53
+0081 900000   F      405             MOV     DPTR,#iso7816_buffer+04H
+0084 E0              406             MOVX    A,@DPTR
+0085 FF              407             MOV     R7,A
+0086 900000   F      408             MOV     DPTR,#rcv_index
+0089 E0              409             MOVX    A,@DPTR
+008A FE              410             MOV     R6,A
+008B EE              411             MOV     A,R6
+008C B5070B          412             CJNE    A,AR7,?C0005
+                     413     ;                               //apdu_le_value = 0;
+                     414     ;                               _iso7816_state = ISO7816_RUNNING;
+                     415                             ; SOURCE LINE # 55
+008F 900000   F      416             MOV     DPTR,#_iso7816_state
+0092 7404            417             MOV     A,#04H
+0094 F0              418             MOVX    @DPTR,A
+                     419     ;                               rcv_index=0;
+                     420                             ; SOURCE LINE # 56
+0095 900000   F      421             MOV     DPTR,#rcv_index
+0098 E4              422             CLR     A
+0099 F0              423             MOVX    @DPTR,A
+                     424     ;                       }
+                     425                             ; SOURCE LINE # 57
+009A                 426     ?C0007:
+                     427     ;                       //break;        
+                     428     ;               /*case ISO7816_WAIT_LE:
+                     429     ;                       apdu_le_value = UBUF;
+                     430     ;                       _iso7816_state = ISO7816_RUNNING;
+                     431     ;                       rcv_index=0;
+                     432     ;                       break; */
+                     433     ;       }
+                     434                             ; SOURCE LINE # 64
+009A                 435     ?C0006:
+009A                 436     ?C0005:
+                     437     ;       IE_UART = 1;
+                     438                             ; SOURCE LINE # 65
+009A D2AA            439             SETB    IE_UART
+                     440     ;       return;
+                     441     ; }
+                     442                             ; SOURCE LINE # 67
+009C                 443     ?C0008:
+009C D007            444             POP     AR7
+009E D006            445             POP     AR6
+00A0 D0D0            446             POP     PSW
+00A2 D082            447             POP     DPL
+00A4 D083            448             POP     DPH
+00A6 D0E0            449             POP     ACC
+00A8 32              450             RETI    
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     8
+
+                     451     ; END OF UART_ISR
+                     452     
+                     453     ; 
+                     454     ; //====================================================
+                     455     ; //    Interrutp 3 interrutp service routine
+                     456     ; void  INT3_ISR(void)  interrupt 3
+                     457     
+----                 458             RSEG  ?PR?INT3_ISR?ISO7816_INTERRUPT
+                     459             USING   0
+0000                 460     INT3_ISR:
+                     461             USING   0
+                     462                             ; SOURCE LINE # 71
+                     463     ; {
+                     464     ;       IE_INT3 = 0;
+                     465                             ; SOURCE LINE # 73
+0000 C2AB            466             CLR     IE_INT3
+                     467     ;       return;
+                     468     ; }
+                     469                             ; SOURCE LINE # 75
+0002                 470     ?C0009:
+0002 32              471             RETI    
+                     472     ; END OF INT3_ISR
+                     473     
+                     474     ; 
+                     475     ; //====================================================
+                     476     ; //    Flash write finish interrutp service routine
+                     477     ; void  FLASH_ISR(void) interrupt 4
+                     478     
+----                 479             RSEG  ?PR?FLASH_ISR?ISO7816_INTERRUPT
+                     480             USING   0
+0000                 481     FLASH_ISR:
+                     482             USING   0
+                     483                             ; SOURCE LINE # 79
+                     484     ; {
+                     485     ;       IE_FLASH = 0;
+                     486                             ; SOURCE LINE # 81
+0000 C2AC            487             CLR     IE_FLASH
+                     488     ;       return;
+                     489     ; }
+                     490                             ; SOURCE LINE # 83
+0002                 491     ?C0010:
+0002 32              492             RETI    
+                     493     ; END OF FLASH_ISR
+                     494     
+                     495     ; 
+                     496     ; //====================================================
+                     497     ; //    Interrutp 5 service routine
+                     498     ; void  INT5_ISR(void)  interrupt 5
+                     499     
+----                 500             RSEG  ?PR?INT5_ISR?ISO7816_INTERRUPT
+                     501             USING   0
+0000                 502     INT5_ISR:
+                     503             USING   0
+                     504                             ; SOURCE LINE # 87
+                     505     ; {
+                     506     ;       IE_INT5 = 0;
+                     507                             ; SOURCE LINE # 89
+0000 C2AD            508             CLR     IE_INT5
+                     509     ;       return;
+                     510     ; }
+                     511                             ; SOURCE LINE # 91
+0002                 512     ?C0011:
+0002 32              513             RETI    
+                     514     ; END OF INT5_ISR
+                     515     
+                     516     ; 
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE     9
+
+                     517     ; //====================================================
+                     518     ; //    Watch dog interrutp service routine
+                     519     ; void  WDT_ISR(void)   interrupt 6
+                     520     
+----                 521             RSEG  ?PR?WDT_ISR?ISO7816_INTERRUPT
+                     522             USING   0
+0000                 523     WDT_ISR:
+0000 C0E0            524             PUSH    ACC
+0002 C0F0            525             PUSH    B
+0004 C083            526             PUSH    DPH
+0006 C082            527             PUSH    DPL
+0008 C0D0            528             PUSH    PSW
+000A 75D000          529             MOV     PSW,#00H
+000D C000            530             PUSH    AR0
+000F C001            531             PUSH    AR1
+0011 C002            532             PUSH    AR2
+0013 C003            533             PUSH    AR3
+0015 C004            534             PUSH    AR4
+0017 C005            535             PUSH    AR5
+0019 C006            536             PUSH    AR6
+001B C007            537             PUSH    AR7
+                     538             USING   0
+                     539                             ; SOURCE LINE # 95
+                     540     ; {
+                     541     ;       IE_WDT = 0;
+                     542                             ; SOURCE LINE # 97
+001D C2AE            543             CLR     IE_WDT
+                     544     ;       TX_NULL_BYTE_OFF(8000)
+                     545                             ; SOURCE LINE # 98
+001F 7C1F            546             MOV     R4,#01FH
+0021 7D3F            547             MOV     R5,#03FH
+0023 7F00            548             MOV     R7,#00H
+0025 120000   F      549             LCALL   _?ISO_AutoTxNULL
+                     550     ;       IE_WDT = 1;
+                     551                             ; SOURCE LINE # 99
+0028 D2AE            552             SETB    IE_WDT
+                     553     ;       return;
+                     554     ; }
+                     555                             ; SOURCE LINE # 101
+002A                 556     ?C0012:
+002A D007            557             POP     AR7
+002C D006            558             POP     AR6
+002E D005            559             POP     AR5
+0030 D004            560             POP     AR4
+0032 D003            561             POP     AR3
+0034 D002            562             POP     AR2
+0036 D001            563             POP     AR1
+0038 D000            564             POP     AR0
+003A D0D0            565             POP     PSW
+003C D082            566             POP     DPL
+003E D083            567             POP     DPH
+0040 D0F0            568             POP     B
+0042 D0E0            569             POP     ACC
+0044 32              570             RETI    
+                     571     ; END OF WDT_ISR
+                     572     
+                     573             END
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE    10
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E                          T Y P E  V A L U E   ATTRIBUTES
+
+?C0001. . . . . . . . . . . . .  C ADDR   0002H   R   SEG=?PR?DES_ISR?ISO7816_INTERRUPT
+?C0002. . . . . . . . . . . . .  C ADDR   0064H   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0003. . . . . . . . . . . . .  C ADDR   0043H   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0004. . . . . . . . . . . . .  C ADDR   0062H   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0005. . . . . . . . . . . . .  C ADDR   009AH   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0006. . . . . . . . . . . . .  C ADDR   009AH   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0007. . . . . . . . . . . . .  C ADDR   009AH   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0008. . . . . . . . . . . . .  C ADDR   009CH   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+?C0009. . . . . . . . . . . . .  C ADDR   0002H   R   SEG=?PR?INT3_ISR?ISO7816_INTERRUPT
+?C0010. . . . . . . . . . . . .  C ADDR   0002H   R   SEG=?PR?FLASH_ISR?ISO7816_INTERRUPT
+?C0011. . . . . . . . . . . . .  C ADDR   0002H   R   SEG=?PR?INT5_ISR?ISO7816_INTERRUPT
+?C0012. . . . . . . . . . . . .  C ADDR   002AH   R   SEG=?PR?WDT_ISR?ISO7816_INTERRUPT
+?C_INITSEG. . . . . . . . . . .  C SEG    0004H       REL=UNIT
+?PR?DES_ISR?ISO7816_INTERRUPT .  C SEG    0003H       REL=UNIT
+?PR?FLASH_ISR?ISO7816_INTERRUPT  C SEG    0003H       REL=UNIT
+?PR?INT3_ISR?ISO7816_INTERRUPT.  C SEG    0003H       REL=UNIT
+?PR?INT5_ISR?ISO7816_INTERRUPT.  C SEG    0003H       REL=UNIT
+?PR?UART_ISR?ISO7816_INTERRUPT.  C SEG    00A9H       REL=UNIT
+?PR?WDT_ISR?ISO7816_INTERRUPT .  C SEG    0045H       REL=UNIT
+?XD?ISO7816_INTERRUPT . . . . .  X SEG    0001H       REL=UNIT
+ACC . . . . . . . . . . . . . .  D ADDR   00E0H   A   
+AR0 . . . . . . . . . . . . . .  D ADDR   0000H   A   
+AR1 . . . . . . . . . . . . . .  D ADDR   0001H   A   
+AR2 . . . . . . . . . . . . . .  D ADDR   0002H   A   
+AR3 . . . . . . . . . . . . . .  D ADDR   0003H   A   
+AR4 . . . . . . . . . . . . . .  D ADDR   0004H   A   
+AR5 . . . . . . . . . . . . . .  D ADDR   0005H   A   
+AR6 . . . . . . . . . . . . . .  D ADDR   0006H   A   
+AR7 . . . . . . . . . . . . . .  D ADDR   0007H   A   
+B . . . . . . . . . . . . . . .  D ADDR   00F0H   A   
+BANK_NUM. . . . . . . . . . . .  D ADDR   00EEH   A   
+BANK_SEL. . . . . . . . . . . .  D ADDR   00EFH   A   
+CHIPSC. . . . . . . . . . . . .  D ADDR   00DBH   A   
+CLKCON. . . . . . . . . . . . .  D ADDR   0086H   A   
+CLKSEL. . . . . . . . . . . . .  D ADDR   008FH   A   
+CRCDAT. . . . . . . . . . . . .  D ADDR   00C2H   A   
+DESCTL. . . . . . . . . . . . .  D ADDR   00C0H   A   
+DESD0 . . . . . . . . . . . . .  D ADDR   00F8H   A   
+DESD1 . . . . . . . . . . . . .  D ADDR   00F9H   A   
+DESD2 . . . . . . . . . . . . .  D ADDR   00FAH   A   
+DESD3 . . . . . . . . . . . . .  D ADDR   00FBH   A   
+DESD4 . . . . . . . . . . . . .  D ADDR   00FCH   A   
+DESD5 . . . . . . . . . . . . .  D ADDR   00FDH   A   
+DESD6 . . . . . . . . . . . . .  D ADDR   00FEH   A   
+DESD7 . . . . . . . . . . . . .  D ADDR   00FFH   A   
+DES_DATEN . . . . . . . . . . .  B ADDR   00C0H.5 A   
+DES_END . . . . . . . . . . . .  B ADDR   00C0H.3 A   
+DES_ISR . . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?DES_ISR?ISO7816_INTERRUPT
+DES_KEY1EN. . . . . . . . . . .  B ADDR   00C0H.6 A   
+DES_KEY2EN. . . . . . . . . . .  B ADDR   00C0H.7 A   
+DES_MODE. . . . . . . . . . . .  B ADDR   00C0H.1 A   
+DES_START . . . . . . . . . . .  B ADDR   00C0H.0 A   
+DES_TDES. . . . . . . . . . . .  B ADDR   00C0H.2 A   
+DPH . . . . . . . . . . . . . .  D ADDR   0083H   A   
+DPH0. . . . . . . . . . . . . .  D ADDR   0083H   A   
+DPH1. . . . . . . . . . . . . .  D ADDR   0085H   A   
+DPL . . . . . . . . . . . . . .  D ADDR   0082H   A   
+DPL0. . . . . . . . . . . . . .  D ADDR   0082H   A   
+DPL1. . . . . . . . . . . . . .  D ADDR   0084H   A   
+DPS . . . . . . . . . . . . . .  D ADDR   00A2H   A   
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE    11
+
+FDCON . . . . . . . . . . . . .  D ADDR   00E3H   A   
+FLASH_ISR . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?FLASH_ISR?ISO7816_INTERRUPT
+FL_CON. . . . . . . . . . . . .  D ADDR   00EBH   A   
+FL_PATCH. . . . . . . . . . . .  D ADDR   00E7H   A   
+FL_SDP1 . . . . . . . . . . . .  D ADDR   00E9H   A   
+FL_SDP2 . . . . . . . . . . . .  D ADDR   00EAH   A   
+FL_STS. . . . . . . . . . . . .  D ADDR   00E8H   A   
+FL_STS_F_CHKFF_ERR. . . . . . .  B ADDR   00E8H.2 A   
+FL_STS_F_OP_ERR . . . . . . . .  B ADDR   00E8H.1 A   
+FL_STS_F_OVER . . . . . . . . .  B ADDR   00E8H.0 A   
+IE. . . . . . . . . . . . . . .  D ADDR   00A8H   A   
+IE_DES. . . . . . . . . . . . .  B ADDR   00A8H.0 A   
+IE_EA . . . . . . . . . . . . .  B ADDR   00A8H.7 A   
+IE_FLASH. . . . . . . . . . . .  B ADDR   00A8H.4 A   
+IE_INT3 . . . . . . . . . . . .  B ADDR   00A8H.3 A   
+IE_INT5 . . . . . . . . . . . .  B ADDR   00A8H.5 A   
+IE_TMR0 . . . . . . . . . . . .  B ADDR   00A8H.1 A   
+IE_UART . . . . . . . . . . . .  B ADDR   00A8H.2 A   
+IE_WDT. . . . . . . . . . . . .  B ADDR   00A8H.6 A   
+INT3_ISR. . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?INT3_ISR?ISO7816_INTERRUPT
+INT5_ISR. . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?INT5_ISR?ISO7816_INTERRUPT
+IP. . . . . . . . . . . . . . .  D ADDR   00B8H   A   
+ISO7816_BUFFER. . . . . . . . .  X ADDR   -----       EXT
+ISO7816_INTERRUPT . . . . . . .  N NUMB   -----       
+MMU_SEL . . . . . . . . . . . .  D ADDR   00C3H   A   
+PCON. . . . . . . . . . . . . .  D ADDR   0087H   A   
+PSW . . . . . . . . . . . . . .  D ADDR   00D0H   A   
+RCV_INDEX . . . . . . . . . . .  X ADDR   0000H   R   SEG=?XD?ISO7816_INTERRUPT
+RNGCTL. . . . . . . . . . . . .  D ADDR   00E1H   A   
+RNGDAT. . . . . . . . . . . . .  D ADDR   00E2H   A   
+RP0 . . . . . . . . . . . . . .  D ADDR   0080H   A   
+RP1 . . . . . . . . . . . . . .  D ADDR   0090H   A   
+RP2 . . . . . . . . . . . . . .  D ADDR   00A0H   A   
+RP3 . . . . . . . . . . . . . .  D ADDR   00B0H   A   
+SFR80 . . . . . . . . . . . . .  D ADDR   0080H   A   
+SFR81 . . . . . . . . . . . . .  D ADDR   0081H   A   
+SFR82 . . . . . . . . . . . . .  D ADDR   0082H   A   
+SFR83 . . . . . . . . . . . . .  D ADDR   0083H   A   
+SFR84 . . . . . . . . . . . . .  D ADDR   0084H   A   
+SFR85 . . . . . . . . . . . . .  D ADDR   0085H   A   
+SFR86 . . . . . . . . . . . . .  D ADDR   0086H   A   
+SFR87 . . . . . . . . . . . . .  D ADDR   0087H   A   
+SFR88 . . . . . . . . . . . . .  D ADDR   0088H   A   
+SFR89 . . . . . . . . . . . . .  D ADDR   0089H   A   
+SFR8A . . . . . . . . . . . . .  D ADDR   008AH   A   
+SFR8B . . . . . . . . . . . . .  D ADDR   008BH   A   
+SFR8C . . . . . . . . . . . . .  D ADDR   008CH   A   
+SFR8D . . . . . . . . . . . . .  D ADDR   008DH   A   
+SFR8E . . . . . . . . . . . . .  D ADDR   008EH   A   
+SFR8F . . . . . . . . . . . . .  D ADDR   008FH   A   
+SFR90 . . . . . . . . . . . . .  D ADDR   0090H   A   
+SFR91 . . . . . . . . . . . . .  D ADDR   0091H   A   
+SFR92 . . . . . . . . . . . . .  D ADDR   0092H   A   
+SFR93 . . . . . . . . . . . . .  D ADDR   0093H   A   
+SFR94 . . . . . . . . . . . . .  D ADDR   0094H   A   
+SFR95 . . . . . . . . . . . . .  D ADDR   0095H   A   
+SFR96 . . . . . . . . . . . . .  D ADDR   0096H   A   
+SFR97 . . . . . . . . . . . . .  D ADDR   0097H   A   
+SFR98 . . . . . . . . . . . . .  D ADDR   0098H   A   
+SFR99 . . . . . . . . . . . . .  D ADDR   0099H   A   
+SFR9A . . . . . . . . . . . . .  D ADDR   009AH   A   
+SFR9B . . . . . . . . . . . . .  D ADDR   009BH   A   
+SFR9C . . . . . . . . . . . . .  D ADDR   009CH   A   
+SFR9D . . . . . . . . . . . . .  D ADDR   009DH   A   
+SFR9E . . . . . . . . . . . . .  D ADDR   009EH   A   
+SFR9F . . . . . . . . . . . . .  D ADDR   009FH   A   
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE    12
+
+SFRA0 . . . . . . . . . . . . .  D ADDR   00A0H   A   
+SFRA1 . . . . . . . . . . . . .  D ADDR   00A1H   A   
+SFRA2 . . . . . . . . . . . . .  D ADDR   00A2H   A   
+SFRA3 . . . . . . . . . . . . .  D ADDR   00A3H   A   
+SFRA4 . . . . . . . . . . . . .  D ADDR   00A4H   A   
+SFRA5 . . . . . . . . . . . . .  D ADDR   00A5H   A   
+SFRA6 . . . . . . . . . . . . .  D ADDR   00A6H   A   
+SFRA7 . . . . . . . . . . . . .  D ADDR   00A7H   A   
+SFRA8 . . . . . . . . . . . . .  D ADDR   00A8H   A   
+SFRA9 . . . . . . . . . . . . .  D ADDR   00A9H   A   
+SFRAA . . . . . . . . . . . . .  D ADDR   00AAH   A   
+SFRAB . . . . . . . . . . . . .  D ADDR   00ABH   A   
+SFRAC . . . . . . . . . . . . .  D ADDR   00ACH   A   
+SFRAD . . . . . . . . . . . . .  D ADDR   00ADH   A   
+SFRAE . . . . . . . . . . . . .  D ADDR   00AEH   A   
+SFRAF . . . . . . . . . . . . .  D ADDR   00AFH   A   
+SFRB0 . . . . . . . . . . . . .  D ADDR   00B0H   A   
+SFRB1 . . . . . . . . . . . . .  D ADDR   00B1H   A   
+SFRB2 . . . . . . . . . . . . .  D ADDR   00B2H   A   
+SFRB3 . . . . . . . . . . . . .  D ADDR   00B3H   A   
+SFRB4 . . . . . . . . . . . . .  D ADDR   00B4H   A   
+SFRB5 . . . . . . . . . . . . .  D ADDR   00B5H   A   
+SFRB6 . . . . . . . . . . . . .  D ADDR   00B6H   A   
+SFRB7 . . . . . . . . . . . . .  D ADDR   00B7H   A   
+SFRB8 . . . . . . . . . . . . .  D ADDR   00B8H   A   
+SFRB9 . . . . . . . . . . . . .  D ADDR   00B9H   A   
+SFRBA . . . . . . . . . . . . .  D ADDR   00BAH   A   
+SFRBB . . . . . . . . . . . . .  D ADDR   00BBH   A   
+SFRBC . . . . . . . . . . . . .  D ADDR   00BCH   A   
+SFRBD . . . . . . . . . . . . .  D ADDR   00BDH   A   
+SFRBE . . . . . . . . . . . . .  D ADDR   00BEH   A   
+SFRBF . . . . . . . . . . . . .  D ADDR   00BFH   A   
+SFRC0 . . . . . . . . . . . . .  D ADDR   00C0H   A   
+SFRC1 . . . . . . . . . . . . .  D ADDR   00C1H   A   
+SFRC2 . . . . . . . . . . . . .  D ADDR   00C2H   A   
+SFRC3 . . . . . . . . . . . . .  D ADDR   00C3H   A   
+SFRC4 . . . . . . . . . . . . .  D ADDR   00C4H   A   
+SFRC5 . . . . . . . . . . . . .  D ADDR   00C5H   A   
+SFRC6 . . . . . . . . . . . . .  D ADDR   00C6H   A   
+SFRC7 . . . . . . . . . . . . .  D ADDR   00C7H   A   
+SFRC8 . . . . . . . . . . . . .  D ADDR   00C8H   A   
+SFRC9 . . . . . . . . . . . . .  D ADDR   00C9H   A   
+SFRCA . . . . . . . . . . . . .  D ADDR   00CAH   A   
+SFRCB . . . . . . . . . . . . .  D ADDR   00CBH   A   
+SFRCC . . . . . . . . . . . . .  D ADDR   00CCH   A   
+SFRCD . . . . . . . . . . . . .  D ADDR   00CDH   A   
+SFRCE . . . . . . . . . . . . .  D ADDR   00CEH   A   
+SFRCF . . . . . . . . . . . . .  D ADDR   00CFH   A   
+SFRD0 . . . . . . . . . . . . .  D ADDR   00D0H   A   
+SFRD1 . . . . . . . . . . . . .  D ADDR   00D1H   A   
+SFRD2 . . . . . . . . . . . . .  D ADDR   00D2H   A   
+SFRD3 . . . . . . . . . . . . .  D ADDR   00D3H   A   
+SFRD4 . . . . . . . . . . . . .  D ADDR   00D4H   A   
+SFRD5 . . . . . . . . . . . . .  D ADDR   00D5H   A   
+SFRD6 . . . . . . . . . . . . .  D ADDR   00D6H   A   
+SFRD7 . . . . . . . . . . . . .  D ADDR   00D7H   A   
+SFRD8 . . . . . . . . . . . . .  D ADDR   00D8H   A   
+SFRD9 . . . . . . . . . . . . .  D ADDR   00D9H   A   
+SFRDA . . . . . . . . . . . . .  D ADDR   00DAH   A   
+SFRDB . . . . . . . . . . . . .  D ADDR   00DBH   A   
+SFRDC . . . . . . . . . . . . .  D ADDR   00DCH   A   
+SFRDD . . . . . . . . . . . . .  D ADDR   00DDH   A   
+SFRDE . . . . . . . . . . . . .  D ADDR   00DEH   A   
+SFRDF . . . . . . . . . . . . .  D ADDR   00DFH   A   
+SFRE0 . . . . . . . . . . . . .  D ADDR   00E0H   A   
+SFRE1 . . . . . . . . . . . . .  D ADDR   00E1H   A   
+A51 MACRO ASSEMBLER  ISO7816_INTERRUPT                                                    01/27/2014 09:14:17 PAGE    13
+
+SFRE2 . . . . . . . . . . . . .  D ADDR   00E2H   A   
+SFRE3 . . . . . . . . . . . . .  D ADDR   00E3H   A   
+SFRE4 . . . . . . . . . . . . .  D ADDR   00E4H   A   
+SFRE5 . . . . . . . . . . . . .  D ADDR   00E5H   A   
+SFRE6 . . . . . . . . . . . . .  D ADDR   00E6H   A   
+SFRE7 . . . . . . . . . . . . .  D ADDR   00E7H   A   
+SFRE8 . . . . . . . . . . . . .  D ADDR   00E8H   A   
+SFRE9 . . . . . . . . . . . . .  D ADDR   00E9H   A   
+SFREA . . . . . . . . . . . . .  D ADDR   00EAH   A   
+SFREB . . . . . . . . . . . . .  D ADDR   00EBH   A   
+SFREC . . . . . . . . . . . . .  D ADDR   00ECH   A   
+SFRED . . . . . . . . . . . . .  D ADDR   00EDH   A   
+SFREE . . . . . . . . . . . . .  D ADDR   00EEH   A   
+SFREF . . . . . . . . . . . . .  D ADDR   00EFH   A   
+SFRF0 . . . . . . . . . . . . .  D ADDR   00F0H   A   
+SFRF1 . . . . . . . . . . . . .  D ADDR   00F1H   A   
+SFRF2 . . . . . . . . . . . . .  D ADDR   00F2H   A   
+SFRF3 . . . . . . . . . . . . .  D ADDR   00F3H   A   
+SFRF4 . . . . . . . . . . . . .  D ADDR   00F4H   A   
+SFRF5 . . . . . . . . . . . . .  D ADDR   00F5H   A   
+SFRF6 . . . . . . . . . . . . .  D ADDR   00F6H   A   
+SFRF7 . . . . . . . . . . . . .  D ADDR   00F7H   A   
+SFRF8 . . . . . . . . . . . . .  D ADDR   00F8H   A   
+SFRF9 . . . . . . . . . . . . .  D ADDR   00F9H   A   
+SFRFA . . . . . . . . . . . . .  D ADDR   00FAH   A   
+SFRFB . . . . . . . . . . . . .  D ADDR   00FBH   A   
+SFRFC . . . . . . . . . . . . .  D ADDR   00FCH   A   
+SFRFD . . . . . . . . . . . . .  D ADDR   00FDH   A   
+SFRFE . . . . . . . . . . . . .  D ADDR   00FEH   A   
+SFRFF . . . . . . . . . . . . .  D ADDR   00FFH   A   
+SLEEP . . . . . . . . . . . . .  D ADDR   0097H   A   
+SP. . . . . . . . . . . . . . .  D ADDR   0081H   A   
+TCON. . . . . . . . . . . . . .  D ADDR   0088H   A   
+TCON_TF0. . . . . . . . . . . .  B ADDR   0088H.5 A   
+TCON_TR0. . . . . . . . . . . .  B ADDR   0088H.4 A   
+TH0 . . . . . . . . . . . . . .  D ADDR   008CH   A   
+TL0 . . . . . . . . . . . . . .  D ADDR   008AH   A   
+TMOD. . . . . . . . . . . . . .  D ADDR   0089H   A   
+UART_ISR. . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?UART_ISR?ISO7816_INTERRUPT
+UBRC. . . . . . . . . . . . . .  D ADDR   00DAH   A   
+UBUF. . . . . . . . . . . . . .  D ADDR   00D9H   A   
+UCR . . . . . . . . . . . . . .  D ADDR   00DFH   A   
+UCR2. . . . . . . . . . . . . .  D ADDR   00DEH   A   
+UCR3. . . . . . . . . . . . . .  D ADDR   00DDH   A   
+UIMSK . . . . . . . . . . . . .  D ADDR   00DCH   A   
+USR . . . . . . . . . . . . . .  D ADDR   00D8H   A   
+USR_TBE . . . . . . . . . . . .  B ADDR   00D8H.0 A   
+VDCON . . . . . . . . . . . . .  D ADDR   00DBH   A   
+WDTCON. . . . . . . . . . . . .  D ADDR   00A5H   A   
+WDTRST. . . . . . . . . . . . .  D ADDR   00A6H   A   
+WDT_ISR . . . . . . . . . . . .  C ADDR   0000H   R   SEG=?PR?WDT_ISR?ISO7816_INTERRUPT
+_?ISO_AUTOTXNULL. . . . . . . .  C ADDR   -----       EXT
+_ISO7816_STATE. . . . . . . . .  X ADDR   -----       EXT
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

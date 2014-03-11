@@ -1,0 +1,1 @@
+"drivers\ioman.c" LARGE OMF2 OPTIMIZE (0,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\ioman.lst) OBJECT(.\Debug\Output\ioman.obj)

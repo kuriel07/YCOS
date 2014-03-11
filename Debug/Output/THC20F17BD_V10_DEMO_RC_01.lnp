@@ -1,0 +1,34 @@
+".\Debug\Output\STARTUP.obj",
+".\Debug\Output\Main.obj",
+".\Debug\Output\ISO7816_Main.obj",
+".\Debug\Output\ISO7816_API.obj",
+".\Debug\Output\ISO7816_Interrupt.obj",
+".\Debug\Output\NORFlash.obj",
+".\Debug\Output\file.obj",
+".\Debug\Output\fs.obj",
+".\Debug\Output\security.obj",
+".\Debug\Output\midgard.obj",
+".\Debug\Output\A3A8.obj",
+".\Debug\Output\DES.obj",
+".\Debug\Output\barrenkalaheapcalc.obj",
+".\Debug\Output\hexstring.obj",
+".\Debug\Output\mem.obj",
+".\Debug\Output\ioman.obj",
+".\Debug\Output\yggdrasil.obj" 
+TO ".\Debug\Output\THC20F17BD_V10_DEMO_RC_01"
+
+
+/***************************Linker Control**************************/
+
+CASE
+CLASSES (
+	DATA	(D:0x0 - D:0x7F),
+	IDATA	(I:0x0 - I:0xFF),
+	XDATA	(X:0x0000 - X:0x07FF),
+    CODE	(C:0x0000 - C:0xFFFF),
+	CONST	(C:0x0000 - C:0xFFFF)
+)
+
+/*******************************************************************/
+
+

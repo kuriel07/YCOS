@@ -1,0 +1,169 @@
+C51 COMPILER V7.01  DES                                                                    01/25/2014 09:07:27 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE DES
+OBJECT MODULE PLACED IN .\Debug\Output\DES.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\DES.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\DES.lst) OBJECT(.\Debug\Output\DES.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+   2          #include "..\asgard\file.h"
+   3          #include "DES.h"
+   4          
+   5          extern void TDES_Decrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf) _REENTRANT_ ;
+   6          extern void TDES_Encrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf) _REENTRANT_ ;
+   7          void DES_Encrypt(uchar * key, uchar * inbuf, uchar * outbuf) _REENTRANT_;
+   8          void DES_Decrypt(uchar * key, uchar * inbuf, uchar * outbuf) _REENTRANT_;
+   9          
+  10          #if DES_OPERATION_MEMORY
+  11          void DES_MemOperation(uint16 length, uchar mode, uchar * key, uchar * inbuf, uchar * outbuf) _REENTRANT_ {
+  12   1              uint16 i, j;
+  13   1              uchar cbc_buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0}; 
+  14   1              uchar cbc_buffer2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  15   1              for(j=0;j<length;j+=8) {
+  16   2                      //DES/3DES encrypt/decrypt
+  17   2                      if(mode & DES_MODE_ENCRYPT) {
+  18   3                      //START ENCRYPTION
+  19   3                              if(mode & DES_MODE_CBC) {               //use CBC
+  20   4                                      for(i=0;i<8;i++) {
+  21   5                                              inbuf[j+i] ^= cbc_buffer[i];
+  22   5                                              //cbc_buffer[i] = cbc_buffer2[i];
+  23   5                                      }
+  24   4                              }
+  25   3                              if(mode & DES_MODE_TDES) {
+  26   4                                      TDES_Encrypt(key, key + 8, inbuf + j, outbuf + j);
+  27   4                              } else {
+  28   4                                      DES_Encrypt(key, inbuf + j, outbuf + j);
+  29   4                              }
+  30   3                              if(mode & DES_MODE_CBC) {               //use CBC       
+  31   4                                      for(i=0;i<8;i++) {
+  32   5                                              cbc_buffer[i] = outbuf[j+i];
+  33   5                                      }
+  34   4                              }
+  35   3                      //END ENCRYPTION
+  36   3                      } else {
+  37   3                      //START DECRYPTION
+  38   3                              if(mode & DES_MODE_CBC) {               //use CBC       
+  39   4                                      for(i=0;i<8;i++) {
+  40   5                                              cbc_buffer2[i] = inbuf[j+i];
+  41   5                                      }
+  42   4                              }
+  43   3                              if(mode & DES_MODE_TDES) {
+  44   4                                      TDES_Decrypt(key, key + 8, inbuf + j, outbuf + j);
+  45   4                              } else {
+  46   4                                      DES_Decrypt(key, inbuf + j, outbuf + j);
+  47   4                              }
+  48   3                              if(mode & DES_MODE_CBC) {               //use CBC
+  49   4                                      for(i=0;i<8;i++) {
+  50   5                                              outbuf[j+i] ^= cbc_buffer[i];
+  51   5                                              cbc_buffer[i] = cbc_buffer2[i];
+  52   5                                      }
+  53   4                              }
+  54   3                      //END DECRYPTION
+C51 COMPILER V7.01  DES                                                                    01/25/2014 09:07:27 PAGE 2   
+
+  55   3                      }
+  56   2              }
+  57   1      }
+  58          #endif
+  59          
+  60          
+  61          #if DES_OPERATION_FILE
+  62          void DES_FileOperation(uint16 length, uint16 offset, uchar mode, uchar * key, fs_handle * handle) _REENTRA
+             -NT_ {
+  63   1              uint16 i, j;
+  64   1              uchar k;
+  65   1              uchar cbc_buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0}; 
+  66   1              uchar cbc_buffer2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  67   1              uchar buffer[32];
+  68   1              for(j=0;j<length;j+=32) {
+  69   2                      _readbin(handle, offset + j, buffer, 32);
+  70   2                      for(k=0;k<32&&(j+k)<length;k+=8) {
+  71   3                              //DES/3DES encrypt/decrypt
+  72   3                              if(mode & DES_MODE_ENCRYPT) {
+  73   4                              //START ENCRYPTION
+  74   4                                      if(mode & DES_MODE_CBC) {               //use CBC
+  75   5                                              for(i=0;i<8;i++) {
+  76   6                                                      buffer[k+i] ^= cbc_buffer[i];
+  77   6                                              }
+  78   5                                      }
+  79   4                                      if(mode & DES_MODE_TDES) {
+  80   5                                              TDES_Encrypt(key, key + 8, buffer+k, buffer+k);
+  81   5                                      } else {
+  82   5                                              DES_Encrypt(key, buffer+k, buffer+k);
+  83   5                                      } 
+  84   4                                      if(mode & DES_MODE_CBC) {               //use CBC       
+  85   5                                              for(i=0;i<8;i++) {
+  86   6                                                      cbc_buffer[i] = buffer[k+i];
+  87   6                                              }
+  88   5                                      }
+  89   4                              //END ENCRYPTION
+  90   4                              } else {
+  91   4                              //START DECRYPTION
+  92   4                                      if(mode & DES_MODE_CBC) {               //use CBC       
+  93   5                                              for(i=0;i<8;i++) {
+  94   6                                                      cbc_buffer2[i] = buffer[k+i];
+  95   6                                              }
+  96   5                                      }
+  97   4                                      if(mode & DES_MODE_TDES) {
+  98   5                                              TDES_Decrypt(key, key + 8, buffer+k, buffer+k);
+  99   5                                      } else {
+ 100   5                                              DES_Decrypt(key, buffer+k, buffer+k);
+ 101   5                                      } 
+ 102   4                                      if(mode & DES_MODE_CBC) {               //use CBC
+ 103   5                                              for(i=0;i<8;i++) {
+ 104   6                                                      buffer[k+i] ^= cbc_buffer[i];
+ 105   6                                                      cbc_buffer[i] = cbc_buffer2[i];
+ 106   6                                              }
+ 107   5                                      }
+ 108   4                              //END DECRYPTION
+ 109   4                              }
+ 110   3                      }
+ 111   2                      _writebin(handle, offset + j, buffer, 32);
+ 112   2              }
+ 113   1      }
+ 114          #endif
+ 115          
+C51 COMPILER V7.01  DES                                                                    01/25/2014 09:07:27 PAGE 3   
+
+ 116          /*void DES_CBC_Encrypt(uchar * key, uchar * inbuf, uchar * outbuf) _REENTRANT_ {
+ 117          
+ 118          }
+ 119          
+ 120          void TDES_CBC_Decrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf) _REENTRANT_ {
+ 121                  uchar i;
+ 122                  uchar cbc_buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0}; 
+ 123                  uchar cbc_buffer2[8] = {0, 0, 0, 0, 0, 0, 0, 0};        
+ 124                  for(i=0;i<8;i++) {
+ 125                          cbc_buffer2[i] = inbuf[i];
+ 126                  } 
+ 127                  TDES_Decrypt(key1, key2, inbuf, outbuf);
+ 128                  for(i=0;i<8;i++) {
+ 129                          outbuf[i] ^= cbc_buffer[i];
+ 130                          cbc_buffer[i] = cbc_buffer2[i];
+ 131                  }
+ 132          }
+ 133          
+ 134          void TDES_CBC_Encrypt(uchar * key1, uchar * key2, uchar * inbuf, uchar * outbuf) _REENTRANT_ {
+ 135          
+ 136          }*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1326    ----
+   CONSTANT SIZE    =     32    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

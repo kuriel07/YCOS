@@ -1,0 +1,271 @@
+C51 COMPILER V7.01  SAT                                                                    01/25/2014 09:07:23 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE SAT
+OBJECT MODULE PLACED IN .\Debug\Output\SAT.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\SAT.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\SAT.lst) OBJECT(.\Debug\Output\SAT.obj)
+
+stmt level    source
+
+   1          //#include "..\..\defs.h"
+   2          //#include "allocator\allocator.h"
+   3          #include "..\liquid.h"
+   4          #include "..\config.h"
+   5          #include "..\midgard\midgard.h"
+   6          #include "..\asgard\file.h"
+   7          #include <string.h>
+   8          #include <stdarg.h>
+   9          
+  10          //fs_handle stk_fs _at_ 0x5f8;
+  11          
+  12          uchar fetch_len = 0;
+  13          
+  14          #if SAT_USE_TEMP_FILE == 0
+  15          uchar * _sat_buffer_in;
+  16          uchar _sat_buffer[256];
+  17          //uchar * _sat_temp = _sat_buffer;
+  18          #else 
+              fs_handle _sat_fs;
+              #endif 
+  21          
+  22          //fs_handle stk_fs;
+  23          
+  24          uchar SAT_push(uchar * buffer, uchar tag, uchar length, uchar * value) _REENTRANT_ {
+  25   1              uchar i = 0, j;
+  26   1              buffer[i++] = tag;
+  27   1              if(length > 0x7F) {
+  28   2                      buffer[i++] = 0x81;
+  29   2                      buffer[i++] = length;
+  30   2              } else {
+  31   2                      buffer[i++] = length;
+  32   2              }
+  33   1              for(j=0;j<length;j++) {
+  34   2                      buffer[i++] = value[j];
+  35   2              }
+  36   1              return i;       
+  37   1      }
+  38          
+  39          uchar SAT_pop(uchar * buffer, uchar * tag, uchar * size, uchar * value) _REENTRANT_ {
+  40   1              uchar i = 0, j;
+  41   1              tag[0] = buffer[i++];
+  42   1              if(buffer[i] == 0x81) {
+  43   2                      i++;
+  44   2              }
+  45   1              size[0] = buffer[i++];
+  46   1              for(j=0;j<size[0];j++) {
+  47   2                      value[j] = buffer[i++];
+  48   2              }
+  49   1              return i;
+  50   1      }
+  51          
+  52          uchar SAT_command(uchar * buffer, uchar number, uchar type, uchar qualifier) _REENTRANT_ { 
+  53   1              buffer[2] = number;
+  54   1              buffer[3] = type;
+C51 COMPILER V7.01  SAT                                                                    01/25/2014 09:07:23 PAGE 2   
+
+  55   1              buffer[4] = qualifier;
+  56   1              return SAT_push(buffer, STK_TAG_CMD_DETAIL, 3, buffer+2);       
+  57   1      }
+  58          
+  59          uchar SAT_device(uchar * buffer, uchar src, uchar dst) _REENTRANT_ {
+  60   1              buffer[2] = src;
+  61   1              buffer[3] = dst;
+  62   1              return SAT_push(buffer, STK_TAG_DEV_ID, 2, buffer+2);   
+  63   1      }
+  64          
+  65          uchar SAT_init(uchar * buffer, uint16 size) _REENTRANT_ {
+  66   1              #if SAT_USE_TEMP_FILE
+                      _select(&_sat_fs, FID_MF);
+                      _select(&_sat_fs, FID_LIQUID);
+                      if(_select(&_sat_fs, FID_SAT) < 0x9F00) return 0;
+                      if(size == 0) return 1;
+                      if(_writebin(&_sat_fs, 0, buffer, size) == APDU_SUCCESS) return 1; 
+                      return 0;
+                      #else
+  74   1              //if(_sat_temp != NULL) { m_free(_sat_temp); _sat_temp = NULL; }
+  75   1              //_sat_temp = m_alloc(SAT_MAX_RESPONSE_SIZE);
+  76   1              //if(_sat_temp != NULL) return 0;                               //SAT overload
+  77   1              //if(_sat_temp == NULL) _sat_temp = m_alloc(SAT_MAX_RESPONSE_SIZE);
+  78   1              //_sat_temp = _sat_buffer;
+  79   1              //memcpy((uchar *)_sat_buffer, buffer, size); 
+  80   1              _sat_buffer_in = buffer;
+  81   1              return 1;
+  82   1              #endif
+  83   1      }
+*** WARNING C280 IN LINE 65 OF FRAMEWORK\SAT.C: 'size': unreferenced local variable
+  84          
+  85          uchar SAT_file_pop(uint16 i, uchar * tag, uchar * size, uchar * value) _REENTRANT_ {
+  86   1              #if SAT_USE_TEMP_FILE
+                      uchar j = 0;
+                      _readbin(&_sat_fs, i + j, tag, 1); j++;
+                      _readbin(&_sat_fs, i + j, size, 1); j++;
+                      if(size[0] == 0x81) {             
+                              _readbin(&_sat_fs, i + j, size, 1); j++;
+                      }
+                      _readbin(&_sat_fs, i + j, value, size[0]);
+                      return (j + size[0]);
+                      #else
+  96   1              /*if(_sat_temp != NULL) return */ return SAT_pop(_sat_buffer_in + i, tag, size, value);
+  97   1              return 0;
+  98   1              #endif
+  99   1      }  
+ 100          
+ 101          uchar SAT_read(uchar * buffer, uint16 size) _REENTRANT_ {                       //fetch purpose
+ 102   1              #if SAT_USE_TEMP_FILE
+                      _select(&_sat_fs, FID_MF);
+                      _select(&_sat_fs, FID_LIQUID);
+                      if(_select(&_sat_fs, FID_SAT) < 0x9F00) return 0;
+                      if(_readbin(&_sat_fs, 0, buffer, size) == APDU_SUCCESS) return 1;
+                      #else
+ 108   1              //if(_sat_temp != NULL) { memcpy(buffer, _sat_temp, size); return 1; }
+ 109   1              memcpy(buffer, (uchar *)_sat_buffer, size);
+ 110   1              #endif
+ 111   1              return 0;
+ 112   1      }
+ 113          
+ 114          void SAT_cleanup(void) _REENTRANT_ {
+ 115   1              #if SAT_USE_TEMP_FILE == 0
+C51 COMPILER V7.01  SAT                                                                    01/25/2014 09:07:23 PAGE 3   
+
+ 116   1              //if(_sat_temp != NULL) { m_free(_sat_temp); _sat_temp = NULL; }
+ 117   1              #endif
+ 118   1              fetch_len = 0;
+ 119   1      }
+ 120          
+ 121          uint16 SAT_status(void) _REENTRANT_ {
+ 122   1              return (fetch_len)?(APDU_STK_RESPONSE | fetch_len):APDU_SUCCESS;
+ 123   1      }
+ 124          
+ 125          uint16 SAT_response(uchar * buffer, uchar len) _REENTRANT_ {
+ 126   1              fetch_len = SAT_file_push(0, FETCH_TAG_PROSIM, len, buffer);
+ 127   1              return SAT_status(); 
+ 128   1      }
+ 129          
+ 130          uint16 SAT_file_flush(uchar length) _REENTRANT_ {       
+ 131   1              SAT_read(STK_buffer, length);
+ 132   1              return SAT_response(STK_buffer, length);
+ 133   1      }
+ 134          
+ 135          uchar SAT_file_push(uint16 i, uchar tag, uchar length, uchar * value) _REENTRANT_ {
+ 136   1              #if SAT_USE_TEMP_FILE
+                      uchar j = 0;
+                      //uchar * buffer = (uchar *)m_alloc(length + 3);
+                      uchar buffer[3];
+                      _select(&_sat_fs, FID_MF);
+                      _select(&_sat_fs, FID_LIQUID);
+                      if(_select(&_sat_fs, FID_SAT) < 0x9F00) return 0;
+                      buffer[j++] = tag;
+                      if(length > 0x7F) {
+                              buffer[j++] = 0x81;
+                      }
+                      buffer[j++] = length;
+                      //memcpy(buffer + j, value, length);
+                      _writebin(&_sat_fs, i, buffer, j);
+                      _writebin(&_sat_fs, i + j, value, length);
+                      //m_free(buffer);
+                      return (j + length);
+                      #else
+ 154   1              /*if(_sat_temp != NULL)*/ 
+ 155   1              return SAT_push(_sat_buffer + i, tag, length, value);
+ 156   1              //return 0;
+ 157   1              #endif  
+ 158   1      }
+ 159          
+ 160          #if 0
+              uint16 SAT_file_write(uchar * fmt, ...) _REENTRANT_ {
+              #else
+ 163          uint16 SAT_printf(uchar * fmt, ...) _REENTRANT_ {
+ 164   1      #endif
+ 165   1              va_list arg_ptr;
+ 166   1              uchar len;
+ 167   1              uint16 i = 0;
+ 168   1              uchar j;
+ 169   1              uchar * ptr;
+ 170   1              uchar buffer[5];
+ 171   1              va_start(arg_ptr, fmt);
+ 172   1              len = strlen(fmt);
+ 173   1              //allocate new temporary response for SAT
+ 174   1              //if(_sat_temp != NULL) { m_free(_sat_temp); _sat_temp = NULL; }
+ 175   1              //_sat_temp = m_alloc(SAT_MAX_RESPONSE_SIZE);
+ 176   1              #if SAT_USE_TEMP_FILE == 0
+ 177   1              //_sat_temp = _sat_buffer;
+C51 COMPILER V7.01  SAT                                                                    01/25/2014 09:07:23 PAGE 4   
+
+ 178   1              //if(_sat_temp == NULL) _sat_temp = m_alloc(SAT_MAX_RESPONSE_SIZE);
+ 179   1              #endif
+ 180   1      
+ 181   1              for(j=0;j<len;j++) {
+ 182   2                      switch(fmt[j]) {
+ 183   3                              case 'c':               //COMMAND TAG
+ 184   3                              case 'C':
+ 185   3                                      buffer[0] = 0;                                                          //command number
+ 186   3                                      buffer[1] = va_arg(arg_ptr, uchar);                     //proactive sim command
+ 187   3                                      buffer[2] = 0;                                                          //command qualifier
+ 188   3                                      i += SAT_file_push(i, STK_TAG_CMD_DETAIL, 3, buffer);
+ 189   3                                      break;  
+ 190   3                              case 'd':                //DEVICE TAG
+ 191   3                              case 'D':
+ 192   3                                      buffer[0] = 0x81;
+ 193   3                                      buffer[1] = va_arg(arg_ptr, uchar);
+ 194   3                                      i += SAT_file_push(i, STK_TAG_DEV_ID, 2, buffer);
+ 195   3                                      break; 
+ 196   3                              case 'a':                //ADDRESS TAG
+ 197   3                              case 'A':
+ 198   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 199   3                                      i += SAT_file_push(i, STK_TAG_ADDRESS & 0x7F, ptr[0], ptr + 1);
+ 200   3                                      break;
+ 201   3                              case 'l':
+ 202   3                              case 'L':
+ 203   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 204   3                                      i += SAT_file_push(i, STK_TAG_ALPHA & 0x7F, ptr[0], ptr + 1);
+ 205   3                                      break;
+ 206   3                              case 'm':                //MESSAGE TAG (SMS-TPDU)
+ 207   3                              case 'M':
+ 208   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 209   3                                      i += SAT_file_push(i, STK_TAG_SMS_TPDU & 0x7F, ptr[0], ptr + 1);
+ 210   3                                      break;
+ 211   3                              case 't':
+ 212   3                              case 'T':
+ 213   3                                      buffer[0] = va_arg(arg_ptr, uchar);
+ 214   3                                      i += SAT_file_push(i, STK_TAG_TIMER_IDENTIFIER & 0x7F, 1, buffer);
+ 215   3                                      break;
+ 216   3                              case 'u':
+ 217   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 218   3                                      i += SAT_file_push(i, STK_TAG_USSD_STRING & 0x7F, ptr[0], ptr + 1);
+ 219   3                                      break;
+ 220   3                              case 'v':
+ 221   3                              case 'V':
+ 222   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 223   3                                      i += SAT_file_push(i, STK_TAG_TIMER_VALUE & 0x7F, ptr[0], ptr + 1);
+ 224   3                                      break;
+ 225   3                              case 'x':
+ 226   3                                      ptr = va_arg(arg_ptr, uchar *);
+ 227   3                                      i += SAT_file_push(i, STK_TAG_TEXT_STRING & 0x7F, ptr[0], ptr + 1);
+ 228   3                                      break;
+ 229   3                      }
+ 230   2              } 
+ 231   1              va_end(arg_ptr);
+ 232   1              SAT_read(STK_buffer, i);
+ 233   1              return SAT_response(STK_buffer, i);
+ 234   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1248    ----
+   CONSTANT SIZE    =   ----    ----
+C51 COMPILER V7.01  SAT                                                                    01/25/2014 09:07:23 PAGE 5   
+
+   XDATA SIZE       =    260    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

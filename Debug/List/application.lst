@@ -1,0 +1,1035 @@
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE APPLICATION
+OBJECT MODULE PLACED IN .\Debug\Output\application.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE yggdrasil\application.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DE
+                    -BUG PRINT(.\Debug\List\application.lst) OBJECT(.\Debug\Output\application.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+   2          #include "..\asgard\file.h"
+   3          #include "..\asgard\fs.h"
+   4          #include "..\midgard\midgard.h"
+   5          #include "..\liquid.h"
+   6          #include "..\framework\vas.h"
+   7          #include "..\framework\sms.h"
+   8          #include "..\framework\dcs.h" 
+   9          #include "..\misc\mem.h"
+  10          #include "application.h"
+  11          #include <string.h>
+  12          
+  13          #define TSEL_MENU_DAFTAR                1
+  14          #define TSEL_MENU_MUTASI                2
+  15          #define TSEL_MENU_STATUS                3
+  16          uchar tsel_menu = TSEL_MENU_DAFTAR;
+  17          #define TSEL_LANG_BAHASA                0x0B
+  18          #define TSEL_LANG_ENGLISH               0x0E
+  19          uchar tsel_lang = TSEL_LANG_BAHASA;
+  20          #define TSEL_NSP_AKTIFASI               1
+  21          #define TSEL_NSP_KIRIM                  2
+  22          #define TSEL_NSP_LANGGANAN              3
+  23          #define TSEL_NSP_PERPANJANGAN   4
+  24          #define TSEL_NSP_BANTUAN                5
+  25          #define TSEL_NSP_KIRIM_TUJUAN   6
+  26          uchar tsel_nsp = TSEL_NSP_AKTIFASI;
+  27          #define TSEL_PULSA_PHONEBOOK    1
+  28          #define TSEL_PULSA_NOMOR                2
+  29          uchar tsel_pulsa = TSEL_PULSA_PHONEBOOK;
+  30          
+  31          
+  32          #define TSEL_UDS_NAMA                   20
+  33          #define TSEL_UDS_KLAHIR                 15
+  34          #define TSEL_UDS_TLAHIR                 10
+  35          #define TSEL_UDS_ALAMAT                 50
+  36          #define TSEL_UDS_KOTA                   15
+  37          #define TSEL_UDS_KODEPOS                5
+  38          #define TSEL_UDS_ID                             16
+  39          struct tsel_user_data {
+  40                  uchar nama[TSEL_UDS_NAMA];
+  41                  uchar s0;
+  42                  uchar kota_lahir[TSEL_UDS_KLAHIR];
+  43                  uchar s1;
+  44                  uchar tgl_lahir[TSEL_UDS_TLAHIR];
+  45                  uchar s2;
+  46                  uchar alamat[TSEL_UDS_ALAMAT];
+  47                  uchar s3;
+  48                  uchar kota[TSEL_UDS_KOTA];
+  49                  uchar s4;
+  50                  uchar kode_pos[TSEL_UDS_KODEPOS];
+  51                  uchar s5;
+  52                  uchar tipe_id;
+  53                  uchar s6;
+  54                  uchar no_id[TSEL_UDS_ID];
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 2   
+
+  55                  uchar s7;
+  56                  uchar sex;
+  57                  uchar s8;
+  58                  uchar agama;
+  59                  uchar s9;
+  60                  uchar hobi;
+  61                  uchar s10;
+  62                  uchar perokok;  
+  63          };
+  64          
+  65          typedef struct tsel_user_data tsel_user_data;
+  66          
+  67          uchar remove_null(uchar * buffer_in, uchar size, uchar * buffer_out) _REENTRANT_ {
+  68   1              uchar i;
+  69   1              uchar j = 0;
+  70   1              for(i=0;i<size;i++) {
+  71   2                      if(buffer_in[i] != 0) {
+  72   3                              buffer_out[j++] = buffer_in[i]; 
+  73   3                      }
+  74   2              }
+  75   1              return j;
+  76   1      }
+  77          
+  78          #define USR_CONF_REG_FLAG               0
+  79          #define USR_CONF_SEND_REG               1
+  80          #define USR_CONF_CUR_LANG               2
+  81          #define USR_CONF_CHNG_LANG              3
+  82          
+  83          extern uchar _sat_buffer[];
+  84          uint16 _default_menu_offset = 0;
+  85          uchar is_sending_reg = FALSE;     
+  86          uchar * x_variable = NULL;
+  87          uchar * y_variable = NULL;
+  88          uint16 send_registration(uchar mode) _REENTRANT_ {
+  89   1              fs_handle cb_fs;
+  90   1              uchar * temp;
+  91   1              uchar len;
+  92   1              uchar res;
+  93   1              uchar i = 0;
+  94   1              file_select(&cb_fs, FID_MF);
+  95   1              file_select(&cb_fs, FID_LIQUID);
+  96   1              #if 1
+  97   1              file_select(&cb_fs, 0x6F02);            //user data
+  98   1              switch(mode) {
+  99   2                      case TSEL_MENU_DAFTAR:
+ 100   2                              memcpy(STK_buffer, "STK ", 4);
+ 101   2                              i = 4;
+ 102   2                              goto format_registration;
+ 103   2                      case TSEL_MENU_MUTASI:  
+ 104   2                              memcpy(STK_buffer, "Mutasi ", 7);
+ 105   2                              i = 7;
+ 106   2                              format_registration:
+ 107   2                              file_readbin(&cb_fs, 0, STK_buffer + i, sizeof(tsel_user_data));
+ 108   2                              ((tsel_user_data *)(STK_buffer + i))->s0 = '|';
+ 109   2                              ((tsel_user_data *)(STK_buffer + i))->s1 = '|';
+ 110   2                              ((tsel_user_data *)(STK_buffer + i))->s2 = '|';
+ 111   2                              ((tsel_user_data *)(STK_buffer + i))->s3 = '|';
+ 112   2                              ((tsel_user_data *)(STK_buffer + i))->s4 = '|';
+ 113   2                              ((tsel_user_data *)(STK_buffer + i))->s5 = '|';
+ 114   2                              ((tsel_user_data *)(STK_buffer + i))->s6 = '|';
+ 115   2                              ((tsel_user_data *)(STK_buffer + i))->s7 = '|';
+ 116   2                              ((tsel_user_data *)(STK_buffer + i))->s8 = '|';
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 3   
+
+ 117   2                              ((tsel_user_data *)(STK_buffer + i))->s9 = '|';
+ 118   2                              ((tsel_user_data *)(STK_buffer + i))->s10 = '|';
+ 119   2                              res = remove_null(STK_buffer, sizeof(tsel_user_data) + i, STK_buffer);
+ 120   2                              temp = m_alloc(res);
+ 121   2                              memcpy(temp, STK_buffer, res);
+ 122   2                              len = encode_SMSTPDU(SMS_TYPE_NOHEADER | SMS_TYPE_SUBMIT, 0x7F, 0, res, "\x03\x81\x44\x44", temp, STK_b
+             -uffer + 1);
+*** WARNING C182 IN LINE 122 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 123   2                              //len = encode_SMSTPDU(SMS_TYPE_NOHEADER | SMS_TYPE_PACKED7 | SMS_TYPE_SUBMIT, res, "\x03\x81\x44\x44",
+             - temp, STK_buffer + 1);       //SMS submit
+ 124   2                              STK_buffer[0] = len;
+ 125   2                              m_free(temp);
+ 126   2                              break;
+ 127   2                      case TSEL_MENU_STATUS:
+ 128   2                              memcpy(STK_buffer, "Cek", 3);
+ 129   2                              res = 3;
+ 130   2                              temp = m_alloc(res);
+ 131   2                              memcpy(temp, STK_buffer, res);
+ 132   2                              len = encode_SMSTPDU(SMS_TYPE_NOHEADER | SMS_TYPE_SUBMIT, 0x7F, 0, res, "\x03\x81\x44\x44", temp, STK_b
+             -uffer + 1);
+*** WARNING C182 IN LINE 132 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 133   2                              //len = encode_SMSTPDU(SMS_TYPE_NOHEADER | SMS_TYPE_PACKED7 | SMS_TYPE_SUBMIT, res, "\x03\x81\x44\x44",
+             - temp, STK_buffer + 1);       //SMS submit
+ 134   2                              m_free(temp);
+ 135   2                              STK_buffer[0] = len;
+ 136   2                              break;
+ 137   2              }
+ 138   1              temp = m_alloc(9);
+ 139   1              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 140   2                      memcpy(temp + 1, "Mengirim", 8);
+ 141   2                      temp[0] = 8;
+ 142   2              } else {        
+ 143   2                      memcpy(temp + 1, "Sending", 7);
+ 144   2                      temp[0] = 7;
+ 145   2                      //SAT_printf("cdlm", (SEND_SHORT_MESSAGE & 0x7F), STK_DEV_ME, temp, STK_buffer);
+ 146   2              } 
+ 147   1              SAT_printf("cdlm", (SEND_SHORT_MESSAGE & 0x7F), STK_DEV_ME, temp, STK_buffer);
+ 148   1              m_free(temp);
+ 149   1              return SAT_status();
+ 150   1              //is_sending_reg = TRUE;
+ 151   1              //result = CALLBACK_TAMPER_RESULT | CALLBACK_STAY_NODE;
+ 152   1              #endif
+ 153   1      }
+ 154          
+ 155          uchar is_leap_year(uint16 year) _REENTRANT_ {
+ 156   1              if((year % 4) == 0) {
+ 157   2                      if((year % 100) == 0) { 
+ 158   3                              if((year % 400) == 0) {
+ 159   4                                      return TRUE;
+ 160   4                              } else {
+ 161   4                                      return FALSE; 
+ 162   4                              } 
+ 163   3                      } else { 
+ 164   3                              return TRUE; 
+ 165   3                      }
+ 166   2              } else {
+ 167   2                      return FALSE;           
+ 168   2              }
+ 169   1      }
+ 170          
+ 171          uchar is_date_valid(uchar * buffer) _REENTRANT_ {
+ 172   1              uchar tgl;
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 4   
+
+ 173   1              uchar bln;
+ 174   1              uint16 thn;
+ 175   1              tgl = (buffer[1] & 0x0F);
+ 176   1              tgl += ((buffer[0] & 0x0F) * 10);
+ 177   1              bln = (buffer[3] & 0x0F);
+ 178   1              bln += ((buffer[2] & 0x0F) * 10);
+ 179   1              thn = (buffer[7] & 0x0F);  
+ 180   1              thn += ((buffer[6] & 0x0F) * 10);
+ 181   1              thn += ((buffer[5] & 0x0F) * 100);
+ 182   1              thn += ((buffer[4] & 0x0F) * 1000);
+ 183   1              if(tgl == 0) return 1;
+ 184   1              if(thn == 0) return 1;
+ 185   1              if(bln == 0) return 1;
+ 186   1              switch(bln) {
+ 187   2                      case 1:
+ 188   2                      case 3:
+ 189   2                      case 5:
+ 190   2                      case 7:
+ 191   2                      case 8:
+ 192   2                      case 10:
+ 193   2                      case 12:                //31 hari
+ 194   2                              if(tgl > 31) return 1;
+ 195   2                              break;
+ 196   2                      case 4:
+ 197   2                      case 6:
+ 198   2                      case 9:
+ 199   2                      case 11:                //30 hari
+ 200   2                              if(tgl > 30) return 1;
+ 201   2                              break;
+ 202   2                      case 2:                 //28/29 hari
+ 203   2                              if(is_leap_year(thn)) {
+ 204   3                                      if(tgl > 29) return 1;
+ 205   3                              } else {
+ 206   3                                      if(tgl > 28) return 1;
+ 207   3                              }
+ 208   2                              break;
+ 209   2              }
+ 210   1              return 0;
+ 211   1      }
+ 212          
+ 213          uint16 user_packet_decode(uchar * buffer, uchar * address, uchar length) _REENTRANT_  {
+ 214   1              if(memcmp(buffer, "$REG$", 5) == 0) {
+ 215   2                      return send_registration(1);
+ 216   2              }
+ 217   1              return APDU_SUCCESS;
+ 218   1      }
+*** WARNING C280 IN LINE 213 OF YGGDRASIL\APPLICATION.C: 'address': unreferenced local variable
+*** WARNING C280 IN LINE 213 OF YGGDRASIL\APPLICATION.C: 'length': unreferenced local variable
+ 219          
+ 220          uchar user_callback(uchar state, uchar tag, uchar size, uchar * buffer) _REENTRANT_ {
+ 221   1              uchar result = CALLBACK_SUCCESS;
+ 222   1      
+ 223   1              uchar len;
+ 224   1              //uchar res[51];                //50 bytes
+ 225   1              //uchar * address;
+ 226   1              //uchar * smsc;
+ 227   1              uint16 i;
+ 228   1              uchar * temp;
+ 229   1              uchar * sex;
+ 230   1              uchar * agama;
+ 231   1              uchar * hobi;
+ 232   1              uchar * nama;
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 5   
+
+ 233   1              uchar * klahir;
+ 234   1              uchar * tlahir;
+ 235   1              fs_handle cb_fs;
+ 236   1      //      uchar i;
+ 237   1              uchar res;
+ 238   1              uchar dcs;
+ 239   1              extern uint16 _stk_menu_offset;
+ 240   1              extern uint16 _stk_menu_current;
+ 241   1              tag |= 0x80; 
+ 242   1              //#define CALLBACK_STAY_NODE            (1<<5)
+ 243   1              //#define CALLBACK_TAMPER_RESULT        (1<<6)
+ 244   1              //#define CALLBACK_FORCE_END            (1<<7)
+ 245   1              //result = (CALLBACK_TAMPER_RESULT);
+ 246   1              switch(tag) {
+ 247   2                      case STK_TAG_ITEM_ID:
+ 248   2                              file_select(&cb_fs, FID_MF);    
+ 249   2                              file_select(&cb_fs, FID_LIQUID);
+ 250   2                              file_select(&cb_fs, 0x6F02);            //user data
+ 251   2                              switch(state) {
+ 252   3                                      case 0x80:                        //select registrasi
+ 253   3                                              tsel_menu = buffer[0];
+ 254   3                                              if(tsel_menu == TSEL_MENU_STATUS) {     
+ 255   4                                                      //send sms
+ 256   4                                                      send_registration(TSEL_MENU_STATUS);
+ 257   4                                                      tsel_menu = TSEL_MENU_DAFTAR;    
+ 258   4                                                      result = (CALLBACK_TAMPER_RESULT | CALLBACK_FORCE_END);
+ 259   4                                                      //break;
+ 260   4                                              }// else {
+ 261   3                                              
+ 262   3                                              _default_menu_offset = _stk_menu_offset;
+ 263   3                                              break;
+ 264   3                                      case 0x11:
+ 265   3                                      case 0x01:                      //tipe identitas
+ 266   3                                              res = buffer[0];
+ 267   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 268   3                                              ((tsel_user_data *)STK_buffer)->tipe_id = (0x30 | res);
+ 269   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 270   3                                              break;
+ 271   3                                      case 0x19:
+ 272   3                                      case 0x09:                              //sex
+ 273   3                                              res = buffer[0];
+ 274   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 275   3                                              ((tsel_user_data *)STK_buffer)->sex = (0x30 | res);
+ 276   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 277   3                                              break;
+ 278   3                                      case 0x1A:
+ 279   3                                      case 0x0A:                        //agama
+ 280   3                                              res = buffer[0];
+ 281   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 282   3                                              ((tsel_user_data *)STK_buffer)->agama = (0x30 | res);
+ 283   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 284   3                                              break;
+ 285   3                                      case 0x1B:
+ 286   3                                      case 0x0B:                              //hobi
+ 287   3                                              res = buffer[0];
+ 288   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 289   3                                              ((tsel_user_data *)STK_buffer)->hobi = (0x30 | res);
+ 290   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 291   3                                              break;
+ 292   3                                      case 0x1C:
+ 293   3                                      case 0x0C:                      //perokok
+ 294   3                                              res = buffer[0];
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 6   
+
+ 295   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 296   3                                              ((tsel_user_data *)STK_buffer)->perokok = (0x30 | res);
+ 297   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 298   3                                              break;
+ 299   3                                      case 0x20:                        //NSP1212
+ 300   3                                              tsel_nsp = buffer[0];
+ 301   3                                              if(tsel_nsp == TSEL_NSP_BANTUAN) {              //send ussd immedietly
+ 302   4                                                      memcpy(STK_buffer + 2, "*121#", 5);
+ 303   4                                                      res = 6;
+ 304   4                                                      STK_buffer[0] = res;
+ 305   4                                                      STK_buffer[1] = 4;         
+ 306   4                                                      temp = m_alloc(9);
+ 307   4                                                      if(tsel_lang == TSEL_LANG_BAHASA) {
+ 308   5                                                              memcpy(temp + 1, "Mengirim", 8);
+ 309   5                                                              temp[0] = 8;
+ 310   5                                                      } else {        
+ 311   5                                                              memcpy(temp + 1, "Sending", 7);
+ 312   5                                                              temp[0] = 7;
+ 313   5                                                      }  
+ 314   4                                                      STK_buffer[1] = 0;
+ 315   4                                                      STK_buffer[0] = encode_827(STK_buffer + 2, STK_buffer + 2, res, 0) + 1;
+ 316   4                                                      SAT_printf("cdlu", (SEND_USSD & 0x7F), STK_DEV_NETWORK, temp, STK_buffer);
+ 317   4                                                      m_free(temp);
+ 318   4                                                      result = (CALLBACK_TAMPER_RESULT | CALLBACK_FORCE_END);
+ 319   4                                                      //break;        
+ 320   4                                              }
+ 321   3                                              break;
+ 322   3                                      case 0x40:                      //Transfer pulsa
+ 323   3                                              tsel_pulsa = buffer[0]; 
+ 324   3                                              if(tsel_pulsa == TSEL_PULSA_NOMOR) {
+ 325   4                                                      temp = m_alloc(9);
+ 326   4                                                      if(tsel_lang == TSEL_LANG_BAHASA) {
+ 327   5                                                              memcpy(temp + 1, "\x04Nomor", 6);
+ 328   5                                                              temp[0] = 6;
+ 329   5                                                      } else {        
+ 330   5                                                              memcpy(temp + 1, "\x04Number", 7);
+ 331   5                                                              temp[0] = 7;
+ 332   5                                                      } 
+ 333   4                                                      SAT_printf("cdx", (GET_INPUT & 0x7F), STK_DEV_ME, temp);
+ 334   4                                                      m_free(temp);
+ 335   4                                                      result = (CALLBACK_TAMPER_RESULT);      
+ 336   4                                              }
+ 337   3                                              break;
+ 338   3                                      case 0xE0:                                              //change language (popup)
+ 339   3                                              res = buffer[0];
+ 340   3                                              file_select(&cb_fs, FID_MF);    
+ 341   3                                              file_select(&cb_fs, FID_LIQUID);
+ 342   3                                              if(res == 1) {
+ 343   4                                                      file_select(&cb_fs, 0x6F2B);
+ 344   4                                              } else { 
+ 345   4                                                      file_select(&cb_fs, 0x6F2E);
+ 346   4                                              }
+ 347   3                                              temp = m_alloc(sizeof(fs_handle)); 
+ 348   3                                              file_select(temp, FID_MF);      
+*** WARNING C182 IN LINE 348 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 349   3                                              file_select(temp, FID_LIQUID);
+*** WARNING C182 IN LINE 349 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 350   3                                              file_select(temp, FID_STKMENU);
+*** WARNING C182 IN LINE 350 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 351   3                                              nama = file_get_current_header(temp);
+*** WARNING C182 IN LINE 351 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 352   3                                              if(((ef_header *)nama)->size > 0x80) {
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 7   
+
+ 353   4                                                      for(i=0;i<((ef_header *)nama)->size - 0x80;i+=0x80) {
+ 354   5                                                              file_readbin(&cb_fs, i, STK_buffer, 0x80);
+ 355   5                                                              file_writebin(temp, i, STK_buffer, 0x80);
+*** WARNING C182 IN LINE 355 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 356   5                                                      }
+ 357   4                                              }
+ 358   3                                              file_readbin(&cb_fs, i, STK_buffer, ((ef_header *)nama)->size - i);
+ 359   3                                              file_writebin(temp, i, STK_buffer, ((ef_header *)nama)->size - i);
+*** WARNING C182 IN LINE 359 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 360   3                                              file_readbin(temp, 0, STK_buffer, sizeof(stk_config));
+*** WARNING C182 IN LINE 360 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 361   3                                              m_free(nama);
+ 362   3                                              m_free(temp);
+ 363   3                                              //reset engine 
+ 364   3                                              _stk_menu_offset = ((stk_config *)STK_buffer)->sibling;
+ 365   3                                              _stk_menu_current = 0;                  
+ 366   3                                              break;
+ 367   3                                      case 0xE1:                                              //change language menu 
+ 368   3                                              res = STK_buffer[0];
+ 369   3                                              file_select(&cb_fs, 0x6F01);            //user config   
+ 370   3                                              file_readbin(&cb_fs, 0, STK_buffer, 0x0C);
+ 371   3                                              if(res == 1) {
+ 372   4                                                      STK_buffer[USR_CONF_CHNG_LANG] = TSEL_LANG_BAHASA;                      
+ 373   4                                              } else { 
+ 374   4                                                      STK_buffer[USR_CONF_CHNG_LANG] = TSEL_LANG_ENGLISH;
+ 375   4                                              }       
+ 376   3                                              file_writebin(&cb_fs, 0, STK_buffer, 0x0C);
+ 377   3                                              break;
+ 378   3                                      default: break;
+ 379   3                              }
+ 380   2      
+ 381   2                              //display summaries
+ 382   2                              if((state & 0xF0) == 0x10) {            //display user data
+ 383   3                                      //if((state & 0x0F) != 0) {
+ 384   3                                      //tamper result, display user information, next node  
+ 385   3                                      file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 386   3                                      nama = m_alloc(TSEL_UDS_NAMA);
+ 387   3                                      klahir = m_alloc(TSEL_UDS_KLAHIR);
+ 388   3                                      tlahir = m_alloc(TSEL_UDS_TLAHIR + 3);
+ 389   3                                      sex = m_alloc(10);
+ 390   3                                      agama = m_alloc(10);
+ 391   3                                      hobi = m_alloc(10);
+ 392   3                                      memset(nama, 0, TSEL_UDS_NAMA);
+ 393   3                                      memset(klahir, 0, TSEL_UDS_KLAHIR);
+ 394   3                                      memset(tlahir, 0, TSEL_UDS_TLAHIR);
+ 395   3                                      memset(sex, 0, 10);
+ 396   3                                      memset(agama, 0, 10);
+ 397   3                                      memset(hobi, 0, 10); 
+ 398   3                                      memcpy(nama, ((tsel_user_data *)STK_buffer)->nama, TSEL_UDS_NAMA); 
+ 399   3                                      memcpy(klahir, ((tsel_user_data *)STK_buffer)->kota_lahir, TSEL_UDS_KLAHIR);
+ 400   3                                      memcpy(tlahir+2, ((tsel_user_data *)STK_buffer)->tgl_lahir, TSEL_UDS_TLAHIR);
+ 401   3                                      tlahir[0] = tlahir[2];
+ 402   3                                      tlahir[1] = tlahir[3];
+ 403   3                                      tlahir[2] = '-';
+ 404   3                                      tlahir[3] = tlahir[4];
+ 405   3                                      tlahir[4] = tlahir[5];
+ 406   3                                      tlahir[5] = '-';
+ 407   3                                      tlahir[TSEL_UDS_TLAHIR + 2] = 0;
+ 408   3                                      if(tsel_lang == TSEL_LANG_BAHASA) {
+ 409   4                                              file_select(&cb_fs, 0x6FB9);
+ 410   4                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->sex -1) & 0x0F, sex, 10);   
+ 411   4                                              file_select(&cb_fs, 0x6FBA);
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 8   
+
+ 412   4                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->agama -1) & 0x0F, agama, 10);
+ 413   4                                              if(((tsel_user_data *)STK_buffer)->hobi != 0xFF) {
+ 414   5                                                      file_select(&cb_fs, 0x6FBB); 
+ 415   5                                                      file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->hobi -1) & 0x0F, hobi, 10);
+ 416   5                                                      ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nNama Lengkap:%s\r\nJenis Kelamin:%s\r\n
+             -Tempat Lahir:%s\r\nTgl. Lahir:%s\r\nAgama:%s\r\nHobi:%s\r\nApakah data-data tersebut benar?", nama, sex, klahir, tlahir,
+             - agama, hobi);
+ 417   5                                              } else {
+ 418   5                                                      ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nNama Lengkap:%s\r\nJenis Kelamin:%s\r\n
+             -Tempat Lahir:%s\r\nTgl. Lahir:%s\r\nAgama:%s\r\nApakah data-data tersebut benar?", nama, sex, klahir, tlahir, agama);
+ 419   5                                              }
+ 420   4                                      } else { 
+ 421   4                                              file_select(&cb_fs, 0x6FE9);
+ 422   4                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->sex -1) & 0x0F, sex, 10);   
+ 423   4                                              file_select(&cb_fs, 0x6FEA);
+ 424   4                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->agama -1) & 0x0F, agama, 10);
+ 425   4                                              if(((tsel_user_data *)STK_buffer)->hobi != 0xFF) {
+ 426   5                                                      file_select(&cb_fs, 0x6FEB); 
+ 427   5                                                      file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->hobi -1) & 0x0F, hobi, 10);
+ 428   5                                                      ls_printf(STK_buffer + 2, "Your data summaries are:\r\nFull Name:%s\r\nSex:%s\r\nPlace of birth:%s\r
+             -\nDate of Birth:%s\r\nReligion:%s\r\nHobby:%s\r\nare the data correct?", nama, sex, klahir, tlahir, agama, hobi);
+ 429   5                                              } else {
+ 430   5                                                      ls_printf(STK_buffer + 2, "Your data summaries are:\r\nFull Name:%s\r\nSex:%s\r\nPlace of birth:%s\r
+             -\nDate of Birth:%s\r\nReligion:%s\r\nare the data correct?", nama, sex, klahir, tlahir, agama);
+ 431   5                                              }
+ 432   4                                      }
+ 433   3                                      file_select(&cb_fs, 0x6F02);
+ 434   3                                      m_free(hobi); 
+ 435   3                                      m_free(agama);
+ 436   3                                      m_free(sex);
+ 437   3                                      m_free(tlahir);
+ 438   3                                      m_free(klahir);
+ 439   3                                      m_free(nama);
+ 440   3                                      //strcpy(STK_buffer + 2, "result tamper data\x0"); 
+ 441   3                                      res = strlen(STK_buffer + 2);
+ 442   3                                      ///file_writebin(&cb_fs, 0, STK_buffer + 2, res); 
+ 443   3                                      STK_buffer[0] = res + 1;
+ 444   3                                      STK_buffer[1] = 0x04;
+ 445   3                                      i = 0;
+ 446   3                                      //i += SAT_command(_sat_buffer + i, 0x01, (GET_INKEY & 0x7F), 4);
+ 447   3                                      //i += SAT_device(_sat_buffer + i, STK_DEV_SIM, STK_DEV_ME);
+ 448   3                                      //i += SAT_file_push(i, (STK_TAG_TEXT_STRING & 0x7F), res + 1, STK_buffer);
+ 449   3                                      //SAT_file_flush(i);
+ 450   3                                      SAT_printf("cdx", (DISPLAY_TEXT & 0x7F), STK_DEV_ME, STK_buffer);
+ 451   3                                      result = CALLBACK_TAMPER_RESULT;
+ 452   3                                      //}     
+ 453   3                              }
+ 454   2                              break;
+ 455   2                      case STK_TAG_TEXT_STRING:
+ 456   2                              size = size - 1;  
+ 457   2                              dcs = buffer[0];
+ 458   2                              if(dcs == 0) {
+ 459   3                                      size = decode_728(buffer + 1, buffer, size);
+ 460   3                                      //buffer[0] = size;
+ 461   3                              } else {
+ 462   3                                      memcpy(buffer, buffer + 1, size);
+ 463   3                              }
+ 464   2                              file_select(&cb_fs, FID_MF);    
+ 465   2                              file_select(&cb_fs, FID_LIQUID);
+ 466   2                              file_select(&cb_fs, 0x6F02);            //user data
+ 467   2                              switch(state) {
+ 468   3                                      case 0x12:                //no identitas
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 9   
+
+ 469   3                                      case 0x02:
+ 470   3                                              temp = m_alloc(size + 1);
+ 471   3                                              memcpy(temp, buffer, size);
+ 472   3                                              temp[size] = 0; 
+ 473   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 474   3                                              memset(((tsel_user_data *)STK_buffer)->no_id, 0, TSEL_UDS_ID);
+ 475   3                                              memcpy(((tsel_user_data *)STK_buffer)->no_id, temp, size + 1);
+ 476   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data)); 
+ 477   3                                              m_free(temp);
+ 478   3                                              break;
+ 479   3                                      case 0x13:
+ 480   3                                      case 0x03:                      //nama
+ 481   3                                              temp = m_alloc(size + 1);
+ 482   3                                              memcpy(temp, buffer, size);
+ 483   3                                              temp[size] = 0;
+ 484   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 485   3                                              memset(((tsel_user_data *)STK_buffer)->nama, 0, TSEL_UDS_NAMA);
+ 486   3                                              memcpy(((tsel_user_data *)STK_buffer)->nama, temp, size + 1);
+ 487   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 488   3                                              m_free(temp);
+ 489   3                                              break;
+ 490   3                                      case 0x14:
+ 491   3                                      case 0x04:                      //kota lahir
+ 492   3                                              temp = m_alloc(size + 1);
+ 493   3                                              memcpy(temp, buffer, size);
+ 494   3                                              temp[size] = 0;
+ 495   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 496   3                                              memset(((tsel_user_data *)STK_buffer)->kota_lahir, 0, TSEL_UDS_KLAHIR);
+ 497   3                                              memcpy(((tsel_user_data *)STK_buffer)->kota_lahir, temp, size + 1);
+ 498   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 499   3                                              m_free(temp);
+ 500   3                                              break;
+ 501   3                                      case 0x15:
+ 502   3                                      case 0x05:
+ 503   3                                              if(is_date_valid(buffer) == 0) {
+ 504   4                                                      temp = m_alloc(size + 1);
+ 505   4                                                      memcpy(temp, buffer, size);
+ 506   4                                                      temp[size] = 0;
+ 507   4                                                      file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 508   4                                                      memset(((tsel_user_data *)STK_buffer)->tgl_lahir, 0, TSEL_UDS_TLAHIR);
+ 509   4                                                      memcpy(((tsel_user_data *)STK_buffer)->tgl_lahir, temp, size + 1);
+ 510   4                                                      file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 511   4                                                      m_free(temp);
+ 512   4                                              } else {
+ 513   4                                                      result = (CALLBACK_STAY_NODE | 1);
+ 514   4                                              }
+ 515   3                                              break;
+ 516   3                                      case 0x16:
+ 517   3                                      case 0x06:                              //alamat
+ 518   3                                              temp = m_alloc(size + 1);
+ 519   3                                              memcpy(temp, buffer, size);
+ 520   3                                              temp[size] = 0;
+ 521   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));  
+ 522   3                                              memset(((tsel_user_data *)STK_buffer)->alamat, 0, TSEL_UDS_ALAMAT);
+ 523   3                                              memcpy(((tsel_user_data *)STK_buffer)->alamat, temp, size + 1);
+ 524   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 525   3                                              m_free(temp);
+ 526   3                                              break;
+ 527   3                                      case 0x17:
+ 528   3                                      case 0x07:                              //kota
+ 529   3                                              temp = m_alloc(size + 1);
+ 530   3                                              memcpy(temp, buffer, size);
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 10  
+
+ 531   3                                              temp[size] = 0;
+ 532   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 533   3                                              memset(((tsel_user_data *)STK_buffer)->kota, 0, TSEL_UDS_KOTA);
+ 534   3                                              memcpy(((tsel_user_data *)STK_buffer)->kota, temp, size + 1);
+ 535   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 536   3                                              m_free(temp);
+ 537   3                                              break;
+ 538   3                                      case 0x18:
+ 539   3                                      case 0x08:                              //kode pos
+ 540   3                                              temp = m_alloc(size + 1);
+ 541   3                                              memcpy(temp, buffer, size);
+ 542   3                                              temp[size] = 0;
+ 543   3                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 544   3                                              memset(((tsel_user_data *)STK_buffer)->kode_pos, 0, TSEL_UDS_KODEPOS);
+ 545   3                                              memcpy(((tsel_user_data *)STK_buffer)->kode_pos, temp, size + 1);
+ 546   3                                              file_writebin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 547   3                                              m_free(temp);
+ 548   3                                              break;
+ 549   3                                      case 0x21:                              //NSP (input) kode nada
+ 550   3                                              switch(tsel_nsp) {
+ 551   4                                                      case TSEL_NSP_KIRIM:
+ 552   4                                                              if(x_variable != NULL) {
+ 553   5                                                                      m_free(x_variable);
+ 554   5                                                                      x_variable = NULL;
+ 555   5                                                              }
+ 556   4                                                              x_variable = m_alloc(size + 1);
+ 557   4                                                              x_variable[0] = size;
+ 558   4                                                              memcpy(x_variable + 1, buffer, size);
+ 559   4                                                              temp = m_alloc(21);
+ 560   4                                                              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 561   5                                                                      memcpy(temp + 1, "\x04Nomor Tujuan", 13);
+ 562   5                                                                      temp[0] = 13;
+ 563   5                                                              } else {        
+ 564   5                                                                      memcpy(temp + 1, "\x04Destination Number", 19);
+ 565   5                                                                      temp[0] = 19;
+ 566   5                                                              } 
+ 567   4                                                              i = 0;
+ 568   4                                                              i += SAT_command(STK_buffer + i, 1, (GET_INPUT & 0x7F), 0);
+ 569   4                                                              i += SAT_device(STK_buffer + i, STK_DEV_SIM, STK_DEV_ME);
+ 570   4                                                              i += SAT_push(STK_buffer + i, (STK_TAG_TEXT_STRING & 0x7F), temp[0], temp + 1);
+ 571   4                                                              i += SAT_push(STK_buffer + i, (STK_TAG_RESPONSE_LENGTH & 0x7F), 2, "\x01\x0C");
+ 572   4                                                              //SAT_printf("cdx", (GET_INPUT & 0x7F), STK_DEV_ME, temp);
+ 573   4                                                              SAT_response(STK_buffer, i);
+ 574   4                                                              m_free(temp);
+ 575   4                                                              result = (CALLBACK_TAMPER_RESULT | CALLBACK_STAY_NODE);
+ 576   4                                                              tsel_nsp = TSEL_NSP_KIRIM_TUJUAN;
+ 577   4                                                              break;
+ 578   4                                                      case TSEL_NSP_KIRIM_TUJUAN:
+ 579   4                                                              if(y_variable != NULL) {
+ 580   5                                                                      m_free(y_variable);
+ 581   5                                                                      y_variable = NULL;
+ 582   5                                                              }
+ 583   4                                                              y_variable = m_alloc(size + 1);
+ 584   4                                                              y_variable[0] = size;
+ 585   4                                                              memcpy(y_variable + 1, buffer, size);
+ 586   4                                                              buffer[1] = 0x04;
+ 587   4                                                              memcpy(buffer + 2, "*121*", 5);                                 //*121*
+ 588   4                                                              res = x_variable[0];
+ 589   4                                                              memcpy(buffer + 7, x_variable + 1, res);           //*121*XXXXXX
+ 590   4                                                              buffer[7 + res] = '*';                                             //*121*XXXXXX*
+ 591   4                                                              memcpy(buffer + 8 + res, y_variable + 1, y_variable[0]); //*121*XXXXXX*YYYYYY
+ 592   4                                                              res = 8 + res + y_variable[0];                   
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 11  
+
+ 593   4                                                              buffer[res++] = '#';                                     //*121*XXXXXX*YYYYYY#
+ 594   4                                                              buffer[res] = 0;
+ 595   4                                                              buffer[0] = res;  
+ 596   4                                                              temp = m_alloc(10);
+ 597   4                                                              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 598   5                                                                      memcpy(temp + 1, "Mengirim", 8);
+ 599   5                                                                      temp[0] = 8;
+ 600   5                                                              } else {        
+ 601   5                                                                      memcpy(temp + 1, "Sending", 7);
+ 602   5                                                                      temp[0] = 7;
+ 603   5                                                              }
+ 604   4                                                              buffer[1] = 0;
+ 605   4                                                              buffer[0] = encode_827(buffer + 2, buffer + 2, res, 0);
+ 606   4                                                              SAT_printf("cdlu", (SEND_USSD & 0x7F), STK_DEV_NETWORK, temp, buffer);
+ 607   4                                                              m_free(temp);
+ 608   4                                                              m_free(y_variable); y_variable = NULL;
+ 609   4                                                              m_free(x_variable);     x_variable = NULL;
+ 610   4                                                              result = CALLBACK_TAMPER_RESULT | CALLBACK_FORCE_END;
+ 611   4                                                              break;
+ 612   4                                                      default:
+ 613   4                                                              if(x_variable != NULL) {
+ 614   5                                                                      m_free(x_variable);
+ 615   5                                                                      x_variable = NULL;
+ 616   5                                                              }
+ 617   4                                                              x_variable = m_alloc(size + 1);
+ 618   4                                                              x_variable[0] = size;
+ 619   4                                                              memcpy(x_variable + 1, buffer, size);
+ 620   4                                                              buffer[1] = 0x04;
+ 621   4                                                              memcpy(buffer + 2, "*121*", 5);                                 //*121*
+ 622   4                                                              res = x_variable[0];
+ 623   4                                                              memcpy(buffer + 7, x_variable + 1, res);           //*121*XXXXXX
+ 624   4                                                              res = 7 + res;                   
+ 625   4                                                              buffer[res++] = '#';                                     //*121*XXXXXX#   
+ 626   4                                                              buffer[res] = 0;
+ 627   4                                                              buffer[0] = res;  
+ 628   4                                                              temp = m_alloc(10);
+ 629   4                                                              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 630   5                                                                      memcpy(temp + 1, "Mengirim", 8);
+ 631   5                                                                      temp[0] = 8;
+ 632   5                                                              } else {        
+ 633   5                                                                      memcpy(temp + 1, "Sending", 7);
+ 634   5                                                                      temp[0] = 7;
+ 635   5                                                              }
+ 636   4                                                              buffer[1] = 0;
+ 637   4                                                              buffer[0] = encode_827(buffer + 2, buffer + 2, res, 0);
+ 638   4                                                              SAT_printf("cdlu", (SEND_USSD & 0x7F), STK_DEV_NETWORK, temp, buffer);
+ 639   4                                                              m_free(temp);
+ 640   4                                                              m_free(x_variable);     x_variable = NULL;
+ 641   4                                                              result = CALLBACK_TAMPER_RESULT | CALLBACK_FORCE_END;
+ 642   4                                                              break;
+ 643   4                                              }
+ 644   3                                              break;
+ 645   3                                      case 0x41:                              //transfer pulsa, input nomor tujuan/nama
+ 646   3                                              file_select(&cb_fs, FID_MF);      
+ 647   3                                              file_select(&cb_fs, 0x7F10);
+ 648   3                                              file_select(&cb_fs, 0x6F3A);
+ 649   3                                              if(tsel_pulsa == TSEL_PULSA_PHONEBOOK) {                                //input nama phonebook
+ 650   4                                                      i = file_seek(&cb_fs, 1, buffer, buffer, size);                                                 //offset 14     
+ 651   4                                                      if((i & 0xFF00) == APDU_SUCCESS_RESPONSE) {
+ 652   5                                                              temp = file_get_current_header(&cb_fs);
+ 653   5                                                              file_readrec(&cb_fs, (i & 0x00FF), STK_buffer, ((ef_header *)temp)->rec_size);
+ 654   5                                                              m_free(temp);
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 12  
+
+ 655   5                                                              if(x_variable != NULL) {
+ 656   6                                                                      m_free(x_variable);
+ 657   6                                                                      x_variable = NULL;
+ 658   6                                                              }
+ 659   5                                                              x_variable = m_alloc((STK_buffer[14] * 2) + 1);
+ 660   5                                                              i = 1;
+ 661   5                                                              for(res = 15, i = 0;res < (15 + STK_buffer[14]);res++) {
+ 662   6                                                                      dcs = (STK_buffer[res] & 0x0F) | 0x30;
+ 663   6                                                                      if(dcs != 0x3F) {
+ 664   7                                                                              x_variable[i++] = dcs;
+ 665   7                                                                      }
+ 666   6                                                                      dcs = ((STK_buffer[res] & 0xF0) >> 4) | 0x30;
+ 667   6                                                                      if(dcs != 0x3F) {
+ 668   7                                                                              x_variable[i++] = dcs;
+ 669   7                                                                      }               
+ 670   6                                                              }
+ 671   5                                                              x_variable[0] = i -1;
+ 672   5                                                      } else {                                                                                //not found, force end
+ 673   5                                                              result = CALLBACK_FORCE_END;                                    
+ 674   5                                                      }
+ 675   4                                              } else {                                                                                        //input number
+ 676   4                                                      if(x_variable != NULL) {
+ 677   5                                                              m_free(x_variable);
+ 678   5                                                              x_variable = NULL;
+ 679   5                                                      }
+ 680   4                                                      x_variable = m_alloc(size + 1);
+ 681   4                                                      memcpy(x_variable + 1, buffer, size);
+ 682   4                                                      x_variable[0] = size;
+ 683   4                                              }
+ 684   3                                              break;
+ 685   3                                      case 0x42:                              //transfer pulsa, nominal
+ 686   3                                              if(y_variable != NULL) {
+ 687   4                                                      m_free(y_variable);
+ 688   4                                                      y_variable = NULL;
+ 689   4                                              }
+ 690   3                                              y_variable = m_alloc(size + 1);
+ 691   3                                              memcpy(y_variable + 1, buffer, size);
+ 692   3                                              y_variable[0] = size;
+ 693   3                                              buffer[1] = 0x04;
+ 694   3                                              memcpy(buffer + 2, "*858*", 5);                                 //*121*
+ 695   3                                              res = x_variable[0];
+ 696   3                                              memcpy(buffer + 7, x_variable + 1, res);           //*121*XXXXXX
+ 697   3                                              buffer[7 + res] = '*';                                             //*121*XXXXXX*
+ 698   3                                              memcpy(buffer + 8 + res, y_variable + 1, y_variable[0]); //*121*XXXXXX*YYYYYY
+ 699   3                                              res = 8 + res + y_variable[0];                   
+ 700   3                                              buffer[res++] = '#';                                     //*121*XXXXXX*YYYYYY#
+ 701   3                                              buffer[res] = 0;
+ 702   3                                              buffer[0] = res;  
+ 703   3                                              temp = m_alloc(10);
+ 704   3                                              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 705   4                                                      memcpy(temp + 1, "Mengirim", 8);
+ 706   4                                                      temp[0] = 8;
+ 707   4                                              } else {        
+ 708   4                                                      memcpy(temp + 1, "Sending", 7);
+ 709   4                                                      temp[0] = 7;
+ 710   4                                              }
+ 711   3                                              buffer[1] = 0;
+ 712   3                                              buffer[0] = encode_827(buffer + 2, buffer + 2, res, 0);
+ 713   3                                              SAT_printf("cdlu", (SEND_USSD & 0x7F), STK_DEV_NETWORK, temp, buffer);
+ 714   3                                              m_free(temp);
+ 715   3                                              m_free(y_variable); y_variable = NULL;
+ 716   3                                              m_free(x_variable);     x_variable = NULL;
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 13  
+
+ 717   3                                              result = CALLBACK_TAMPER_RESULT | CALLBACK_FORCE_END;
+ 718   3                                              break;
+ 719   3                                      default: break;
+ 720   3                              } 
+ 721   2                              break;
+ 722   2                      case STK_TAG_RESULT:  
+ 723   2                              file_select(&cb_fs, FID_MF);    
+ 724   2                              file_select(&cb_fs, FID_LIQUID);
+ 725   2                              file_select(&cb_fs, 0x6F02);            //user data
+ 726   2                              switch(state) {
+ 727   3                                      case 0x90:                      //setup sequence   
+ 728   3                                              if(buffer[0] == STK_RES_SUCCESS) {         
+ 729   4                                                      file_select(&cb_fs, 0x6F01);            //user config                           
+ 730   4                                                      file_readbin(&cb_fs, 0, STK_buffer, 0x0C);
+ 731   4                                                      tsel_lang = STK_buffer[USR_CONF_CUR_LANG];
+ 732   4                                                      tsel_menu = STK_buffer[USR_CONF_REG_FLAG];
+ 733   4                                                      if(is_sending_reg == TRUE) {                                                                                                    //reg sms sending successfull
+ 734   5                                                              is_sending_reg = FALSE;
+ 735   5                                                              STK_buffer[USR_CONF_SEND_REG] = 0xFF;   
+ 736   5                                                      }
+ 737   4                                                      if(tsel_menu == 0xFF) tsel_menu = TSEL_MENU_DAFTAR; 
+ 738   4                                                      file_writebin(&cb_fs, 0, STK_buffer, 0x0C);
+ 739   4      
+ 740   4                                                      if(STK_buffer[USR_CONF_SEND_REG] == 0x00) {                                                                     //send registration message
+ 741   5                                                              send_registration(STK_buffer[USR_CONF_REG_FLAG]);
+ 742   5                                                              /*#if 1
+ 743   5                                                              file_select(&cb_fs, 0x6F02);            //user data
+ 744   5                                                              file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 745   5                                                              ((tsel_user_data *)STK_buffer)->s0 = '|';
+ 746   5                                                              ((tsel_user_data *)STK_buffer)->s1 = '|';
+ 747   5                                                              ((tsel_user_data *)STK_buffer)->s2 = '|';
+ 748   5                                                              ((tsel_user_data *)STK_buffer)->s3 = '|';
+ 749   5                                                              ((tsel_user_data *)STK_buffer)->s4 = '|';
+ 750   5                                                              ((tsel_user_data *)STK_buffer)->s5 = '|';
+ 751   5                                                              ((tsel_user_data *)STK_buffer)->s6 = '|';
+ 752   5                                                              ((tsel_user_data *)STK_buffer)->s7 = '|';
+ 753   5                                                              ((tsel_user_data *)STK_buffer)->s8 = '|';
+ 754   5                                                              ((tsel_user_data *)STK_buffer)->s9 = '|';
+ 755   5                                                              ((tsel_user_data *)STK_buffer)->s10 = '|';
+ 756   5                                                              res = remove_null(STK_buffer, sizeof(tsel_user_data), STK_buffer);
+ 757   5                                                              temp = m_alloc(res);
+ 758   5                                                              memcpy(temp, STK_buffer, res);
+ 759   5                                                              len = encode_SMSTPDU(SMS_TYPE_NOHEADER | SMS_TYPE_PACKED7 | SMS_TYPE_SUBMIT, res, "\x03\x81\x44\x44
+             -", temp, STK_buffer + 1);     //SMS submit
+ 760   5                                                              STK_buffer[0] = len;
+ 761   5                                                              m_free(temp);
+ 762   5                                                              temp = m_alloc(9);
+ 763   5                                                              if(tsel_lang == TSEL_LANG_BAHASA) {
+ 764   5                                                                      memcpy(temp + 1, "Mengirim", 8);
+ 765   5                                                                      temp[0] = 8;
+ 766   5                                                              } else {        
+ 767   5                                                                      memcpy(temp + 1, "Sending", 7);
+ 768   5                                                                      temp[0] = 7;
+ 769   5                                                                      //SAT_printf("cdlm", (SEND_SHORT_MESSAGE & 0x7F), STK_DEV_ME, temp, STK_buffer);
+ 770   5                                                              } 
+ 771   5                                                              SAT_printf("cdlm", (SEND_SHORT_MESSAGE & 0x7F), STK_DEV_ME, temp, STK_buffer);
+ 772   5                                                              m_free(temp);
+ 773   5                                                              #endif */
+ 774   5                                                              is_sending_reg = TRUE;
+ 775   5                                                              result = CALLBACK_TAMPER_RESULT | CALLBACK_STAY_NODE;
+ 776   5                                                      } else if(STK_buffer[USR_CONF_REG_FLAG] != 0xFF) {                                                                      //registration done, no need for popup
+ 777   5                                                              result = CALLBACK_FORCE_END;
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 14  
+
+ 778   5                                                      }
+ 779   4                                              }
+ 780   3                                              break;
+ 781   3                                      case 0xE2: 
+ 782   3                                              if(buffer[0] == STK_RES_SUCCESS) {
+ 783   4                                                      file_select(&cb_fs, 0x6F01);            //user config                           
+ 784   4                                                      file_readbin(&cb_fs, 0, STK_buffer, 0x0C);
+ 785   4                                                      if(STK_buffer[USR_CONF_CHNG_LANG] != 0xFF) {                                                                    //change language
+ 786   5                                                              file_select(&cb_fs, FID_MF);    
+ 787   5                                                              file_select(&cb_fs, FID_LIQUID);
+ 788   5                                                              if(STK_buffer[USR_CONF_CHNG_LANG] == TSEL_LANG_BAHASA) {
+ 789   6                                                                      tsel_lang = TSEL_LANG_BAHASA;
+ 790   6                                                                      file_select(&cb_fs, 0x6F2B);
+ 791   6                                                              } else if(STK_buffer[USR_CONF_CHNG_LANG] == TSEL_LANG_ENGLISH) { 
+ 792   6                                                                      tsel_lang = TSEL_LANG_ENGLISH;
+ 793   6                                                                      file_select(&cb_fs, 0x6F2E);
+ 794   6                                                              }
+ 795   5                                                              temp = m_alloc(sizeof(fs_handle)); 
+ 796   5                                                              file_select(temp, FID_MF);      
+*** WARNING C182 IN LINE 796 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 797   5                                                              file_select(temp, FID_LIQUID);
+*** WARNING C182 IN LINE 797 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 798   5                                                              file_select(temp, FID_STKMENU);
+*** WARNING C182 IN LINE 798 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 799   5                                                              nama = file_get_current_header(temp);
+*** WARNING C182 IN LINE 799 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 800   5                                                              if(((ef_header *)nama)->size > 0x80) {
+ 801   6                                                                      for(i=0;i<((ef_header *)nama)->size - 0x80;i+=0x80) {
+ 802   7                                                                              file_readbin(&cb_fs, i, STK_buffer, 0x80);
+ 803   7                                                                              file_writebin(temp, i, STK_buffer, 0x80);
+*** WARNING C182 IN LINE 803 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 804   7                                                                      }
+ 805   6                                                              }
+ 806   5                                                              file_readbin(&cb_fs, i, STK_buffer, ((ef_header *)nama)->size - i);
+ 807   5                                                              file_writebin(temp, i, STK_buffer, ((ef_header *)nama)->size - i);
+*** WARNING C182 IN LINE 807 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 808   5                                                              file_readbin(temp, 0, STK_buffer, sizeof(stk_config));
+*** WARNING C182 IN LINE 808 OF YGGDRASIL\APPLICATION.C: pointer to different objects
+ 809   5                                                              m_free(nama);
+ 810   5                                                              m_free(temp);
+ 811   5                                                              //reset engine 
+ 812   5                                                              _stk_menu_offset = ((stk_config *)STK_buffer)->sibling;
+ 813   5                                                              _stk_menu_current = 0; 
+ 814   5                                                              //disable language changing
+ 815   5                                                              file_select(&cb_fs, 0x6F01);            //user config                           
+ 816   5                                                              file_readbin(&cb_fs, 0, STK_buffer, 0x0C);
+ 817   5                                                              STK_buffer[USR_CONF_CUR_LANG] = tsel_lang;
+ 818   5                                                              STK_buffer[USR_CONF_CHNG_LANG] = 0xFF;                          
+ 819   5                                                              file_writebin(&cb_fs, 0, STK_buffer, 0x0C);      
+ 820   5                                                              result = CALLBACK_STAY_NODE;
+ 821   5                                                      }
+ 822   4                                              }
+ 823   3                                              break;
+ 824   3                                      case 0x0F:                      //(registration success
+ 825   3                                              if(buffer[0] == STK_RES_SUCCESS) { 
+ 826   4                                                      file_select(&cb_fs, 0x6F01);            //user config
+ 827   4                                                      //#define USR_CONF_REG_FLAG             0
+ 828   4                                                      //#define USR_CONF_SEND_REG             1
+ 829   4                                                      //#define USR_CONF_CUR_LANG             2
+ 830   4                                                      //#define USR_CONF_CHNG_LANG    3                                               
+ 831   4                                                      file_readbin(&cb_fs, 0, STK_buffer, 0x0C);
+ 832   4                                                      STK_buffer[USR_CONF_REG_FLAG] = tsel_menu;
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 15  
+
+ 833   4                                                      STK_buffer[USR_CONF_SEND_REG] = 0;                              
+ 834   4                                                      file_writebin(&cb_fs, 0, STK_buffer, 0x0C);
+ 835   4                                                      //rehabilitate ADN+SMSP
+ 836   4                                                      file_select(&cb_fs, FID_MF);
+ 837   4                                                      file_select(&cb_fs, FID_TELECOM); 
+ 838   4                                                      file_select(&cb_fs, 0x6F3A);
+ 839   4                                                      file_rehabilitate(&cb_fs);
+ 840   4                                                      file_select(&cb_fs, FID_TELECOM); 
+ 841   4                                                      file_select(&cb_fs, 0x6F42);
+ 842   4                                                      file_rehabilitate(&cb_fs);
+ 843   4                                              } else {
+ 844   4                                                      _stk_menu_offset = _default_menu_offset;
+ 845   4                                              }
+ 846   3                                              break;
+ 847   3                                      case 0x0D:                      //display user data (part 2)
+ 848   3                                              //tamper result, display user information, next node
+ 849   3                                              if(buffer[0] == STK_RES_SUCCESS) {  
+ 850   4                                                      file_readbin(&cb_fs, 0, STK_buffer, sizeof(tsel_user_data));
+ 851   4                                                      nama = m_alloc(TSEL_UDS_ALAMAT);                        //alamat
+ 852   4                                                      klahir = m_alloc(TSEL_UDS_KOTA);                        //kota
+ 853   4                                                      tlahir = m_alloc(TSEL_UDS_KODEPOS + 1);                 //kodepos
+ 854   4                                                      sex = m_alloc(10);                                                      //tipe id
+ 855   4                                                      agama = m_alloc(TSEL_UDS_ID);                           //no identitas
+ 856   4                                                      memset(nama, 0, TSEL_UDS_ALAMAT);
+ 857   4                                                      memset(klahir, 0, TSEL_UDS_KOTA);
+ 858   4                                                      memset(tlahir, 0, TSEL_UDS_KODEPOS);
+ 859   4                                                      memset(sex, 0, 10);
+ 860   4                                                      memset(agama, 0, TSEL_UDS_ID);  
+ 861   4                                                      memcpy(nama, ((tsel_user_data *)STK_buffer)->alamat, TSEL_UDS_ALAMAT); 
+ 862   4                                                      memcpy(klahir, ((tsel_user_data *)STK_buffer)->kota, TSEL_UDS_KOTA);
+ 863   4                                                      memcpy(tlahir, ((tsel_user_data *)STK_buffer)->kode_pos, TSEL_UDS_KODEPOS);
+ 864   4                                                      tlahir[TSEL_UDS_KODEPOS] = 0;  
+ 865   4                                                      memcpy(agama, ((tsel_user_data *)STK_buffer)->no_id, TSEL_UDS_ID);
+ 866   4                                                      if(tsel_lang == TSEL_LANG_BAHASA) {
+ 867   5                                                              file_select(&cb_fs, 0x6FB2);
+ 868   5                                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->tipe_id -1) & 0x0F, sex, 10);
+ 869   5                                                              switch(((tsel_user_data *)STK_buffer)->perokok == 0xFF) {
+ 870   6                                                                      default:
+ 871   6                                                                      case 0xFF:
+ 872   6                                                                              ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nAlamat Rumah:%s\r\nKota:%s\r\nKode P
+             -os:%s\r\nTipe Identitas:%s\r\nNo. Identitas:%s\r\nApakah data-data tersebut benar?", nama, klahir, tlahir, sex, agama);
+ 873   6                                                                              break;
+ 874   6                                                                      case 0x01:
+ 875   6                                                                              ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nAlamat Rumah:%s\r\nKota:%s\r\nKode P
+             -os:%s\r\nTipe Identitas:%s\r\nNo. Identitas:%s\r\nPerokok:Ya\r\nApakah data-data tersebut benar?", nama, klahir, tlahir,
+             - sex, agama);
+ 876   6                                                                              break;
+ 877   6                                                                      case 0x02:
+ 878   6                                                                              ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nAlamat Rumah:%s\r\nKota:%s\r\nKode P
+             -os:%s\r\nTipe Identitas:%s\r\nNo. Identitas:%s\r\nPerokok:Bukan\r\nApakah data-data tersebut benar?", nama, klahir, tlah
+             -ir, sex, agama);
+ 879   6                                                                              break;
+ 880   6                                                              }
+ 881   5                                                      } else { 
+ 882   5                                                              file_select(&cb_fs, 0x6FE2);
+ 883   5                                                              file_readrec(&cb_fs, (((tsel_user_data *)STK_buffer)->tipe_id -1) & 0x0F, sex, 10);   
+ 884   5                                                              ls_printf(STK_buffer + 2, "Your data summaries are:\r\nHome Address:%s\r\nCity:%s\r\nZIP code:%s\r\
+             -nID:%s\r\nID. Number:%s\r\nare the data correct?", nama, klahir, tlahir, sex, agama);  
+ 885   5                                                      }
+ 886   4                                                      file_select(&cb_fs, 0x6F02);
+ 887   4                                                      m_free(agama);
+ 888   4                                                      m_free(sex);
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 16  
+
+ 889   4                                                      m_free(tlahir);
+ 890   4                                                      m_free(klahir);
+ 891   4                                                      m_free(nama);
+ 892   4                                                      //strcpy(STK_buffer + 2, "result tamper data\x0"); 
+ 893   4                                                      res = strlen(STK_buffer + 2);
+ 894   4                                                      ///file_writebin(&cb_fs, 0, STK_buffer + 2, res); 
+ 895   4                                                      STK_buffer[0] = res + 1;
+ 896   4                                                      STK_buffer[1] = 0x04;
+ 897   4                                                      i = 0;
+ 898   4                                                      //i += SAT_command(_sat_buffer + i, 0x01, (GET_INKEY & 0x7F), 4);
+ 899   4                                                      //i += SAT_device(_sat_buffer + i, STK_DEV_SIM, STK_DEV_ME);
+ 900   4                                                      //i += SAT_file_push(i, (STK_TAG_TEXT_STRING & 0x7F), res + 1, STK_buffer);
+ 901   4                                                      //SAT_file_flush(i);
+ 902   4                                                      SAT_printf("cdx", (DISPLAY_TEXT & 0x7F), STK_DEV_ME, STK_buffer);
+ 903   4                                                      result = CALLBACK_TAMPER_RESULT;
+ 904   4                                              } else {           
+ 905   4                                                      _stk_menu_offset = _default_menu_offset;
+ 906   4                                              }
+ 907   3                                              break;
+ 908   3                                      case 0x60:
+ 909   3                                              if(buffer[0] == STK_RES_SUCCESS) {
+ 910   4                                                      
+ 911   4                                              } else {
+ 912   4                                                      //invalidate EFADN & EFSMSP
+ 913   4                                                      file_select(&cb_fs, FID_MF);
+ 914   4                                                      file_select(&cb_fs, FID_TELECOM); 
+ 915   4                                                      file_select(&cb_fs, 0x6F3A);
+ 916   4                                                      file_invalidate(&cb_fs);
+ 917   4                                                      file_select(&cb_fs, FID_TELECOM); 
+ 918   4                                                      file_select(&cb_fs, 0x6F42);
+ 919   4                                                      file_invalidate(&cb_fs); 
+ 920   4                                                      /*if(tsel_lang == TSEL_LANG_BAHASA) {   
+ 921   4                                                              ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nAlamat Rumah:%s\r\nKota:%s\r\nKode Pos
+             -:%s\r\nTipe Identitas:%s\r\nNo. Identitas:%s\r\nApakah data-data tersebut benar?", nama, klahir, tlahir, sex, agama);
+ 922   4                                                      } else {    
+ 923   4                                                              ls_printf(STK_buffer + 2, "Data yang Anda masukan adalah:\r\nAlamat Rumah:%s\r\nKota:%s\r\nKode Pos
+             -:%s\r\nTipe Identitas:%s\r\nNo. Identitas:%s\r\nApakah data-data tersebut benar?", nama, klahir, tlahir, sex, agama);  
+ 924   4                                                      }
+ 925   4                                                      SAT_printf("cdx", (DISPLAY_TEXT & 0x7F), STK_DEV_ME, STK_buffer); */
+ 926   4                                                      result = (CALLBACK_FORCE_END | 1);
+ 927   4                                              }
+ 928   3                                              break;
+ 929   3                                      default:
+ 930   3                                              
+ 931   3                                              break;
+ 932   3                              }
+ 933   2                              break;
+ 934   2              } 
+ 935   1              
+ 936   1      
+ 937   1              return result;
+ 938   1      }
+*** WARNING C280 IN LINE 223 OF YGGDRASIL\APPLICATION.C: 'len': unreferenced local variable
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   7604    ----
+   CONSTANT SIZE    =   1230    ----
+   XDATA SIZE       =     13    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V7.01  APPLICATION                                                            01/25/2014 10:10:44 PAGE 17  
+
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  19 WARNING(S),  0 ERROR(S)

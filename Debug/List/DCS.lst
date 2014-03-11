@@ -1,0 +1,219 @@
+C51 COMPILER V7.01  DCS                                                                    01/25/2014 09:07:27 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE DCS
+OBJECT MODULE PLACED IN .\Debug\Output\DCS.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\DCS.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\DCS.lst) OBJECT(.\Debug\Output\DCS.obj)
+
+stmt level    source
+
+   1          #include "..\midgard\midgard.h"
+   2          #include "DCS.h"    
+   3          #include <string.h>
+   4          
+   5          #if COMPACT_7BIT_SUPPORT 
+   6          uchar decode_728(uchar * buffer_in, uchar * buffer_out, uchar size) _REENTRANT_ {               //7bit to 8 bit charset
+   7   1              //uchar buffer[7];
+   8   1              uchar i, j, k, l, m;
+   9   1              uchar * temp;
+  10   1              //printf("allocate %i\n", ((uint16)size * 8) / 7);
+  11   1              temp = (uchar *)m_alloc(((uint16)size * 8) / 7);          //allocate new temporary for 8bit charset
+  12   1              for(i=0, j=0;i<size;i+=7, j+=8) {
+  13   2                      for(k=0, l=0x7F, m=0;k<8;k++, l>>=1, m<<=1) {
+  14   3                              m|=1;
+  15   3                              temp[j+k] = (buffer_in[i+k] & l) << k | ((buffer_in[i+k-1] >> (8-k)) & m);
+  16   3                      }
+  17   2                      //temp[j+0] = (buffer_in[i+0] & 0x7F) << 0 | ((buffer_in[i+0-1] >> 8) & 0);
+  18   2                      //temp[j+1] = (buffer_in[i+1] & 0x3F) << 1 | ((buffer_in[i+1-1] >> 7) & 1);
+  19   2                      //temp[j+1] = (buffer_in[i+2] & 0x1F) << 2 | ((buffer_in[i+2-1] >> 6) & 3);
+  20   2              }
+  21   1              memcpy(buffer_out, temp, j);      //copy to buffer_out
+  22   1              m_free(temp);                                   //free temp
+  23   1              return (((uint16)size * 8) / 7);
+  24   1      }
+  25          
+  26          uchar encode_827(uchar * buffer_in, uchar * buffer_out, uchar size, uchar offset) _REENTRANT_ {         //8bit to
+             - 7 bit charset
+  27   1              //uchar buffer[7];
+  28   1              uchar i, j, k, l, m, o;
+  29   1              uchar c;
+  30   1              //offset value between 0..7
+  31   1              //uchar roffset = 8 - offset;
+  32   1              uchar * temp;
+  33   1              //printf("allocate %i\n", ((uint16)size * 7) / 8);
+  34   1              temp = (uchar *)m_alloc(7);       //allocate new temporary for 8bit charset
+  35   1              memset(temp, 0, 7);
+  36   1              i=0;
+  37   1              m=0;
+  38   1              //initialize mask bit value     
+  39   1              /*for(i=0;i<offset;i++,m<<=1) {
+  40   1                      m|=1;
+  41   1              }*/
+  42   1              i = 0;
+  43   1              j = 0;
+  44   1              k = offset;
+  45   1              l = 0;  
+  46   1              //if(i == 0 && offset == 0) i=1;
+  47   1              //for(i=0, j=0;i<size;i+=8, j+=7) {
+  48   1              while(i < size) {
+  49   2      
+  50   2                      //block encoder (827)
+  51   2                      /*for(k=offset, l=0x7F; k<7, i<size; k++, l>>=1, m<<=1) {
+  52   2                              //temp[j+k] = (buffer_in[i+k] & l) << k | ((buffer_in[i] >> (8-k)) & m);
+  53   2                              m|=1;
+C51 COMPILER V7.01  DCS                                                                    01/25/2014 09:07:27 PAGE 2   
+
+  54   2                              //temp[j+k] = (buffer_in[i+k] & l) << k | ((buffer_in[i] >> (8-k)) & m);
+  55   2                              o = (k - offset);
+  56   2                              buffer_out[j+o] = ((buffer_in[i] & 0x7F) >> k) | ((buffer_in[i+1] & m) << (7-k));
+  57   2                              i++;
+  58   2                              //temp[o] = c;
+  59   2                              //temp[k]=offset;
+  60   2                              //temp[k] = temp[k] & ~(0xff << offset);
+  61   2                              //temp[k] = temp[k] | (c << offset);
+  62   2                              //temp[k+1] = temp[k+1] & ~(0xff >> roffset);
+  63   2                              //temp[k+1] = temp[k+1] | (c >> roffset);
+  64   2                      }
+  65   2                      //memcpy(buffer_out + j, temp, k);
+  66   2                      j += (k - offset);       
+  67   2                      //i += ((k - offset)+1);
+  68   2                      offset = 0;             //clear offset (start of new block)
+  69   2                      m = 0;                  //clear mask bit */
+  70   2                      /*temp[j+0] = (buffer_in[i+0] & 0x7F) >> 0 | (buffer_in[i+1] & 0x1) << 7;
+  71   2                      temp[j+1] = (buffer_in[i+1] & 0x7F) >> 1 | (buffer_in[i+2] & 0x3) << 6;
+  72   2                      temp[j+2] = (buffer_in[i+2] & 0x7F) >> 2 | (buffer_in[i+3] & 0x7) << 5;
+  73   2                      temp[j+3] = (buffer_in[i+3] & 0x7F) >> 3 | (buffer_in[i+4] & 0x0f) << 4;
+  74   2                      temp[j+4] = (buffer_in[i+4] & 0x7F) >> 4 | (buffer_in[i+5] & 0x1f) << 3;
+  75   2                      temp[j+5] = (buffer_in[i+5] & 0x7F) >> 5 | (buffer_in[i+6] & 0x3f) << 2;
+  76   2                      temp[j+7] = (buffer_in[i+6] & 0x7F) >> 6 | (buffer_in[i+7] & 0x3f) << 1; */      
+  77   2                      //temp = (buffer_out + j + k);
+  78   2                      switch(k) {
+  79   3                              case 0:
+  80   3                                      //buffer_out[i] = ((buffer_in[i] & 0x7F) >> k) | ((buffer_in[i+1] & m) << (7-k));
+  81   3                                      temp[k] = (buffer_in[i] & 0x7F);
+  82   3                                      l++; 
+  83   3                                      break;
+  84   3                              case 1:
+  85   3                                      temp[k-1] &= ~((0x01) << 7);
+  86   3                                      temp[k-1] |= ((buffer_in[i] & 0x01) << 7);
+  87   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 1); 
+  88   3                                      l++;    
+  89   3                                      break; 
+  90   3                              case 2:           
+  91   3                                      temp[k-1] &= ~((0x03) << 6);
+  92   3                                      temp[k-1] |= ((buffer_in[i] & 0x03) << 6);
+  93   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 2); 
+  94   3                                      l++; 
+  95   3                                      break;
+  96   3                              case 3:  
+  97   3                                      temp[k-1] &= ~((0x07) << 5);
+  98   3                                      temp[k-1] |= ((buffer_in[i] & 0x07) << 5);
+  99   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 3);
+ 100   3                                      l++; 
+ 101   3                                      break;
+ 102   3                              case 4:         
+ 103   3                                      temp[k-1] &= ~((0x0F) << 4);
+ 104   3                                      temp[k-1] |= ((buffer_in[i] & 0x0F) << 4);
+ 105   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 4);
+ 106   3                                      l++; 
+ 107   3                                      break;
+ 108   3                              case 5:                 
+ 109   3                                      temp[k-1] &= ~((0x1F) << 3);
+ 110   3                                      temp[k-1] |= ((buffer_in[i] & 0x1F) << 3);
+ 111   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 5); 
+ 112   3                                      l++; 
+ 113   3                                      break;   
+ 114   3                              case 6:                         
+ 115   3                                      temp[k-1] &= ~((0x3F) << 2);
+C51 COMPILER V7.01  DCS                                                                    01/25/2014 09:07:27 PAGE 3   
+
+ 116   3                                      temp[k-1] |= ((buffer_in[i] & 0x3F) << 2);
+ 117   3                                      temp[k] = ((buffer_in[i] & 0x7F) >> 6);  
+ 118   3                                      l++;                       
+ 119   3                                      break;   
+ 120   3                              case 7:  
+ 121   3                                      //*(temp + 1) &= ~((0x7F) << 1);
+ 122   3                                      temp[k-1] |= ((buffer_in[i] & 0x7F) << 1); 
+ 123   3                                      break;  
+ 124   3                              default: break; 
+ 125   3                      }
+ 126   2                      i++;       
+ 127   2                      k++;
+ 128   2                      k = k % 8; 
+ 129   2                      if(k == 0) {
+ 130   3                              memcpy(buffer_out + j, temp + offset, l);       
+ 131   3                              memset(temp, 0, 7);
+ 132   3                              offset = 0;
+ 133   3                              j += l; 
+ 134   3                              l = 0;          //total octed wrote
+ 135   3                      }
+ 136   2              }
+ 137   1              if(k != 0) {
+ 138   2                      memcpy(buffer_out + j, temp + offset, l);
+ 139   2                      j += l;
+ 140   2              }
+ 141   1              return j;
+ 142   1              //memcpy(buffer_out, temp, j);    //copy to buffer_out
+ 143   1              /*m_free(temp);                                 //free temp
+ 144   1              if((size % 8) == 0) {
+ 145   1                      return (((uint16)size * 7) / 8);                //don't ceil this value
+ 146   1              }
+ 147   1              return (((uint16)size * 7) / 8) + 1;            //ceiling*/
+ 148   1      }
+*** WARNING C280 IN LINE 28 OF FRAMEWORK\DCS.C: 'o': unreferenced local variable
+*** WARNING C280 IN LINE 29 OF FRAMEWORK\DCS.C: 'c': unreferenced local variable
+ 149          #endif
+ 150          
+ 151          /*uchar add_variable(uchar * operand1, uchar * operand2, uchar size) _REENTRANT_ {
+ 152                  uchar i;
+ 153                  uint16 temp;
+ 154                  for(i = (size - 1); i != 0; i--) {
+ 155                                  
+ 156                  }
+ 157          } */
+ 158          
+ 159          #if UNICODE_SUPPORT
+              uchar decode_ucs28(uint16 * buffer_in, uchar * buffer_out, uchar size) _REENTRANT_ {            //unicode to 8 bit c
+             -harset
+                      uchar i;
+                      size = (size / 2);
+                      for(i=0; i < size; i++) {
+                              buffer_out[i] = buffer_in[i];           
+                      }
+                      return size;
+              }
+              
+              uchar encode_82ucs(uchar * buffer_in, uint16 * buffer_out, uchar size) _REENTRANT_ {            //8bit to unicode ch
+             -arset
+                      uchar i;
+                      uchar * buffer = m_alloc(size);
+                      memcpy(buffer, buffer_in, size);
+                      size = (size * 2);
+C51 COMPILER V7.01  DCS                                                                    01/25/2014 09:07:27 PAGE 4   
+
+                      for(i=0; i < size; i++) {
+                              buffer_out[i] = buffer[i];              
+                      }
+                      m_free(buffer);
+                      return size;
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1305    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,122 @@
+C51 COMPILER V7.01  RFM                                                                    01/25/2014 09:07:27 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE RFM
+OBJECT MODULE PLACED IN .\Debug\Output\RFM.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\RFM.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\RFM.lst) OBJECT(.\Debug\Output\RFM.obj)
+
+stmt level    source
+
+   1          #include "RFM.h" 
+   2          #include "..\asgard\file.h"
+   3          #include "..\midgard\midgard.h"
+   4          #include "..\liquid.h"
+   5          #include <string.h>
+   6          
+   7          extern uchar STK_buffer[];
+   8          uint16 RFM_decode(fs_handle * handle, uint16 address, uint16 length) _REENTRANT_  {
+   9   1              uint16 status = APDU_SUCCESS;
+  10   1              //uint16 i = address;
+  11   1              uchar j;
+  12   1              ef_header * curfile;
+  13   1              fs_handle rfm_fs;
+  14   1              _select(&rfm_fs, FID_MF);
+  15   1              while(address < length) {
+  16   2                      _readbin(handle, address, STK_buffer, 5);        //read command
+  17   2                      address += 5;
+  18   2                      if(STK_buffer[0] == CLA_GSM11) {                //GSM operation
+  19   3                              switch(STK_buffer[1]) {
+  20   4                                      case INS_SELECT :
+  21   4                                              _readbin(handle, address, STK_buffer + 5, STK_buffer[4]);               //Get_Data()
+  22   4                                              address += STK_buffer[4];
+  23   4                                              for(j=0;j<STK_buffer[4];j+=2) {
+  24   5                                                      status = _select(&rfm_fs, *((uint16 *)(STK_buffer + 5 + j)));
+  25   5                                                      if(status < 0x9F00) { //file not found
+  26   6                                                              address=length;         //cancel all commands to prevent corrupting operation
+  27   6                                                              break;
+  28   6                                                      }
+  29   5                                              }
+  30   4                                              break;                  
+  31   4                                      case INS_READ_BINARY :
+  32   4                                              break;
+  33   4                                      case INS_READ_RECORD :
+  34   4                                              break;                          
+  35   4                                      case INS_UPDATE_BINARY :
+  36   4                                              curfile = NULL;
+  37   4                                              curfile = file_get_current_header(&rfm_fs);
+  38   4                                              if(curfile != NULL) {
+  39   5                                                      if(curfile->type == T_EF) {
+  40   6                                                              if((curfile->acc_inc & 0xF0) == 0) {            //check if OTA updateable
+  41   7                                                                      _readbin(handle, address, STK_buffer + 5, STK_buffer[4]);               //Get_Data()
+  42   7                                                                      address += STK_buffer[4];
+  43   7                                                                      status = _writebin(&rfm_fs, *((uint16 *)(STK_buffer + 2)), STK_buffer + 5, STK_buffer[4]);
+  44   7                                                              } 
+  45   6                                                      }
+  46   5                                                      m_free(curfile);
+  47   5                                              }
+  48   4                                              break;                  
+  49   4                                      case INS_UPDATE_RECORD : 
+  50   4                                              curfile = NULL;
+  51   4                                              curfile = file_get_current_header(&rfm_fs);
+  52   4                                              if(curfile != NULL) {
+  53   5                                                      if(curfile->type == T_EF) {
+  54   6                                                              if((curfile->acc_inc & 0xF0) == 0) {            //check if OTA updateable
+C51 COMPILER V7.01  RFM                                                                    01/25/2014 09:07:27 PAGE 2   
+
+  55   7                                                                      _readbin(handle, address, STK_buffer + 5, STK_buffer[4]);               //Get_Data()
+  56   7                                                                      address += STK_buffer[4];
+  57   7                                                                      switch(STK_buffer[3]) {
+  58   8                                                                              case P_NEXT_REC :
+  59   8                                                                                      status = _writerec_next(&rfm_fs, STK_buffer + 5, STK_buffer[4]);
+  60   8                                                                                      break;
+  61   8                                                                              case P_PREV_REC :
+  62   8                                                                                      status = _writerec_prev(&rfm_fs, STK_buffer + 5, STK_buffer[4]);
+  63   8                                                                                      break;
+  64   8                                                                              case P_ABS_REC :
+  65   8                                                                                      status = _writerec(&rfm_fs, STK_buffer[2] - 1, STK_buffer + 5, STK_buffer[4]);
+  66   8                                                                                      break;
+  67   8                                                                              default :
+  68   8                                                                                      break;
+  69   8                                                                      }
+  70   7                                                              } 
+  71   6                                                      }
+  72   5                                                      m_free(curfile);
+  73   5                                              }
+  74   4                                              break;                          
+  75   4                                      case INS_REHABILITATE : 
+  76   4                                              status = _rehabilitate(&rfm_fs);
+  77   4                                              break;                  
+  78   4                                      case INS_INVALIDATE : 
+  79   4                                              status = _invalidate(&rfm_fs);
+  80   4                                              break;                          
+  81   4                                      case INS_SEEK : 
+  82   4                                              break;                          
+  83   4                                      case INS_INCREASE :
+  84   4                                              break;
+  85   4                              }       
+  86   3                      }
+  87   2              }
+  88   1              //locate response+status(SW) and put in response buffer
+  89   1              status = APDU_SUCCESS;                  //finished RFM
+  90   1              //status = RFM_refresh()
+  91   1              return status;
+  92   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    695    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1 @@
+"drivers\flash.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\flash.lst) OBJECT(.\Debug\Output\flash.obj)

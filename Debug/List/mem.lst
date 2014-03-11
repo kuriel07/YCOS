@@ -1,0 +1,187 @@
+C51 COMPILER V7.01  MEM                                                                    01/25/2014 09:07:15 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE MEM
+OBJECT MODULE PLACED IN .\Debug\Output\mem.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE misc\mem.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\D
+                    -ebug\List\mem.lst) OBJECT(.\Debug\Output\mem.obj)
+
+stmt level    source
+
+   1          #include "mem.h"
+   2          #include "..\defs.h"
+   3          #include <string.h>
+   4          #include <stdarg.h>
+   5          #include <stdio.h>
+   6          #include <stdlib.h>
+   7          
+   8          #if 0
+              uint16 memcopy(char *pdest, char *psrc, uint16 offset, uint16 size) _REENTRANT_
+              {
+                      uint16 wrote = 0;
+                      while(size > offset){
+                              *((eint8*)pdest+wrote)=*((eint8*)psrc+wrote);
+                              size--;
+                              wrote++;
+                      }
+                      return wrote;
+              }
+              
+              void memclear(char *buffer, uint16 size) _REENTRANT_ {
+                      uint16 sz = size; 
+                      char * bx = (char *)buffer; 
+                      while(sz) { 
+                              bx[--sz] = 0x00; 
+                      }
+              }
+              /*
+              uint16 memadd(char *pdest, char *psrc, uint16 offset, uint16 size) _REENTRANT_
+              {
+                      uint16 wrote = 0;
+                      while(size>offset){
+                              *((eint8*)pdest+size-1) = *((eint8*)pdest+size-1) + *((eint8*)psrc+size-1);
+                              size--;
+                              wrote++;
+                      }
+                      return wrote;
+              }
+              */
+              uchar memcompare(char *pdest, char *psrc, uint16 offset, uint16 size) _REENTRANT_
+              {
+                      while(size>offset){
+                              if(*((eint8*)pdest+size-1)!=*((eint8*)psrc+size-1)) return FALSE;
+                              size--;
+                      }
+                      return TRUE;
+              }
+              #endif
+  48          
+  49          /*void memclear(char * buffer, char fill, uchar size) _REENTRANT_ {
+  50                  while(size!=0) {
+  51                          buffer[size-1] = fill;
+  52                          size--;
+  53                  }
+  54          } */
+C51 COMPILER V7.01  MEM                                                                    01/25/2014 09:07:15 PAGE 2   
+
+  55          /*
+  56          uchar mempadding(char *buffer, char pad_char, uchar size) _REENTRANT_
+  57          {
+  58                  uchar len_buf = strlen(buffer);
+  59                  while(size>len_buf) {
+  60                          buffer[--size] = pad_char;
+  61                  }
+  62                  return size;
+  63          } */
+  64          /*
+  65          uint16 memcat(char *pdest, char *psrc, uint16 offset, uint16 size) _REENTRANT_
+  66          {
+  67                  uint16 start_offset = offset;
+  68                  while(size!=0) {
+  69                          pdest[offset] = psrc[(offset++)-start_offset];
+  70                          size--;
+  71                  }
+  72                  return offset;  //total size
+  73          } */
+  74          
+  75          /*void ls_printf(uchar *str, uchar *fmt, ...) _REENTRANT_ {
+  76                  va_list arg_ptr;
+  77          
+  78                  va_start (arg_ptr, fmt);           // format string
+  79                  vsprintf (str, fmt, arg_ptr);
+  80                  va_end (arg_ptr);
+  81          }*/
+  82          
+  83          void ls_printf(uchar * ptr, uchar * fmt, ...) _REENTRANT_ {
+  84   1              va_list arg_ptr;
+  85   1              uchar p;
+  86   1              uchar * buf;
+  87   1              uchar buffer[6];
+  88   1              uint16 i = 0, j = 0, k;
+  89   1              //ptr[0] = 0;           //create null pointer string
+  90   1              va_start(arg_ptr, fmt);
+  91   1              while((p = fmt[j++]) != 0) {
+  92   2                      switch(p) {
+  93   3                              case '%':
+  94   3                                      p = fmt[j++];
+  95   3                                      switch(p) {
+  96   4                                              case 'S':
+  97   4                                              case 's':
+  98   4                                                      buf = va_arg(arg_ptr, uchar *);
+  99   4                                                      strcpy(ptr + i, buf);
+ 100   4                                                      i += strlen(buf);
+ 101   4                                                      ptr[i] = 0;
+ 102   4                                                      break;
+ 103   4                                              case 'C':
+ 104   4                                              case 'c':
+ 105   4                                                      ptr[i++] = (uchar)va_arg(arg_ptr, uchar);
+ 106   4                                                      break;
+ 107   4                                              case 'D':
+ 108   4                                              case 'd':
+ 109   4                                                      //itoa(buffer, va_arg(arg_ptr, uint16)); 
+ 110   4                                                      k = va_arg(arg_ptr, uint16);
+ 111   4                                                      buffer[0] = 0;
+ 112   4                                                      if((k / 10000) != 0) { ptr[i++] = (0x30 | ((uchar)(k / 10000) & 0x0F)); k = k % 10000; buffer[0] = 1
+             -; } 
+ 113   4                                                      if((k / 1000) != 0) { ptr[i++] = (0x30 | ((uchar)(k / 1000) & 0x0F)); k = k % 1000; buffer[0] = 1;} 
+             -else { if(buffer[0] == 1) ptr[i++] = 0x30; }
+ 114   4                                                      if((k / 100) != 0) { ptr[i++] = (0x30 | ((uchar)(k / 100) & 0x0F)); k = k % 100; buffer[0] = 1;} els
+C51 COMPILER V7.01  MEM                                                                    01/25/2014 09:07:15 PAGE 3   
+
+             -e { if(buffer[0] == 1) ptr[i++] = 0x30; }
+ 115   4                                                      if((k / 10) != 0) { ptr[i++] = (0x30 | ((uchar)(k / 10) & 0x0F)); k = k % 10; buffer[0] = 1;} else {
+             - if(buffer[0] == 1) ptr[i++] = 0x30; }
+ 116   4                                                      ptr[i++] = (0x30 | (k & 0x0F));
+ 117   4                                                      //strcpy(ptr, buffer);
+ 118   4                                                      //ptr += strlen(buffer);
+ 119   4                                                      break;  
+ 120   4                                              default:
+ 121   4                                                      ptr[i++] = '%';
+ 122   4                                                      ptr[i++] = p;
+ 123   4                                                      break;
+ 124   4      
+ 125   4                                      }
+ 126   3                                      break;
+ 127   3                              case '\\':
+ 128   3                                      p = fmt[j++];
+ 129   3                                      switch(p) {
+ 130   4                                              case 'n':
+ 131   4                                                      ptr[i++] = 0x0d;
+ 132   4                                                      break;
+ 133   4                                              case 'r':
+ 134   4                                                      ptr[i++] = 0x0a;
+ 135   4                                                      break;
+ 136   4                                              default:
+ 137   4                                                      ptr[i++] = '\\';
+ 138   4                                                      ptr[i++] = p;
+ 139   4                                                      break;
+ 140   4                                      }
+ 141   3                                      break;
+ 142   3                              default:
+ 143   3                                      ptr[i++] = p;
+ 144   3                                      break;
+ 145   3                      }
+ 146   2              }
+ 147   1              ptr[i] = 0;             //null string
+ 148   1              va_end(arg_ptr);
+ 149   1      }
+ 150          
+ 151          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    740    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

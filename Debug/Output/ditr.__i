@@ -1,0 +1,1 @@
+"plugins\ditr.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\ditr.lst) OBJECT(.\Debug\Output\ditr.obj)

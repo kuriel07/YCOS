@@ -1,0 +1,37 @@
+
+
+2014-01-27_09:42:16 Log file "I:/Research/Yggdrasil G30/Debug/Output/Yggdrasil20_hex.log" was opened.
+
+2014-01-27_09:42:17 segList len = 1, segList =  {00H 0000H 10000H}
+
+2014-01-27_09:42:17 vec file "I:/Research/Yggdrasil G30/Debug/Output/Yggdrasil20_PCSCMgr.txt" was opened.
+
+2014-01-27_09:42:17 step0:reset the card...OK
+
+2014-01-27_09:42:17 step1:activate boot loader: skipped.
+
+2014-01-27_09:42:17 step2:verify boot loader...OK
+
+2014-01-27_09:42:17 step3:config bank and HEA...OK
+
+2014-01-27_09:42:17 step4:erase FLASH(no first sector)...OK
+
+2014-01-27_09:42:17 step5:program FLASH(no first sector)...please wait several seconds...OK
+
+2014-01-27_09:42:19 step6:verify FLASH(no first sector)...please wait several seconds...OK
+
+2014-01-27_09:42:21 step7:erase the first sector...OK
+
+2014-01-27_09:42:21 step8:program the first sector...OK
+
+2014-01-27_09:42:21 step9:verify the first sector...OK
+
+2014-01-27_09:42:21 step10:initialize OTP...OK
+
+2014-01-27_09:42:21 step11:power off...OK
+
+2014-01-27_09:42:21 The vector file was closed.
+
+2014-01-27_09:42:21 Total steps 11, failed 0.
+
+2014-01-27_09:42:21 The Log file was closed.

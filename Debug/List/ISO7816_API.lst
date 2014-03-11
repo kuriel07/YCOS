@@ -1,0 +1,716 @@
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE ISO7816_API
+OBJECT MODULE PLACED IN .\Debug\Output\ISO7816_API.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE ISO7816\ISO7816_API.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBU
+                    -G PRINT(.\Debug\List\ISO7816_API.lst) OBJECT(.\Debug\Output\ISO7816_API.obj)
+
+stmt level    source
+
+   1          
+   2          #include        "_17BD_UserCode.h"
+   3          #include        "..\ISO7816\ISO7816.h"
+   4          #include        "..\NORFlash\NORFlash.h"
+   5          #include        "defs.h"
+   6          #include        <string.h>
+   7          #include        <intrins.h>
+   8          
+   9          const BYTEC     VectorTable[0x60] = {0x02,0x00,0x3B,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x32,0x00,0x00,0x0
+             -0,0x00,
+  10                                                             0x00,0x00,0x00,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x32,0x00,0x00,0x00,0x00,
+  11                                                             0x00,0x00,0x00,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x32,0x00,0x00,0x00,0x00,
+  12                                                             0x00,0x00,0x00,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x78,0xFF,0xE4,0xF6,0xD8,
+  13                                                             0xFD,0x90,0x00,0x00,0x7F,0x1A,0x7E,0x04,0xEF,0x70,0x03,0xEE,0x60,0x08,0x0E,0xE4,
+  14                                                             0xF0,0xA3,0xDF,0xFC,0xDE,0xFA,0x75,0x90,0x03,0x75,0xC3,0x01,0x02,0x80,0x00,0xFF};
+  15          //====================================================
+  16          //      Initial I/O
+  17          void    IoInit(BYTE FIDI) _REENTRANT_ 
+  18          {
+  19   1              switch(FIDI)
+  20   1              {                                                                               
+  21   2                      case(0x11): UBRC = FIDI;        break;          //      9600 Bps
+  22   2                      case(0x12): UBRC = FIDI;        break;          //
+  23   2                      case(0x13): UBRC = FIDI;        break;          //
+  24   2                      case(0x18): UBRC = FIDI;        break;
+  25   2                      case(0x91): UBRC = FIDI;        break;
+  26   2                      case(0x92): UBRC = FIDI;        break;
+  27   2                      case(0x94): UBRC = FIDI;        break;          //      57600 Bps
+  28   2                      case(0x95): UBRC = FIDI;        break;          //      115200 Bps
+  29   2                      case(0x96): UBRC = FIDI;        break;          //      223K Bps
+  30   2              }
+  31   1      }
+  32          
+  33          //====================================================
+  34          //      PPS acknowledge
+  35          void    PPS_ACK(void)
+  36          {
+  37   1              Tx_n_Bytes(4,iso7816_buffer);
+  38   1      }
+  39          
+  40          //====================================================
+  41          //      PPS
+  42          void    PPS(void)
+  43          {       
+  44   1              HALFWX P12;
+  45   1      
+  46   1              P12=((HALFW)iso7816_buffer[2] << 8) + (HALFW)iso7816_buffer[3];
+  47   1              switch(P12)
+  48   1              {       
+  49   2                      case 0x11FE:    { PPS_ACK(); IoInit(0x11); break; }
+  50   2                      case 0x947B:    { PPS_ACK(); IoInit(0x94); break; }
+  51   2                      case 0x957A:    { PPS_ACK(); IoInit(0x95); break; }
+  52   2                      case 0x9679:    { PPS_ACK(); IoInit(0x96); break; }
+  53   2                      default: return;
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 2   
+
+  54   2              }
+  55   1      } 
+  56          
+  57          //====================================================
+  58          //      PPS                                               
+  59          void    Set_PPS(BYTEX * buffer) _REENTRANT_
+  60          {       
+  61   1              HALFWX P12;
+  62   1              P12=((HALFW)buffer[2] << 8) + (HALFW)buffer[3];
+  63   1              //if(P12 == 0x11FE)     { PPS_ACK(); IoInit(0x11); return; }
+  64   1              //if(P12 == 0x947B)     { PPS_ACK(); IoInit(0x94); return; }
+  65   1              //if(P12 == 0x957A)     { PPS_ACK(); IoInit(0x95); return; }
+  66   1              //if(P12 == 0x9679)     { PPS_ACK(); IoInit(0x96); return; }
+  67   1              switch(buffer[2]) {
+  68   2                      case(0x11): PPS_ACK(); IoInit(0x11); return;            //      9600 Bps
+  69   2                      case(0x12): PPS_ACK(); IoInit(0x12); return;            //
+  70   2                      case(0x13): PPS_ACK(); IoInit(0x13); return;            //
+  71   2                      case(0x18): PPS_ACK(); IoInit(0x18); return;
+  72   2                      case(0x91): PPS_ACK(); IoInit(0x91); return;
+  73   2                      case(0x92): PPS_ACK(); IoInit(0x92); return;
+  74   2                      case(0x94): PPS_ACK(); IoInit(0x94); return;            //      57600 Bps
+  75   2                      case(0x95): PPS_ACK(); IoInit(0x95); return;            //      115200 Bps
+  76   2                      case(0x96): PPS_ACK(); IoInit(0x96); return;            //      223K Bps        
+  77   2              }
+  78   1              return;
+  79   1      }
+  80          
+  81          //====================================================
+  82          //      Receive one byte by UART
+  83          BYTE    receive_byte(void)
+  84          {
+  85   1              UCR = 0x00;                                             //      UART mode,H/W check parity err,Rx
+  86   1              while(!(USR&0x02))
+  87   1              {;}                                                             //      Wait for receicing
+  88   1              return  UBUF;                                   //      Return the received byte
+  89   1      }
+  90          
+  91          //====================================================
+  92          //      Receive n bytes by UART
+  93          void    Rx_n_Bytes(short n) _REENTRANT_ 
+  94          {       
+  95   1              short   i = 0;
+  96   1      
+  97   1              for(i = 0;i < n;i ++)
+  98   1                      IOBuf[i] = receive_byte();
+  99   1      }
+ 100          
+ 101          //====================================================
+ 102          //      Transmit one byte by UART
+ 103          void    send_byte(char c) _REENTRANT_ 
+ 104          {
+ 105   1              UCR = 0x20;                                             //      UART mode,H/W check parity err,Tx
+ 106   1              UCR2 = 0x0f;                                    //      1 ETU guard time, resend unlimited
+ 107   1              UBUF = c;                                               //      Load the transmitted byte into buffer
+ 108   1              while(!USR_TBE)
+ 109   1              {;}     
+ 110   1              UCR = 0x00;                                             //      Keep Rx mode
+ 111   1      }
+ 112          
+ 113          //====================================================
+ 114          //      Transmit n bytes by UART
+ 115          void    Tx_n_Bytes(USHORT n, BYTE * databuf) _REENTRANT_ 
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 3   
+
+ 116          {
+ 117   1              USHORT  i;
+ 118   1      
+ 119   1              for(i = 0;i < n;i ++)
+ 120   1                      send_byte(databuf[i]);  
+ 121   1      }
+ 122          
+ 123          //====================================================
+ 124          //      Transmit status by UART
+ 125          void    Tx_Status(USHORT sw) _REENTRANT_ 
+ 126          {
+ 127   1              //USHORT        i;
+ 128   1      
+ 129   1              //for(i = 0;i < n;i ++)
+ 130   1              send_byte((BYTE)(sw>>8));
+ 131   1              send_byte((BYTE)(sw&0xff));     
+ 132   1      }
+ 133          
+ 134          //====================================================
+ 135          //      Chip enters idle mode, be awaken up by UART interrupt
+ 136          void    Sleep_Mode(void)
+ 137          {
+ 138   1              BYTE    backupVDCON = VDCON;
+ 139   1              BYTE    backupFDCON = FDCON;
+ 140   1      
+ 141   1              VDCON = 0x00;                                   //      VD closed
+ 142   1              FDCON = 0X00;                                   //      FD closed
+ 143   1      
+ 144   1              SLEEP = 0x01;                                   //      Idle mode
+ 145   1      
+ 146   1              _nop_();
+ 147   1              _nop_();
+ 148   1              _nop_();
+ 149   1      
+ 150   1      
+ 151   1              VDCON = backupVDCON;                    
+ 152   1              FDCON = backupFDCON;                                            
+ 153   1      }
+ 154          
+ 155          void ISO_DelayETU(void) {
+ 156   1              ISOTDAT0 = ISOTRLD0 = 0xFF;
+ 157   1              ISOTDAT1 = ISOTRLD1 = 0x7F;                             //
+ 158   1              ISOTMSK |= Bit0_En;                                             //      ISO timing to send NULL byte interrupt disabled
+ 159   1              ISOTCON &= (Bit3_Dis&Bit2_Dis);                                 //      Counting mode  use mode 1 , clear Tflag
+ 160   1              ISOTCON |= (Bit1_En);                                   //      Counting mode                   use mode 1
+ 161   1              ISOTCON |= Bit0_En;                                             //      Timer start
+ 162   1              while((ISOTCON & (1<<3)) == 0);
+ 163   1      }
+ 164          
+ 165          //====================================================
+ 166          //      ISO/IEC 7816 interface ISO Tx NULL byte automatically
+ 167          void    ISO_AutoTxNULL(BYTE mode, HALFW ETUcount) _REENTRANT_ 
+ 168          {
+ 169   1              if(mode == 1)
+ 170   1              {
+ 171   2                      ISOTDAT0 = ISOTRLD0 = ETUcount;
+ 172   2                      ISOTDAT1 = ISOTRLD1 = (ETUcount>>8);    //      Every ETUcount to send 1 NULL byte
+ 173   2                      ISOTMSK |= Bit0_En;                                             //      ISO timing to send NULL byte interrupt disabled
+ 174   2                      ISOTCON &= (Bit1_Dis&Bit2_Dis);                 //      Counting mode
+ 175   2                      ISOTCON |= Bit0_En;                                             //      Timer start
+ 176   2              }
+ 177   1              else
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 4   
+
+ 178   1              {
+ 179   2                      ISOTCON &= Bit0_Dis;
+ 180   2              }
+ 181   1      }
+ 182          
+ 183          //====================================================
+ 184          //      Change bank
+ 185          void    SetBase(BYTE BankNum) _REENTRANT_ 
+ 186          {
+ 187   1              if(BankNum < 8)
+ 188   1              {
+ 189   2                      MMU_SEL = 0x01;
+ 190   2                      rP3     = BankNum;                              //      Set P3
+ 191   2              }
+ 192   1              else
+ 193   1              {
+ 194   2                      MMU_SEL = 0x00;
+ 195   2                      //SWptr = P1P2ERR;                      //      P1,P2 error
+ 196   2              }       
+ 197   1      }
+ 198          
+ 199          //====================================================
+ 200          //      Compute CRC by hardware
+ 201          uint16  CalCRC(BYTE * SrcAddr, HALFW length) _REENTRANT_
+ 202          {
+ 203   1              uint16 crcval;
+ 204   1              while(length != 0)
+ 205   1              {
+ 206   2                      CRCDAT = *(BYTEX *)SrcAddr;
+ 207   2                      SrcAddr ++;
+ 208   2                      length --;
+ 209   2              }
+ 210   1              crcval = (BYTE)CRCDAT;
+ 211   1              crcval <<= 8;
+ 212   1              crcval |= (BYTE)CRCDAT;
+ 213   1              //DstAddr[0] = CRCDAT;                                          //      Read CRC
+ 214   1              //DstAddr[1] = CRCDAT;
+ 215   1              return crcval;
+ 216   1      }
+ 217          
+ 218          //====================================================
+ 219          //      Erase pages in flash memory.
+ 220          BYTE    Erase_Pages(HALFW FlashAddr, HALFW PageNum) _REENTRANT_
+ 221          {
+ 222   1              HALFW i;
+ 223   1      
+ 224   1              for (i = 0;i < PageNum;i++)                             //      Erase pages       
+ 225   1              {
+ 226   2                      Erase_Page((BYTEX *)FlashAddr);
+ 227   2      
+ 228   2                      FlashAddr += PageSize;
+ 229   2                      /*if(SWptr != 0)
+ 230   2                      {
+ 231   2                              return  SWptr;
+ 232   2                      } */
+ 233   2              }
+ 234   1      }
+*** WARNING C173 IN LINE 234 OF ISO7816\ISO7816_API.C: missing return-expression
+ 235          
+ 236          //====================================================
+ 237          //      Read flash memory
+ 238          void    ReadFlash(BYTEX *ramAddr, HALFW FlashAddr, HALFW  length) 
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 5   
+
+ 239          {
+ 240   1              if(length == 0)
+ 241   1                      length = 0x100;
+ 242   1      
+ 243   1              if((FlashAddr >= FlashStart) && (FlashAddr < FlashLimit)) memcpy(ramAddr,(BYTEX *)FlashAddr,length);
+ 244   1                      //mem_cpy(ramAddr,(BYTEX *)FlashAddr,length);
+ 245   1      }
+ 246          
+ 247          //====================================================
+ 248          //      Update flash memory
+ 249          BYTE    UpdateFlash(HALFW foffset, BYTEX * RAMbuf, BYTE length) 
+ 250          {
+ 251   1              HALFW   FlashAddr, FlashAddrEnd;
+ 252   1              HALFW   dataleft = 0, toUpdate = 0;
+ 253   1              uchar updtcntr = 0;
+ 254   1              FlashAddr =  foffset;
+ 255   1              FlashAddrEnd = FlashAddr + length - 1;          //      End of the target address
+ 256   1      
+ 257   1              //***************************************************// 
+ 258   1      //      Update RAM
+ 259   1              if((foffset >= RAMBase) && (foffset < RAMLimit))
+ 260   1              {
+ 261   2                      //mem_cpy((BYTEX *)foffset,RAMbuf,length);
+ 262   2                      memcpy((BYTEX *)foffset, RAMbuf, length);
+ 263   2                      return SUCCESS;
+ 264   2              }
+ 265   1      
+ 266   1              //***************************************************// 
+ 267   1      //      Update flash
+ 268   1              else if((FlashAddrEnd < FlashLimit))            //      Flash and OTP memory area
+ 269   1              {   
+ 270   2                      //mem_cpy(FlashBuffer,RAMbuf,length);
+ 271   2                      
+ 272   2                  FlashAddr &= (0xFE00 | PageSize); 
+ 273   2                  foffset = (HALFW)foffset & (PageSize - 1);
+ 274   2                  
+ 275   2                      for(dataleft = length; dataleft; dataleft  -= toUpdate)
+ 276   2                      {
+ 277   3                              toUpdate = (foffset + dataleft) < PageSize ? dataleft : (PageSize - foffset);
+ 278   3                                                      
+ 279   3                              //mem_cpy(FlashBuffer,(BYTEX *)FlashAddr,PageSize);
+ 280   3                              memcpy(FlashBuffer, (BYTEX *)FlashAddr, PageSize);
+ 281   3      
+ 282   3                              //mem_cpy(FlashBuffer + foffset,RAMbuf,toUpdate);
+ 283   3                              memcpy(FlashBuffer + foffset, RAMbuf, toUpdate);
+ 284   3                              RAMbuf += toUpdate;             /* update rambuf pointer */
+ 285   3                              updtcntr = 0;
+ 286   3                              erase_page:     
+ 287   3                              if(Erase_Page((BYTEX *)FlashAddr) != SUCCESS)
+ 288   3                              {
+ 289   4                                      //SWptr = WRERROR;                              //      6501
+ 290   4                                      updtcntr++;
+ 291   4                                      if(updtcntr > 3) return WRERROR; 
+ 292   4                                      //return WRERROR;
+ 293   4                                      goto erase_page;                        
+ 294   4                              }
+ 295   3                              
+ 296   3                              //updtcntr = 0;
+ 297   3                              write_bytes:
+ 298   3                              if(Write_Bytes((BYTEX *)FlashAddr, FlashBuffer, PageSize) != SUCCESS)
+ 299   3                              {
+ 300   4                                      //SWptr = WRERROR;                              //      6501
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 6   
+
+ 301   4                                      updtcntr++;
+ 302   4                                      if(updtcntr > 3) return WRERROR; 
+ 303   4                                      //return WRERROR;
+ 304   4                                      goto erase_page;                        
+ 305   4                              }
+ 306   3                      
+ 307   3                              //if(memcmp((BYTEX *)FlashAddr, FlashBuffer, PageSize) != SUCCESS)      
+ 308   3                              {                                                                       //      Check by reading back
+ 309   4                                      //SWptr = RDERROR;                              //      6504
+ 310   4                                      //return RDERROR;
+ 311   4                                      //goto erase_page;      
+ 312   4                              }       
+ 313   3                                              
+ 314   3                              foffset = (BYTE)(toUpdate + foffset) & (PageSize - 1);
+ 315   3                              FlashAddr += PageSize;
+ 316   3                      }
+ 317   2              }
+ 318   1              else
+ 319   1              {
+ 320   2                      return P1P2ERR;                                         //      6A00
+ 321   2              }
+ 322   1              return SUCCESS;
+ 323   1      }
+*** WARNING C280 IN LINE 297 OF ISO7816\ISO7816_API.C: 'write_bytes': unreferenced label
+ 324          
+ 325          #if 1
+ 326          void DES_Decrypt(BYTE * key, BYTE * inbuf, BYTE * outbuf) _REENTRANT_ {
+ 327   1              /*CLKCON |= Bit0_En;                                            //      Open DES CLK
+ 328   1              DES_DATEN = 1;                                                  //      Enable data input
+ 329   1              DESD0 = inbuf[7];
+ 330   1              DESD1 = inbuf[6];
+ 331   1              DESD2 = inbuf[5];
+ 332   1              DESD3 = inbuf[4];       
+ 333   1              DESD4 = inbuf[3];
+ 334   1              DESD5 = inbuf[2];
+ 335   1              DESD6 = inbuf[1];
+ 336   1              DESD7 = inbuf[0];
+ 337   1              DES_DATEN = 0;                                                  //      Disable data input      
+ 338   1              if(mode) {
+ 339   1                      DES_KEY1EN = 1;
+ 340   1                      DESD0 = key1[7];
+ 341   1                      DESD1 = key1[6];
+ 342   1                      DESD2 = key1[5];        
+ 343   1                      DESD3 = key1[4];
+ 344   1                      DESD4 = key1[3];
+ 345   1                      DESD5 = key1[2];
+ 346   1                      DESD6 = key1[1];        
+ 347   1                      DESD7 = key1[0];
+ 348   1                      DES_KEY1EN = 0;
+ 349   1              
+ 350   1                      DES_KEY2EN = 1;
+ 351   1                      DESD0 = key2[7];
+ 352   1                      DESD1 = key2[6];
+ 353   1                      DESD2 = key2[5];        
+ 354   1                      DESD3 = key2[4];
+ 355   1                      DESD4 = key2[3];
+ 356   1                      DESD5 = key2[2];
+ 357   1                      DESD6 = key2[1];        
+ 358   1                      DESD7 = key2[0];
+ 359   1                      DES_KEY2EN = 0;
+ 360   1                      DES_TDES = 1;                                           //      Tripple DES
+ 361   1              } else {        
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 7   
+
+ 362   1                      DESCTL |= 0xC0;                                         //      Key1,Key2 enable
+ 363   1                      DESD0 = key[7];
+ 364   1                      DESD1 = key[6];
+ 365   1                      DESD2 = key[5]; 
+ 366   1                      DESD3 = key[4];
+ 367   1                      DESD4 = key[3];
+ 368   1                      DESD5 = key[2];
+ 369   1                      DESD6 = key[1]; 
+ 370   1                      DESD7 = key[0];
+ 371   1                      DESCTL &= 0x3F;                                         //      Key1,Key2 disable
+ 372   1                      DES_TDES = 0;                                           //      Tripple DES
+ 373   1              }
+ 374   1              //if(oper == 0x00)
+ 375   1              //DES_MODE = 0;                                         //      Encryption
+ 376   1              //if(oper == 0x01)
+ 377   1              DES_MODE = 1;                                           //      Decryption
+ 378   1              DES_TDES = 0;                                           //      Tripple DES     (disabled)
+ 379   1              DES_START = 1;                                                  //      Start DES
+ 380   1              while(!DES_END)                                                 //      DES caculation is pending
+ 381   1              {;}             
+ 382   1              //CLKCON &= Bit0_Dis;                                           //      Close DES CLK                                                           
+ 383   1              //CLKCON |= Bit0_En;                                            //      Open DES CLK
+ 384   1              outbuf[7] = DESD0;
+ 385   1              outbuf[6] = DESD1;              
+ 386   1              outbuf[5] = DESD2;
+ 387   1              outbuf[4] = DESD3;
+ 388   1              outbuf[3] = DESD4;
+ 389   1              outbuf[2] = DESD5;
+ 390   1              outbuf[1] = DESD6;
+ 391   1              outbuf[0] = DESD7;
+ 392   1              DES_END = 0;                                                    //      Clear DES_END
+ 393   1              CLKCON &= Bit0_Dis;                                             //      Close DES CLK   
+ 394   1              return;*/
+ 395   1              DES_Operation(0, 1, inbuf, key, key, outbuf);   
+ 396   1      }
+ 397          
+ 398          void DES_Encrypt(BYTE * key, BYTE * inbuf, BYTE * outbuf) _REENTRANT_ {
+ 399   1              /*CLKCON |= Bit0_En;                                            //      Open DES CLK
+ 400   1              DES_DATEN = 1;                                                  //      Enable data input
+ 401   1              DESD0 = inbuf[7];
+ 402   1              DESD1 = inbuf[6];
+ 403   1              DESD2 = inbuf[5];
+ 404   1              DESD3 = inbuf[4];       
+ 405   1              DESD4 = inbuf[3];
+ 406   1              DESD5 = inbuf[2];
+ 407   1              DESD6 = inbuf[1];
+ 408   1              DESD7 = inbuf[0];
+ 409   1              DES_DATEN = 0;                                                  //      Disable data input
+ 410   1              if(mode) {
+ 411   1                      DES_KEY1EN = 1;
+ 412   1                      DESD0 = key1[7];
+ 413   1                      DESD1 = key1[6];
+ 414   1                      DESD2 = key1[5];        
+ 415   1                      DESD3 = key1[4];
+ 416   1                      DESD4 = key1[3];
+ 417   1                      DESD5 = key1[2];
+ 418   1                      DESD6 = key1[1];        
+ 419   1                      DESD7 = key1[0];
+ 420   1                      DES_KEY1EN = 0;
+ 421   1              
+ 422   1                      DES_KEY2EN = 1;
+ 423   1                      DESD0 = key2[7];
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 8   
+
+ 424   1                      DESD1 = key2[6];
+ 425   1                      DESD2 = key2[5];        
+ 426   1                      DESD3 = key2[4];
+ 427   1                      DESD4 = key2[3];
+ 428   1                      DESD5 = key2[2];
+ 429   1                      DESD6 = key2[1];        
+ 430   1                      DESD7 = key2[0];
+ 431   1                      DES_KEY2EN = 0;
+ 432   1                      DES_TDES = 1;                                           //      Tripple DES
+ 433   1              } else {        
+ 434   1                      DESCTL |= 0xC0;                                         //      Key1,Key2 enable
+ 435   1                      DESD0 = key[7];
+ 436   1                      DESD1 = key[6];
+ 437   1                      DESD2 = key[5]; 
+ 438   1                      DESD3 = key[4];
+ 439   1                      DESD4 = key[3];
+ 440   1                      DESD5 = key[2];
+ 441   1                      DESD6 = key[1]; 
+ 442   1                      DESD7 = key[0];
+ 443   1                      DESCTL &= 0x3F;                                         //      Key1,Key2 disable
+ 444   1                      DES_TDES = 0;                                           //      Tripple DES
+ 445   1              }
+ 446   1              //if(oper == 0x00)
+ 447   1              DES_MODE = 0;                                           //      Encryption
+ 448   1              //if(oper == 0x01)
+ 449   1              //DES_MODE = 1;                                         //      Decryption
+ 450   1              DES_START = 1;                                                  //      Start DES
+ 451   1              while(!DES_END)                                                 //      DES caculation is pending
+ 452   1              {;}             
+ 453   1              CLKCON &= Bit0_Dis;                                             //      Close DES CLK                                                           
+ 454   1              CLKCON |= Bit0_En;                                              //      Open DES CLK
+ 455   1              outbuf[7] = DESD0;
+ 456   1              outbuf[6] = DESD1;              
+ 457   1              outbuf[5] = DESD2;
+ 458   1              outbuf[4] = DESD3;
+ 459   1              outbuf[3] = DESD4;
+ 460   1              outbuf[2] = DESD5;
+ 461   1              outbuf[1] = DESD6;
+ 462   1              outbuf[0] = DESD7;
+ 463   1              DES_END = 0;                                                    //      Clear DES_END
+ 464   1              CLKCON &= Bit0_Dis;                                             //      Close DES CLK
+ 465   1              return;*/
+ 466   1              DES_Operation(0, 0, inbuf, key, key, outbuf);   
+ 467   1      }
+ 468          
+ 469          void TDES_Decrypt(BYTE * key1, BYTE * key2, BYTE * inbuf, BYTE * outbuf) _REENTRANT_ {
+ 470   1              DES_Operation(1, 1, inbuf, key1, key2, outbuf); 
+ 471   1      }
+ 472          
+ 473          void TDES_Encrypt(BYTE * key1, BYTE * key2, BYTE * inbuf, BYTE * outbuf) _REENTRANT_ {
+ 474   1              DES_Operation(1, 0, inbuf, key1, key2, outbuf); 
+ 475   1      }
+ 476          
+ 477          #endif
+ 478          
+ 479          //====================================================
+ 480          //      DES operation
+ 481          //      mode=P1:        0x00-DES,0x01-T-DES
+ 482          //      oper=P2:        0x00-Encrypt,0x01-Decrypt,0x10-Read Result
+ 483          //      len=P3
+ 484          BYTE DES_Operation(BYTE mode, BYTE oper, BYTE * inbuf, BYTE * key1, BYTE * key2, BYTE * outbuf)
+ 485          {       
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 9   
+
+ 486   1              CLKCON |= Bit0_En;                                              //      Open DES CLK
+ 487   1              DES_DATEN = 1;                                                  //      Enable data input
+ 488   1              DESD0 = inbuf[7];
+ 489   1              DESD1 = inbuf[6];
+ 490   1              DESD2 = inbuf[5];
+ 491   1              DESD3 = inbuf[4];       
+ 492   1              DESD4 = inbuf[3];
+ 493   1              DESD5 = inbuf[2];
+ 494   1              DESD6 = inbuf[1];
+ 495   1              DESD7 = inbuf[0];
+ 496   1              DES_DATEN = 0;                                                  //      Disable data input
+ 497   1      
+ 498   1              if(mode == 0x01)                                                //      Tripple DES
+ 499   1              {       
+ 500   2                      DES_KEY1EN = 1;
+ 501   2                      DESD0 = key1[7];
+ 502   2                      DESD1 = key1[6];
+ 503   2                      DESD2 = key1[5];        
+ 504   2                      DESD3 = key1[4];
+ 505   2                      DESD4 = key1[3];
+ 506   2                      DESD5 = key1[2];
+ 507   2                      DESD6 = key1[1];        
+ 508   2                      DESD7 = key1[0];
+ 509   2                      DES_KEY1EN = 0;
+ 510   2      
+ 511   2                      DES_KEY2EN = 1;
+ 512   2                      DESD0 = key2[7];
+ 513   2                      DESD1 = key2[6];
+ 514   2                      DESD2 = key2[5];        
+ 515   2                      DESD3 = key2[4];
+ 516   2                      DESD4 = key2[3];
+ 517   2                      DESD5 = key2[2];
+ 518   2                      DESD6 = key2[1];        
+ 519   2                      DESD7 = key2[0];
+ 520   2                      DES_KEY2EN = 0;
+ 521   2      
+ 522   2                      if(oper == 0x00)
+ 523   2                      DES_MODE = 0;                                           //      Encryption
+ 524   2                      if(oper == 0x01)
+ 525   2                      DES_MODE = 1;                                           //      Decryption
+ 526   2                      DES_TDES = 1;                                           //      Tripple DES
+ 527   2              }
+ 528   1              else                                                                    //      Single DES
+ 529   1              {       
+ 530   2                      DESCTL |= 0xC0;                                         //      Key1,Key2 enable
+ 531   2                      DESD0 = key1[7];
+ 532   2                      DESD1 = key1[6];
+ 533   2                      DESD2 = key1[5];        
+ 534   2                      DESD3 = key1[4];
+ 535   2                      DESD4 = key1[3];
+ 536   2                      DESD5 = key1[2];
+ 537   2                      DESD6 = key1[1];        
+ 538   2                      DESD7 = key1[0];
+ 539   2                      DESCTL &= 0x3F;                                         //      Key1,Key2 disable
+ 540   2      
+ 541   2                      if(oper == 0x00)
+ 542   2                      DES_MODE = 0;                                           //      Encryption
+ 543   2                      if(oper == 0x01)
+ 544   2                      DES_MODE = 1;                                           //      Decryption
+ 545   2                      DES_TDES = 0;                                           //      Tripple DES
+ 546   2              }
+ 547   1              DES_START = 1;                                                  //      Start DES
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 10  
+
+ 548   1              while(!DES_END)                                                 //      DES caculation is pending
+ 549   1              {;}             
+ 550   1              //CLKCON &= Bit0_Dis;                                           //      Close DES CLK
+ 551   1                                                              
+ 552   1              //CLKCON |= Bit0_En;                                            //      Open DES CLK
+ 553   1              outbuf[7] = DESD0;
+ 554   1              outbuf[6] = DESD1;              
+ 555   1              outbuf[5] = DESD2;
+ 556   1              outbuf[4] = DESD3;
+ 557   1              outbuf[3] = DESD4;
+ 558   1              outbuf[2] = DESD5;
+ 559   1              outbuf[1] = DESD6;
+ 560   1              outbuf[0] = DESD7;
+ 561   1              DES_END = 0;                                                    //      Clear DES_END
+ 562   1              CLKCON &= Bit0_Dis;                                             //      Close DES CLK
+ 563   1      }
+*** WARNING C173 IN LINE 563 OF ISO7816\ISO7816_API.C: missing return-expression
+ 564          
+ 565          void MAC_Algorithm3(uchar len, uchar * key, uchar * message, uchar * output) _REENTRANT_ {
+ 566   1              //unsigned char output[8];
+ 567   1              uchar i, j;
+ 568   1          uchar xx[8];
+ 569   1          //uchar block[8];
+ 570   1          //uchar offset = 0;
+ 571   1              memset(xx, 0, 8);
+ 572   1          //memcpy(xx, iv, 8);
+ 573   1          // Chain and encrypt 5 8-bit blocks
+ 574   1          for (i = 0; i < len; i += 8) {
+ 575   2              //memcpy(block, message + i , 8);
+ 576   2                      for(j = 0; j < 8; j++) {
+ 577   3                              xx[j] ^= message[i + j];
+ 578   3                      }
+ 579   2              //set xx `xor {xx} {mj}` # chain
+ 580   2              //xor_block(xx, block);
+ 581   2                      DES_Operation(0, 0, xx, key, key, output);
+ 582   2              //set xx `des -k {k0} -c {xx}` #encrypt
+ 583   2              //des_ecb_crypt(xx, output, DES_ENCRYPT, k0);
+ 584   2              memcpy(xx, output, 8);
+ 585   2          }
+ 586   1      
+ 587   1              DES_Operation(0, 0, xx, key + 8, key + 8, output);
+ 588   1          //des_ecb_crypt(xx, output, DES_DECRYPT, k1);
+ 589   1          memcpy(xx, output, 8);
+ 590   1              
+ 591   1              DES_Operation(0, 0, xx, key, key, output);
+ 592   1          //des_ecb_crypt(xx, output, DES_ENCRYPT, k0);
+ 593   1          memcpy(xx, output, 8);
+ 594   1          //print_hex(xx, 8);
+ 595   1      }
+ 596          
+ 597          //====================================================
+ 598          //      Generate random number
+ 599          void Random_Number_Generator(BYTE *RNGBuf, BYTE length) _REENTRANT_ {
+ 600   1              BYTE    WaitTime;
+ 601   1      
+ 602   1              RNGCTL &= 0xFE;                                                 //      Open RNG
+ 603   1      
+ 604   1              while(length > 0)
+ 605   1              {
+ 606   2                      WaitTime = 10;
+ 607   2                      while(WaitTime --)
+ 608   2                      {
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 11  
+
+ 609   3                              _nop_();
+ 610   3                              _nop_();
+ 611   3                              _nop_();
+ 612   3                              _nop_();
+ 613   3                              _nop_();
+ 614   3      
+ 615   3                              _nop_();
+ 616   3                              _nop_();
+ 617   3                              _nop_();
+ 618   3                              _nop_();
+ 619   3                              _nop_();
+ 620   3                      }
+ 621   2                      *RNGBuf = RNGDAT;
+ 622   2                      RNGBuf++;
+ 623   2                      length--;
+ 624   2              }
+ 625   1      
+ 626   1              RNGCTL |= 0x01;                                                 //      Close RNG
+ 627   1      }
+ 628          
+ 629          //====================================================
+ 630          //      Return to BL
+ 631          void    ReturnToBL(void)
+ 632          {
+ 633   1              IE = 0;
+ 634   1              MMU_SEL = 0x01;
+ 635   1              rP3 = 0x06;
+ 636   1              Foffset = 0x8000;
+ 637   1              //IOBuf[0] = 0x00;
+ 638   1              //IOBuf[1] = 0x01;
+ 639   1              Erase_Page((BYTEX *)Foffset);
+ 640   1              //mem_cpy(IOBuf,VectorTable,0x60);
+ 641   1              memcpy(IOBuf,VectorTable,0x60);
+ 642   1              Write_Bytes((BYTEX *)(0x8000),IOBuf,0x60);
+ 643   1      }
+ 644          
+ 645          void StartTimeoutSequence(void) {
+ 646   1              _tick_counter = 0;
+ 647   1              TMOD = 1;               //16 bit timer mode
+ 648   1              TH0 = 0xC3;             //50000 clock
+ 649   1              TL0 = 0x50;     
+ 650   1              IE_TMR0 = 1;            //enable interrupt timer 0      
+ 651   1              TCON_TF0 = 0;
+ 652   1              TCON_TR0 = 1;
+ 653   1      }
+ 654          
+ 655          void EndTimeoutSequence(void) {
+ 656   1              _tick_counter = 0;
+ 657   1              TCON_TR0 = 0;
+ 658   1              TH0 = 0x00;     
+ 659   1              TL0 = 0x00;             
+ 660   1              TCON_TF0 = 0;
+ 661   1              IE_TMR0 = 0;            //disable interrupt timer 0     
+ 662   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2450    ----
+   CONSTANT SIZE    =     96    ----
+   XDATA SIZE       =   ----      34
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+C51 COMPILER V7.01  ISO7816_API                                                            01/25/2014 09:07:12 PAGE 12  
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  3 WARNING(S),  0 ERROR(S)

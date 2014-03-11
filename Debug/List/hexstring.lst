@@ -1,0 +1,263 @@
+C51 COMPILER V7.01  HEXSTRING                                                              01/19/2013 07:30:55 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE HEXSTRING
+OBJECT MODULE PLACED IN .\Debug\Output\hexstring.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE misc\hexstring.c LARGE OMF2 OPTIMIZE(SIZE) REGFILE(.\Debug\Output\Yggdras
+                    -il20.ORC) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\hexstring.lst) OBJECT(.\Debug\Output\hexstring.obj)
+
+stmt level    source
+
+   1          #include "hexstring.h"
+*** WARNING C245 IN LINE 4 OF MISC\../DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 5 OF MISC\../DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 6 OF MISC\../DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 7 OF MISC\../DEFS.H: unknown #pragma, line ignored
+   2          #include "..\defs.h" 
+   3          #include <stdio.h>
+   4          
+   5          char gethex()
+   6          {
+   7   1              /*uchar c;
+   8   1              ulang_get_key:
+   9   1              c = getch();
+  10   1              //printf("%c ditekan \n", c);
+  11   1              switch(c)
+  12   1              {
+  13   1                      case 0x0d:
+  14   1                              return 0x10;
+  15   1                              break;
+  16   1                      case '0':
+  17   1                              putchar('0');
+  18   1                              return 0;
+  19   1                              break;
+  20   1                      case '1':
+  21   1                              putchar('1');
+  22   1                              return 1;
+  23   1                              break;
+  24   1                      case '2':
+  25   1                              putchar('2');
+  26   1                              return 2;
+  27   1                              break;
+  28   1                      case '3':
+  29   1                              putchar('3');
+  30   1                              return 3;
+  31   1                              break;
+  32   1                      case '4':
+  33   1                              putchar('4');
+  34   1                              return 4;
+  35   1                              break;
+  36   1                      case '5':
+  37   1                              putchar('5');
+  38   1                              return 5;
+  39   1                              break;
+  40   1                      case '6':
+  41   1                              putchar('6');
+  42   1                              return 6;
+  43   1                              break;
+  44   1                      case '7':
+  45   1                              putchar('7');
+  46   1                              return 7;
+  47   1                              break;
+  48   1                      case '8':
+  49   1                              putchar('8');
+  50   1                              return 8;
+C51 COMPILER V7.01  HEXSTRING                                                              01/19/2013 07:30:55 PAGE 2   
+
+  51   1                              break;
+  52   1                      case '9':
+  53   1                              putchar('9');
+  54   1                              return 9;
+  55   1                              break;
+  56   1                      case 'A':
+  57   1                              putchar('A');
+  58   1                              return 0x0a;
+  59   1                              break;
+  60   1                      case 'B':
+  61   1                              putchar('B');
+  62   1                              return 0x0b;
+  63   1                              break;
+  64   1                      case 'C':
+  65   1                              putchar('C');
+  66   1                              return 0x0c;
+  67   1                              break;
+  68   1                      case 'D':
+  69   1                              putchar('D');
+  70   1                              return 0x0d;
+  71   1                              break;
+  72   1                      case 'E':
+  73   1                              putchar('E');
+  74   1                              return 0x0e;
+  75   1                              break;
+  76   1                      case 'F':
+  77   1                              putchar('F');
+  78   1                              return 0x0f;
+  79   1                              break;
+  80   1                      case 'a':
+  81   1                              putchar('A');
+  82   1                              return 0x0a;
+  83   1                              break;
+  84   1                      case 'b':
+  85   1                              putchar('B');
+  86   1                              return 0x0b;
+  87   1                              break;
+  88   1                      case 'c':
+  89   1                              putchar('C');
+  90   1                              return 0x0c;
+  91   1                              break;
+  92   1                      case 'd':
+  93   1                              putchar('D');
+  94   1                              return 0x0d;
+  95   1                              break;
+  96   1                      case 'e':
+  97   1                              putchar('E');
+  98   1                              return 0x0e;
+  99   1                              break;
+ 100   1                      case 'f':
+ 101   1                              putchar('F');
+ 102   1                              return 0x0f;
+ 103   1                              break;
+ 104   1                      default:
+ 105   1                              goto ulang_get_key;
+ 106   1                              break;
+ 107   1              } */
+ 108   1              return 0;
+ 109   1      }
+ 110          
+ 111          char gethexvalue(char c)
+ 112          {
+C51 COMPILER V7.01  HEXSTRING                                                              01/19/2013 07:30:55 PAGE 3   
+
+ 113   1              /*switch(c)
+ 114   1              {
+ 115   1                      case 0x0d:
+ 116   1                              return 0x10;
+ 117   1                              break;
+ 118   1                      case '0':
+ 119   1                              putchar('0');
+ 120   1                              return 0;
+ 121   1                              break;
+ 122   1                      case '1':
+ 123   1                              putchar('1');
+ 124   1                              return 1;
+ 125   1                              break;
+ 126   1                      case '2':
+ 127   1                              putchar('2');
+ 128   1                              return 2;
+ 129   1                              break;
+ 130   1                      case '3':
+ 131   1                              putchar('3');
+ 132   1                              return 3;
+ 133   1                              break;
+ 134   1                      case '4':
+ 135   1                              putchar('4');
+ 136   1                              return 4;
+ 137   1                              break;
+ 138   1                      case '5':
+ 139   1                              putchar('5');
+ 140   1                              return 5;
+ 141   1                              break;
+ 142   1                      case '6':
+ 143   1                              putchar('6');
+ 144   1                              return 6;
+ 145   1                              break;
+ 146   1                      case '7':
+ 147   1                              putchar('7');
+ 148   1                              return 7;
+ 149   1                              break;
+ 150   1                      case '8':
+ 151   1                              putchar('8');
+ 152   1                              return 8;
+ 153   1                              break;
+ 154   1                      case '9':
+ 155   1                              putchar('9');
+ 156   1                              return 9;
+ 157   1                              break;
+ 158   1                      case 'A':
+ 159   1                              putchar('A');
+ 160   1                              return 0x0a;
+ 161   1                              break;
+ 162   1                      case 'B':
+ 163   1                              putchar('B');
+ 164   1                              return 0x0b;
+ 165   1                              break;
+ 166   1                      case 'C':
+ 167   1                              putchar('C');
+ 168   1                              return 0x0c;
+ 169   1                              break;
+ 170   1                      case 'D':
+ 171   1                              putchar('D');
+ 172   1                              return 0x0d;
+ 173   1                              break;
+ 174   1                      case 'E':
+C51 COMPILER V7.01  HEXSTRING                                                              01/19/2013 07:30:55 PAGE 4   
+
+ 175   1                              putchar('E');
+ 176   1                              return 0x0e;
+ 177   1                              break;
+ 178   1                      case 'F':
+ 179   1                              putchar('F');
+ 180   1                              return 0x0f;
+ 181   1                              break;
+ 182   1                      case 'a':
+ 183   1                              putchar('A');
+ 184   1                              return 0x0a;
+ 185   1                              break;
+ 186   1                      case 'b':
+ 187   1                              putchar('B');
+ 188   1                              return 0x0b;
+ 189   1                              break;
+ 190   1                      case 'c':
+ 191   1                              putchar('C');
+ 192   1                              return 0x0c;
+ 193   1                              break;
+ 194   1                      case 'd':
+ 195   1                              putchar('D');
+ 196   1                              return 0x0d;
+ 197   1                              break;
+ 198   1                      case 'e':
+ 199   1                              putchar('E');
+ 200   1                              return 0x0e;
+ 201   1                              break;
+ 202   1                      case 'f':
+ 203   1                              putchar('F');
+ 204   1                              return 0x0f;
+ 205   1                              break;
+ 206   1                      default:
+ 207   1                              return 0x00;
+ 208   1                              break;
+ 209   1              }*/
+ 210   1              return c;
+ 211   1      }
+ 212          
+ 213          uint16 fromhex(char * buf, uchar size)
+ 214          {
+ 215   1              uint16 temp = 0;
+ 216   1              uchar i;
+ 217   1              for(i=0;i<size;i++)
+ 218   1              {
+ 219   2                      temp <<= 8;
+ 220   2                      temp |= (uchar)buf[i];
+ 221   2              }
+ 222   1              return temp;
+ 223   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     90    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       7
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+C51 COMPILER V7.01  HEXSTRING                                                              01/19/2013 07:30:55 PAGE 5   
+
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

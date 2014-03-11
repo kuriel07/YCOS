@@ -1,0 +1,36 @@
+C51 COMPILER V7.01  MAZE                                                                   01/15/2014 08:32:07 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE MAZE
+OBJECT MODULE PLACED IN .\Debug\Output\maze.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE midgard\maze.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT
+                    -(.\Debug\List\maze.lst) OBJECT(.\Debug\Output\maze.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+*** WARNING C245 IN LINE 4 OF MIDGARD\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 5 OF MIDGARD\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 6 OF MIDGARD\..\DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 7 OF MIDGARD\..\DEFS.H: unknown #pragma, line ignored
+   2          #include "maze.h"
+   3          
+   4          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

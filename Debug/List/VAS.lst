@@ -1,0 +1,1428 @@
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE VAS
+OBJECT MODULE PLACED IN .\Debug\Output\VAS.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE framework\VAS.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRIN
+                    -T(.\Debug\List\VAS.lst) OBJECT(.\Debug\Output\VAS.obj)
+
+stmt level    source
+
+   1          //#include "..\..\defs.h"
+   2          #include "..\midgard\midgard.h"
+   3          #include "..\asgard\file.h"
+   4          #include "..\liquid.h"
+   5          //#include "SAT.h"
+   6          #include "VAS.h"
+   7          #include "SMS.h" 
+   8          #include "..\framework\dcs.h"
+   9          #include <string.h>     
+  10                   
+  11          #if VAS_MDIL_ALLOCATED || VAS_VDIL_ALLOCATED
+              #include "..\plugins\dil.h"
+              #endif             
+  14          #if VAS_DITR_ALLOCATED
+              #include "..\plugins\ditr.h"
+              #endif 
+  17          #if VAS_MASL_ALLOCATED
+              #include "..\plugins\masl.h"
+              #endif 
+  20          #if VAS_ENCR_ALLOCATED
+              #include "..\plugins\encr.h"
+              #endif           
+  23          #if VAS_DECR_ALLOCATED
+              #include "..\plugins\decr.h"
+              #endif           
+  26          #if VAS_ICCID_ALLOCATED
+              #include "..\plugins\iccid.h"
+              #endif
+  29          
+  30          uchar VAS_activated(void) _REENTRANT_ {
+  31   1              fs_handle cb_fs;
+  32   1              _select(&cb_fs, FID_MF);
+  33   1              if(_select(&cb_fs, FID_WIB) < 0x9F00) return FALSE;
+  34   1              if(_select(&cb_fs, FID_WMENU) <= 0x9F00) return FALSE;
+  35   1              if(_check_access(&cb_fs, FILE_REHABILITATE) == APDU_SUCCESS) {
+  36   2                      return FALSE;
+  37   2              }
+  38   1              return TRUE;
+  39   1      }
+  40          
+  41          #if VAS_ALLOCATED
+  42          fs_handle _vas_fs;         
+  43          uchar vas_state = VAS_STATE_NORMAL;
+  44          uchar vas_mode = VAS_MODE_SCRIPT;
+  45          uchar vas_cvid = 0;             //current variable id, shared between execute+decode   
+  46          uchar * vas_cistr = NULL;       //plugin input string
+  47          vas_variable * _var_list = NULL;
+  48          vas_variable * _const_list = NULL;  
+  49          int16 vas_skip = 0;
+  50          uint16 vas_PL = 0;              //Program Length
+  51          uint16 vas_PC = 0;              //Program Counter
+  52          uint16 vas_PC_prev = 0;         //for skip -2
+  53          uchar vas_tar_mode = VAS_TAR_PULL;
+  54          
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 2   
+
+  55          //initialize VAS decoder to specified plugin address on EFbytecode
+  56          uchar VAS_plugin_init(uint16 address) _REENTRANT_ {
+  57   1              uint16 length;
+  58   1              _select(&_vas_fs, FID_MF);
+  59   1              _select(&_vas_fs, FID_WIB);
+  60   1              if(_select(&_vas_fs, FID_WBYTECODE) < 0x9F00) return FALSE;
+  61   1              if(_readbin(&_vas_fs, address, &length, 2) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 61 OF FRAMEWORK\VAS.C: pointer to different objects
+  62   2                      vas_PL = address + length;
+  63   2                      vas_PC = address + 2;
+  64   2                      vas_PC_prev = vas_PC;
+  65   2                      vas_skip = 0;
+  66   2                      return TRUE;
+  67   2              }
+  68   1              return FALSE;
+  69   1      }
+  70          
+  71          void VAS_exit_plugin(void) {
+  72   1              vas_mode = VAS_MODE_SCRIPT;
+  73   1              m_free(vas_cistr);
+  74   1              vas_cistr = NULL;
+  75   1      }
+  76          
+  77          //initialize VAS to specified file
+  78          uchar VAS_init(fs_handle * handle, uint16 address, uint16 size) _REENTRANT_ {
+  79   1              //file_select(&_vas_fs, FID_MF);
+  80   1              //file_select(&_vas_fs, FID_LIQUID);
+  81   1              //if(file_select(&_vas_fs, fid) < 0x9F00) return FALSE;
+  82   1              //if(file_writebin(&_vas_fs, 0, buffer, size) == APDU_SUCCESS) {
+  83   1              memcpy(&_vas_fs, handle, sizeof(fs_handle));
+  84   1              vas_PL = address + size;
+  85   1              vas_PC = address;
+  86   1              vas_PC_prev = vas_PC;
+  87   1              vas_skip = 0;
+  88   1              return TRUE;
+  89   1              //}
+  90   1              //return FALSE;
+  91   1      }
+  92          
+  93          uchar VAS_file_pop(uint16 i, uchar * tag, uchar * size, uchar * value) _REENTRANT_ {
+  94   1              _readbin(&_vas_fs, i, tag, 1);
+  95   1              _readbin(&_vas_fs, i+1, size, 1);
+  96   1              _readbin(&_vas_fs, i+2, value, size[0]);
+  97   1              return (size[0] + 2);
+  98   1      }
+  99          
+ 100          /*#if 0
+ 101          uchar VAS_file_push(uint16 i, uchar tag, uchar length, uchar * value) _REENTRANT_ {
+ 102                  //uchar buffer = (uchar *)m_alloc(length + 2);
+ 103                  uchar buffer[2];
+ 104                  buffer[0] = tag;
+ 105                  buffer[1] = length;
+ 106                  //memcpy(buffer + 2, value, length);
+ 107                  file_writebin(&_vas_fs, i, buffer, 2);                  //PUSH TL  (Tag-Length)
+ 108                  file_writebin(&_vas_fs, i + 2, value, length);    //PUSH V (Value)
+ 109                  //m_free(buffer);
+ 110                  return (length + 2);    
+ 111          }
+ 112          #endif*/
+ 113           
+ 114          //set variable to the list
+ 115          vas_variable * set_variable(vas_variable ** list, uchar id, uchar length, uchar * buffer) _REENTRANT_ { 
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 3   
+
+ 116   1              vas_variable * iterator = *list;
+ 117   1              vas_variable * temp;
+ 118   1              if(length == 0) return NULL;
+ 119   1              if(*list == NULL) {
+ 120   2                      create_new_list: 
+ 121   2                      *list = m_alloc(length + sizeof(vas_variable_header)); 
+ 122   2                      iterator = *list;
+ 123   2              } else {
+ 124   2                      while(iterator->next != NULL) {
+ 125   3                              temp = iterator->next;
+ 126   3                              if(temp->id == id) {            //same id not allowed, remove variable from memory
+ 127   4                                      iterator->next = temp->next;
+ 128   4                                      m_free(temp);
+ 129   4                              }
+ 130   3                              iterator = iterator->next;
+ 131   3                      }
+ 132   2                      temp = *list;
+ 133   2                      if(temp->id == id) {            //the first variable on the list has the same id
+ 134   3                              m_free(temp);
+ 135   3                              goto create_new_list;   
+ 136   3                      } else {
+ 137   3                              iterator->next = m_alloc(length + sizeof(vas_variable_header));
+ 138   3                              iterator = iterator->next;
+ 139   3                      }
+ 140   2              }
+ 141   1              if(iterator != NULL) {          //assign newly created variable
+ 142   2                      iterator->id = id;
+ 143   2                      iterator->length = length;
+ 144   2                      iterator->next = NULL;
+ 145   2                      memcpy(iterator->buffer, buffer, length);
+ 146   2              }       
+ 147   1              return iterator;
+ 148   1      }
+ 149          
+ 150          //clear variable list
+ 151          void clear_list(vas_variable ** list, uchar from, uchar to) _REENTRANT_ {
+ 152   1              vas_variable * iterator = *list;
+ 153   1              vas_variable * temp = iterator;
+ 154   1              vas_variable * last = NULL;
+ 155   1              while(iterator != NULL) {
+ 156   2                      temp = iterator;
+ 157   2                      iterator = iterator->next;
+ 158   2                      if(temp->id >= from && temp->id <= to) {        //free this variable
+ 159   3                              m_free(temp);
+ 160   3                      } else {        //do not freed, reverse list
+ 161   3                              if(last != NULL) {      
+ 162   4                                      temp->next = last;
+ 163   4                                      last = temp;
+ 164   4                              } else {
+ 165   4                                      last = temp;
+ 166   4                                      last->next = NULL;
+ 167   4                              }
+ 168   3                      }
+ 169   2              }
+ 170   1              *list = last;
+ 171   1      }
+ 172          
+ 173          //get variable from list
+ 174          vas_variable * get_variable(vas_variable ** list, uchar id) _REENTRANT_ {
+ 175   1              vas_variable * iterator = *list;
+ 176   1              while(iterator != NULL) {
+ 177   2                      if(iterator->id == id) return iterator;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 4   
+
+ 178   2                      iterator = iterator->next;
+ 179   2              }
+ 180   1              return NULL;
+ 181   1      }
+ 182          
+ 183          /*#if 0
+ 184          void list_dump(vas_variable * list) _REENTRANT_ {
+ 185                  vas_variable * iterator = list;
+ 186                  uchar i = 0;
+ 187                  while(iterator != NULL) {
+ 188                          printf("id: %02x length: %02x data: ", iterator->id, iterator->length);
+ 189                          for(i=0;i<iterator->length;i++) {
+ 190                                  printf("%c", iterator->buffer[i]);
+ 191                          }
+ 192                          printf("\n");
+ 193                          iterator = iterator->next;
+ 194                  }
+ 195                  return NULL;
+ 196          }
+ 197          #endif*/
+ 198          
+ 199          uint16 VAS_script_fetch(uchar * response, uint16 length) _REENTRANT_ {                  //fetch on response      +19~24 byt
+             -es
+ 200   1              uchar i = 0;
+ 201   1              uchar tag;
+ 202   1              uchar res;
+ 203   1              uchar size;
+ 204   1              //uchar cmd = 0;
+ 205   1              static uchar fetch_cntr = 0;                    //retry counter
+ 206   1              vas_variable * selected;
+ 207   1              if((vas_state & 0x0F) == VAS_STATE_WAIT_RESPONSE) return APDU_SUCCESS;
+ 208   1              if(SAT_init(response, length) == 0) return APDU_STK_OVERLOAD;
+ 209   1              while(i != length) {
+ 210   2                      i += SAT_file_pop(i, &tag, &size, STK_buffer);
+ 211   2                      tag |= 0x80; 
+ 212   2                      switch(tag) {                   //TERMINAL HANDLER
+ 213   3                              case STK_TAG_CMD_DETAIL:
+ 214   3                                      //cmd = STK_buffer[1];
+ 215   3                                      //break;
+ 216   3                              case STK_TAG_DEV_ID: break;                     //don't process this tag
+ 217   3                              case STK_TAG_RESULT:   //cek result
+ 218   3                                      res = STK_buffer[0];
+ 219   3                                      switch(res >> 4) {
+ 220   4                                              case 0: fetch_cntr = 0; break;  //success
+ 221   4                                              case 1:         //other operation, ex:backward
+ 222   4                                                      fetch_cntr = 0; 
+ 223   4                                                      switch(res) {
+ 224   5                                                              case STK_RES_BACKWARD: //vas_skip = -2; break;
+ 225   5                                                              clear_list(&_var_list, 0x01, 0xDF);                             //clear variable
+ 226   5                                                              goto exit_fetch; 
+ 227   5                                                              default:
+ 228   5                                                              case STK_RES_TRANSACTION_ABORT: 
+ 229   5                                                              case STK_RES_NO_USER_RESPONSE:
+ 230   5                                                              case STK_RES_TERMINATED: 
+ 231   5                                                              terminate_vas:
+ 232   5                                                              clear_list(&_var_list, 0x01, 0xFF);                             //clear variable
+ 233   5                                                              goto exit_fetch;
+ 234   5                                                              //case STK_RES_TRANSACTION_ABORT: vas_skip = -1; break;
+ 235   5                                                      }
+ 236   4                                                      break;
+ 237   4                                              case 2:         //try 3 times before quit
+ 238   4                                                      if(fetch_cntr++ < 3) {
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 5   
+
+ 239   5                                                              vas_skip = -2;                                                          
+ 240   5                                                              break;
+ 241   5                                                      }
+ 242   4                                              case 3: fetch_cntr = 0; goto terminate_vas;
+ 243   4                                      }
+ 244   3                                      break;
+ 245   3                              default: break;
+ 246   3                              case STK_TAG_TIMER_IDENTIFIER:
+ 247   3                                      res = STK_buffer[0];
+ 248   3                                      break; 
+ 249   3                              case STK_TAG_TIMER_VALUE:
+ 250   3                                      break;
+ 251   3                              case STK_TAG_SMS_TPDU:
+ 252   3                                      break;
+ 253   3                              case STK_TAG_ITEM_ID:
+ 254   3                                      if((vas_state & 0x0F) == VAS_STATE_MENU) {                      //select item(script running), assign variable
+ 255   4                                              //select default pull TAR
+ 256   4                                              selected = m_alloc(sizeof(fs_handle));
+ 257   4                                              _select(selected, FID_MF);
+*** WARNING C182 IN LINE 257 OF FRAMEWORK\VAS.C: pointer to different objects
+ 258   4                                              _select(selected, FID_WIB);
+*** WARNING C182 IN LINE 258 OF FRAMEWORK\VAS.C: pointer to different objects
+ 259   4                                              if(_select(selected, FID_WTAR) >= 0x9F00) {
+*** WARNING C182 IN LINE 259 OF FRAMEWORK\VAS.C: pointer to different objects
+ 260   5                                                      res = 0;
+ 261   5                                                      while(_readrec(selected, res++, STK_buffer + 1, 5) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 261 OF FRAMEWORK\VAS.C: pointer to different objects
+ 262   6                                                              if(STK_buffer[1] == 0) {
+ 263   7                                                                      p348_set_tar(STK_buffer + 2);
+ 264   7                                                                      break;
+ 265   7                                                              }
+ 266   6                                                      } 
+ 267   5                                              }
+ 268   4                                              m_free(selected);
+ 269   4                                              //prepare VAS to execute plugin and change state to normal execution
+ 270   4                                              VAS_invoke(VAS_SELECT_MENU, STK_buffer[0]);
+ 271   4                                              vas_state = (vas_state & 0xF0) | VAS_STATE_NORMAL;
+ 272   4                                      } else {                                                                        //setup menu selection(initial), use internal plugin
+ 273   4                                              if(vas_cvid != 0) {
+ 274   5                                                      selected = get_variable(&_const_list, STK_buffer[0]);   //get selected variable from const_list
+ 275   5                                                      vas_skip = (int16)((int8)selected->buffer[0]);          //get current skip value
+ 276   5                                                      //printf("var len : %d, %s, %d\n", selected->length, selected->buffer + 1, vas_cvid);
+ 277   5                                                      size = selected->length - 1;
+ 278   5                                                      memcpy(STK_buffer, selected->buffer + 1, size);
+ 279   5                                                      clear_list(&_const_list, 0, 0xFF);                      //free all const_list variable                                  
+ 280   5                                                      set_variable(&_var_list, vas_cvid, size, STK_buffer);           //create new variable with id=cvid
+ 281   5                                                      //return 0x9C00 | vas_skip;
+ 282   5                                                      //list_dump(&_var_list);
+ 283   5                                              }               
+ 284   4                                      }
+ 285   3                                      break;
+ 286   3                              case STK_TAG_LOCATION_INFO:
+ 287   3                                      if(vas_state & VAS_STATE_WAIT_VARIABLE) {
+ 288   4                                              vas_state &= 0x0F;                                      //clear wait variable
+ 289   4                                              if(vas_cvid != 0) {
+ 290   5                                                      set_variable(&_var_list, vas_cvid, size, STK_buffer);
+ 291   5                                                      goto start_decode;
+ 292   5                                              }
+ 293   4                                      }
+ 294   3                                      break;
+ 295   3                              case STK_TAG_TEXT_STRING:
+ 296   3                                      //if(vas_state != VAS_STATE_MENU) {             //prevent *attack* from external (check state)
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 6   
+
+ 297   3                                      if(vas_state & VAS_STATE_WAIT_VARIABLE) {
+ 298   4                                              vas_state &= 0x0F;                                      //clear wait variable
+ 299   4                                              if(vas_cvid != 0) {
+ 300   5                                                      if((STK_buffer[0] & 0x0F) == 0x00) {            //7 bit default alphabet
+ 301   6                                                              decode_728(STK_buffer + 1, STK_buffer + 1, size - 1);
+ 302   6                                                      } 
+ 303   5                                                      set_variable(&_var_list, vas_cvid, size - 1, STK_buffer + 1);
+ 304   5                                                      goto start_decode;
+ 305   5                                              }
+ 306   4                                      }
+ 307   3                                      //}
+ 308   3                                      break;
+ 309   3                      }
+ 310   2              }
+ 311   1              //didn't get variable, exit fetch and wait for next terminal response
+ 312   1              if(vas_state & VAS_STATE_WAIT_VARIABLE) goto exit_fetch;
+ 313   1              start_decode:
+ 314   1              if((vas_state & 0x0F) != VAS_STATE_MENU) {                              //use normal execution
+ 315   2                      return VAS_decode();
+ 316   2              }
+ 317   1              exit_fetch:   
+ 318   1              return APDU_SUCCESS;
+ 319   1      }
+ 320          
+ 321          uint16 VAS_fetch(uchar * response, uint16 length) _REENTRANT_ {                 //fetch on response      +6~11 bytes
+ 322   1              if(vas_mode & VAS_MODE_PLUGIN) {
+ 323   2                      //return VAS_plugin_fetch(response, length);
+ 324   2                      switch(vas_mode & 0x7F) {
+ 325   3                              default: break;
+ 326   3      #if     VAS_MDIL_ALLOCATED
+                                      case VAS_PLUGIN_MDIL: return mdil_fetch(response, length);
+              #endif  
+ 329   3      #if     VAS_VDIL_ALLOCATED
+                                      case VAS_PLUGIN_VDIL: return vdil_fetch(response, length);
+              #endif   
+ 332   3      #if     VAS_DITR_ALLOCATED
+                                      case VAS_PLUGIN_DITR: return ditr_fetch(response, length);
+              #endif  
+ 335   3      #if     VAS_MASL_ALLOCATED
+                                      case VAS_PLUGIN_MASL: return masl_fetch(response, length);
+              #endif 
+ 338   3      #if     VAS_ENCR_ALLOCATED
+                                      case VAS_PLUGIN_ENCR: return encr_fetch(response, length);
+              #endif  
+ 341   3      #if     VAS_DECR_ALLOCATED
+                                      case VAS_PLUGIN_DECR: return decr_fetch(response, length);
+              #endif     
+ 344   3      #if     VAS_ICCID_ALLOCATED
+                                      case VAS_PLUGIN_ICCID: return iccid_fetch(response, length);
+              #endif
+ 347   3                      }
+ 348   2              } else { 
+ 349   2                      //use local script
+ 350   2                      return VAS_script_fetch(response, length);
+ 351   2              }
+ 352   1      }
+ 353                          
+ 354          uint16 VAS_execute(uchar * response) _REENTRANT_ {                      //execute on envelope   +17-22 bytes
+ 355   1              uchar dsize;
+ 356   1              uchar dtag; 
+ 357   1              uint16 status = APDU_SUCCESS;
+ 358   1              uchar tag, size, i = 0;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 7   
+
+ 359   1              SAT_pop(response, &dtag, &dsize, STK_buffer);
+ 360   1              memcpy(response, STK_buffer, dsize);
+ 361   1              //return VAS_fetch(response, size);                     //use default execution
+ 362   1              switch(dtag) {
+ 363   2                      case ENV_TAG_MENU:
+ 364   2                              //cleanup
+ 365   2                              clear_list(&_var_list, 0x01, 0xFF);                             //clear variable
+ 366   2                              clear_list(&_const_list, 0x01, 0xFF);                           //clear constant
+ 367   2                              vas_state = VAS_STATE_MENU;                                             //end of script, exit to menu
+ 368   2                              status = VAS_fetch(response, dsize);                    //use default execution case ENV_TAG_CALL:         //CALL CONTROL
+ 369   2                              break;
+ 370   2                      case ENV_TAG_SMS_PP:
+ 371   2                      case ENV_TAG_SMS_CB: 
+ 372   2                              //vas_state = VAS_STATE_NORMAL;
+ 373   2                      case ENV_TAG_EVENT:
+ 374   2                      case ENV_TAG_TIMER:
+ 375   2                              if(SAT_init(response, dsize) == 0) return APDU_STK_OVERLOAD;
+ 376   2                              while(i != dsize) {
+ 377   3                                      i += SAT_file_pop(i, &tag, &size, STK_buffer);
+ 378   3                                      tag |= 0x80; 
+ 379   3                                      switch(tag) {                   //TERMINAL HANDLER
+ 380   4                                              case STK_TAG_CMD_DETAIL:
+ 381   4                                              case STK_TAG_DEV_ID: break;                     //don't process this tag
+ 382   4                                              case STK_TAG_ITEM_ID:  
+ 383   4                                                      break;
+ 384   4                                              case STK_TAG_RESULT:   //cek result
+ 385   4                                              default: break;
+ 386   4                                              case STK_TAG_TIMER_IDENTIFIER:
+ 387   4                                                      //res = STK_buffer[0];
+ 388   4                                                      break; 
+ 389   4                                              case STK_TAG_TIMER_VALUE:
+ 390   4                                                      /*if(dtag == ENV_TAG_TIMER) {
+ 391   4                                                              timer_callback(res, tag, size, STK_buffer);
+ 392   4                                                      }*/
+ 393   4                                                      break;
+ 394   4                                              case STK_TAG_SMS_TPDU:
+ 395   4                                                      if(dtag == ENV_TAG_SMS_PP) {  
+ 396   5                                                              status = decode_SMSTPDU(1, STK_buffer);
+ 397   5                                                      }
+ 398   4                                                      if(dtag == ENV_TAG_SMS_CB) {
+ 399   5                                                              status = decode_SMSTPDU(0, STK_buffer);
+ 400   5                                                      }
+ 401   4                                                      break;
+ 402   4                                              case STK_TAG_EVENT_LIST:
+ 403   4                                                      if(VAS_invoke(VAS_SELECT_EVENT, STK_buffer[0]) == TRUE) {
+ 404   5                                                              status = VAS_decode();
+ 405   5                                                      }
+ 406   4                                                      break;
+ 407   4                                      }
+ 408   3                              }
+ 409   2                              break;
+ 410   2                      default:
+ 411   2                              status = APDU_SUCCESS; break;
+ 412   2              }
+ 413   1              return status;
+ 414   1      }
+ 415          
+ 416          uchar VAS_substitute(uchar lv_format, uchar * buffer_in, uchar len, uchar * buffer_out, uchar max_len) _RE
+             -ENTRANT_ {
+ 417   1              uchar i = 0, j = 0;
+ 418   1              uchar p;
+ 419   1              uchar d;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 8   
+
+ 420   1              vas_variable * selected;
+ 421   1              while(i < len) {
+ 422   2                      p = buffer_in[i++];
+ 423   2                      d = p;
+ 424   2                      switch(p) {
+ 425   3                              case 0x80:
+ 426   3                              case 0x81:
+ 427   3                              case 0x82:
+ 428   3                                      p = buffer_in[i++];
+ 429   3                                      switch(p) {
+ 430   4                                              //byte stuffing
+ 431   4                                              case 0x80:
+ 432   4                                              case 0x81:
+ 433   4                                              case 0x82:
+ 434   4                                                      buffer_out[j++] = p;
+ 435   4                                                      break;
+ 436   4                                              //variable reference    
+ 437   4                                              default:
+ 438   4                                                      selected = get_variable(&_var_list, p); //get selected variable from const_list
+ 439   4                                                      if(selected == NULL) break;
+ 440   4                                                      if(lv_format) {
+ 441   5                                                              buffer_out[j++] = d;
+ 442   5                                                              buffer_out[j++] = selected->length;
+ 443   5                                                      }
+ 444   4                                                      if((j + selected->length) < max_len) {
+ 445   5                                                              memcpy(buffer_out + j, selected->buffer, selected->length);
+ 446   5                                                              j += selected->length;
+ 447   5                                                      }
+ 448   4                                                      break;
+ 449   4                                      }
+ 450   3                                      break;
+ 451   3                              default:
+ 452   3                                      buffer_out[j++] = p;
+ 453   3                                      break;
+ 454   3                      }
+ 455   2              }
+ 456   1              //printf("length : %d\n", j);
+ 457   1              return j;
+ 458   1      }
+ 459          
+ 460          uchar VAS_push_header(uchar offset, uchar cmd, uchar qualifier, uchar target) _REENTRANT_ {
+ 461   1              uchar temp[3];
+ 462   1              temp[0] = 1;
+ 463   1              temp[1] = cmd;
+ 464   1              temp[2] = qualifier;
+ 465   1              offset = SAT_file_push(offset, STK_TAG_CMD_DETAIL, 3, temp);
+ 466   1              temp[0] = STK_DEV_SIM;
+ 467   1              temp[1] = target;
+ 468   1              offset += SAT_file_push(offset, STK_TAG_DEV_ID, 2, temp);
+ 469   1              return offset;
+ 470   1      }
+ 471          
+ 472          //WIB Instruction Decoder
+ 473          uint16 VAS_decode(void) _REENTRANT_ {           //+24~34 bytes
+ 474   1              //#define buffer        STK_buffer
+ 475   1              //uint16 i = 0;
+ 476   1              uint16 status = APDU_SUCCESS;
+ 477   1              uchar j, k;
+ 478   1              uchar tag;
+ 479   1              uchar size;
+ 480   1              //uchar skip = 0;
+ 481   1              //uchar id_gen = 0;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 9   
+
+ 482   1              uchar len;
+ 483   1              uchar temp[5];
+ 484   1              uchar attr;
+ 485   1              uchar * value;
+ 486   1              uchar * address;
+ 487   1              vas_variable * cvar;
+ 488   1              #if     VAS_MDIL_ALLOCATED || VAS_VDIL_ALLOCATED  
+                      fs_handle vas_fs;
+                      #endif
+ 491   1              //ignore wait response state
+ 492   1              next_instruction:
+ 493   1              while(vas_PC < vas_PL) {
+ 494   2                      if(vas_skip == -2) {            //backward operation
+ 495   3                              vas_PC = vas_PC_prev;
+ 496   3                              vas_skip = 0;
+ 497   3                      }
+ 498   2                      if(vas_skip == -1) goto finish_decode;
+ 499   2                      vas_PC_prev = vas_PC;
+ 500   2                      vas_PC += VAS_file_pop(vas_PC, &tag, &size, STK_buffer);
+ 501   2                      //printf("T = %02x, L = %02x\n", tag, size);
+ 502   2                      vas_cvid = 0;
+ 503   2                      if(vas_skip == 0) {
+ 504   3                              len = 0;
+ 505   3                              j = 0;
+ 506   3                              k = 0;
+ 507   3                              attr = 0;
+ 508   3                              switch(tag & 0x7F) {            //decode WIB (VAS)
+ 509   4      #if IVAS_SUBMIT_EXTENDED_ALLOCATED
+ 510   4                                      case VAS_SUBMIT_EXTENDED:
+ 511   4                                              attr = STK_buffer[k++];
+ 512   4      #endif
+ 513   4      #if (IVAS_SUBMIT_ALLOCATED)
+ 514   4                                      case VAS_SUBMIT:
+ 515   4      #endif
+ 516   4      #if (IVAS_SUBMIT_ALLOCATED || IVAS_SUBMIT_EXTENDED_ALLOCATED)
+ 517   4                                              len = STK_buffer[k];            //output length
+ 518   4                                              value = m_alloc(len + 1);
+ 519   4                                              memcpy(value, STK_buffer + k + 1, len);
+ 520   4                                              //server inbound message
+ 521   4                                              len = VAS_substitute(TRUE, value, len, STK_buffer, 255);
+ 522   4                                              m_free(value);
+ 523   4      
+ 524   4                                              liquid_set_response_data(RESPONSE_PKT_POR_OK, STK_buffer, len);                         //set EFres
+ 525   4                                              //m_free(value);
+ 526   4                                              j += VAS_push_header(j, (SEND_SHORT_MESSAGE & 0x7F), 0x00, STK_DEV_ME);         //packing not required
+ 527   4                                              
+ 528   4                                              //service center address (load from sms_header)
+ 529   4                                              address = m_alloc(sizeof(fs_handle));           //--> address, temporary fs_handle
+ 530   4                                              _select(address, FID_MF);
+*** WARNING C182 IN LINE 530 OF FRAMEWORK\VAS.C: pointer to different objects
+ 531   4                                              _select(address, FID_WIB);
+*** WARNING C182 IN LINE 531 OF FRAMEWORK\VAS.C: pointer to different objects
+ 532   4                                              _select(address, FID_WTEXT);
+*** WARNING C182 IN LINE 532 OF FRAMEWORK\VAS.C: pointer to different objects
+ 533   4                                              k = 0;
+ 534   4                                              //read alpha tag
+ 535   4                                              while(_readbin(address, k, STK_buffer, 2) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 535 OF FRAMEWORK\VAS.C: pointer to different objects
+ 536   5                                                      k += 2;
+ 537   5                                                      if(STK_buffer[0] == 1) {
+ 538   6                                                              len = STK_buffer[1];
+ 539   6                                                              _readbin(address, k, STK_buffer, len);
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 10  
+
+*** WARNING C182 IN LINE 539 OF FRAMEWORK\VAS.C: pointer to different objects
+ 540   6                                                              if(STK_buffer[0] == 0) {                        //alpha id tag
+ 541   7                                                                      len = STK_buffer[1];                    //length of alpha identifier
+ 542   7                                                                      j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, STK_buffer + 2);
+ 543   7                                                                      break;
+ 544   7                                                              }
+ 545   6                                                      } else {
+ 546   6                                                              if(STK_buffer[0] == 0xFF) break;
+ 547   6                                                      } 
+ 548   5                                                      k += STK_buffer[1];
+ 549   5                                              }
+ 550   4                                              //address tag
+ 551   4                                              //m_free(address);
+ 552   4                                              len = p348_create_header(STK_buffer);                                                                                   //create 03.48 header, configuration based on tar val
+             -ue
+ 553   4                                              len = p348_encode_command_packet(STK_buffer);                                                           //encode response packet (combine 0348header wit
+             -h EFres content)
+*** WARNING C182 IN LINE 553 OF FRAMEWORK\VAS.C: pointer to different objects
+ 554   4                                              
+ 555   4                                              send_short_message:
+ 556   4                                              value = m_alloc(len);
+ 557   4                                              memcpy(value, STK_buffer, len);         //copy response packet header and all it;s content to allocated memo
+             -ry
+ 558   4                                              //encode encrypted 03.48 response to SMS-TPDU packet
+ 559   4                                              _select(address, FID_MF);
+*** WARNING C182 IN LINE 559 OF FRAMEWORK\VAS.C: pointer to different objects
+ 560   4                                              _select(address, FID_WIB);
+*** WARNING C182 IN LINE 560 OF FRAMEWORK\VAS.C: pointer to different objects
+ 561   4                                              _select(address, FID_WSMSHEADER);
+*** WARNING C182 IN LINE 561 OF FRAMEWORK\VAS.C: pointer to different objects
+ 562   4                                              _readrec(address, 0, STK_buffer + len + 1, 27);
+*** WARNING C182 IN LINE 562 OF FRAMEWORK\VAS.C: pointer to different objects
+ 563   4                                              k = ((vas_sms_header *)(STK_buffer + len + 1))->sc_address[0];
+ 564   4                                              j += SAT_file_push(j, (STK_TAG_ADDRESS & 0x7F), k, ((vas_sms_header *)(STK_buffer + len + 1))->sc_add
+             -ress + 1);
+ 565   4                                              k = ((vas_sms_header *)(STK_buffer + len + 1))->da_address[0];
+ 566   4                                              m_free(address);
+ 567   4      
+ 568   4                                              address = m_alloc(k + 1);
+ 569   4                                              memcpy(address, ((vas_sms_header *)(STK_buffer + len + 1))->da_address, k + 1);
+ 570   4                                              k = ((vas_sms_header *)(STK_buffer + len + 1))->pid;
+ 571   4                                              attr = ((vas_sms_header *)(STK_buffer + len + 1))->dcs;
+ 572   4                                              len = encode_SMSTPDU(SMS_TYPE_SUBMIT, k, attr, len, address, (response_packet *)value, STK_buffer);     /
+             -/SMS submit
+ 573   4                                              //STK_buffer[0] = len;          //encoded length
+ 574   4                                              m_free(value);
+ 575   4                                              m_free(address);
+ 576   4                                              j += SAT_file_push(j, (STK_TAG_SMS_TPDU & 0x7F), len, STK_buffer);
+ 577   4                                              //#else
+ 578   4                                              //len = encode_SMSTPDU(SMS_TYPE_SUBMIT, len, "\x00\x02\x45\xF3", (response_packet *)value, STK_buffer
+             - + 1);        //SMS submit
+ 579   4                                              //STK_buffer[0] = len;          //encoded length
+ 580   4                                              //m_free(value);
+ 581   4                                              //#endif
+ 582   4                                              if(vas_tar_mode == VAS_TAR_PULL) {
+ 583   5                                                      vas_state = VAS_STATE_WAIT_RESPONSE;
+ 584   5                                              }
+ 585   4                                              //#if 0         //TODO:change to variable addressing mode for smsc
+ 586   4                                              //status = SAT_printf("cdam", SEND_SHORT_MESSAGE, STK_DEV_ME, smsc, STK_buffer);
+ 587   4                                              //#else         //use default address mode
+ 588   4                                              //status = SAT_printf("cdm", SEND_SHORT_MESSAGE, STK_DEV_ME, STK_buffer);
+ 589   4                                              //#endif
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 11  
+
+ 590   4                                              goto exit_decode;
+ 591   4      #endif
+ 592   4      #if (IVAS_DISPLAY_TEXT_EXTENDED_ALLOCATED)
+ 593   4                                      case VAS_DISPLAY_TEXT_EXTENDED:
+ 594   4                                              if(STK_buffer[k] & 0x02) attr |= 0x80;  //wait for user to clear message
+ 595   4                                              if(STK_buffer[k] & 0x01) attr |= 0x01;  //high priority
+ 596   4                                              k++;
+ 597   4                                              goto show_display_text;
+ 598   4      #endif
+ 599   4      #if (IVAS_DISPLAY_TEXT_ALLOCATED)
+ 600   4                                      case VAS_DISPLAY_TEXT:
+ 601   4                                              attr |= 0x80;           //wait for user to clear message
+ 602   4      #endif
+ 603   4      #if     (IVAS_DISPLAY_TEXT_CLEAR_AFTER_DELAY_ALLOCATED)
+ 604   4                                      case VAS_DISPLAY_TEXT_CLEAR_AFTER_DELAY:
+ 605   4      #endif
+ 606   4      #if (IVAS_DISPLAY_TEXT_EXTENDED_ALLOCATED || IVAS_DISPLAY_TEXT_ALLOCATED || IVAS_DISPLAY_TEXT_CLEAR_AFTER_
+             -DELAY_ALLOCATED)
+ 607   4                                              show_display_text:      
+ 608   4                                              j += VAS_push_header(j, (DISPLAY_TEXT & 0x7F), attr, STK_DEV_DISPLAY);
+ 609   4                                              len = STK_buffer[k];
+ 610   4                                              //for text tag STK_buffer now is obsolote, can be used to store result
+ 611   4                                              value = m_alloc(len + 1);
+ 612   4                                              memcpy(value, STK_buffer + k + 1, len);
+ 613   4                                              //use no lv format (not a inbound message)
+ 614   4                                              #if UNICODE_SUPPORT 
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = decode_ucs28(value, value, len);  
+                                                      }
+                                                      #endif
+ 619   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer, 255);
+ 620   4                                              m_free(value);
+ 621   4                                              value = m_alloc(len + 1);
+ 622   4                                              //value[len] = 0;
+ 623   4                                              value[0] = 0x04;                                                                                //DCS
+ 624   4                                              memcpy(value + 1, STK_buffer, len);
+ 625   4                                              j += SAT_file_push(j, (STK_TAG_TEXT_STRING & 0x7F), len + 1, value);
+ 626   4                                              m_free(value);
+ 627   4                                              status = APDU_STK_RESPONSE | j;
+ 628   4                                              goto exit_decode;
+ 629   4      #endif
+ 630   4      #if (IVAS_GET_INPUT_ALLOCATED)
+ 631   4                                      case VAS_GET_INPUT:
+ 632   4                                              vas_cvid = STK_buffer[k++];     
+ 633   4                                              len = STK_buffer[k];    //k=1
+ 634   4                                              value = m_alloc(len + 1);
+ 635   4                                              memcpy(value, STK_buffer + k + 1, len);
+ 636   4                                              //use no lv format (not a inbound message)
+ 637   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer + size, 255 - size);
+ 638   4                                              m_free(value);
+ 639   4                                              value = m_alloc(len + 2);
+ 640   4                                              value[0] = len + 1;
+ 641   4                                              value[1] = 0xF6;                        //DCS
+ 642   4                                              memcpy(value + 2, STK_buffer + size, len);
+ 643   4                                              //value[len + 1] = 0;
+ 644   4                                              len = STK_buffer[k++];
+ 645   4                                              k += len;
+ 646   4                                              while(k < size) {
+ 647   5                                                      len = STK_buffer[k++];
+ 648   5                                                      switch(STK_buffer[k]) {
+ 649   6                                                              case 0: temp[4] = STK_buffer[k+1]; break;
+ 650   6                                                              case 1: attr = STK_buffer[k+1]; break;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 12  
+
+ 651   6                                                              case 2: temp[3] = STK_buffer[k+1]; break;
+ 652   6                                                      }
+ 653   5                                                      k += len;
+ 654   5                                              }
+ 655   4                                              j += VAS_push_header(j, (GET_INPUT & 0x7F), attr, STK_DEV_ME);
+ 656   4                                              #if UNICODE_SUPPORT
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              value[0] = decode_ucs28(value + 2, value + 2, value[0] - 1);
+                                                              value[0] += 1;          //for DCS       
+                                                      }
+                                                      #endif
+ 662   4                                              j += SAT_file_push(j, (STK_TAG_TEXT_STRING & 0x7F), value[0], value + 1);
+ 663   4                                              len = 2;
+ 664   4                                              j += SAT_file_push(j, (STK_TAG_RESPONSE_LENGTH & 0x7F), len, temp + 3);
+ 665   4                                              m_free(value);
+ 666   4                                              while(k < size) {
+ 667   5                                                      len = STK_buffer[k++];
+ 668   5                                                      if(STK_buffer[k] == 4) {
+ 669   6                                                              j += SAT_file_push(j, (STK_TAG_DEFAULT_TEXT & 0x7F), STK_buffer[k+1], STK_buffer + k + 2);
+ 670   6                                                      }
+ 671   5                                                      k += len;
+ 672   5                                              }
+ 673   4                                              //list_dump(_const_list); 
+ 674   4                                              vas_state |= (VAS_STATE_WAIT_VARIABLE | VAS_STATE_VAR_TEXT);
+ 675   4                                              status = APDU_STK_RESPONSE | j;
+ 676   4                                              goto exit_decode;
+ 677   4      #endif
+ 678   4      #if (IVAS_SELECT_ITEM_ALLOCATED)
+ 679   4                                      case VAS_SELECT_ITEM:     //show menu
+ 680   4                                              vas_cvid = STK_buffer[k++];
+ 681   4                                              j += VAS_push_header(j, (SELECT_ITEM & 0x7F), 0, STK_DEV_ME);
+ 682   4                                              len = STK_buffer[k++];
+ 683   4                                              temp[0] = len;
+ 684   4                                              //value = m_alloc(len + 1);
+ 685   4                                              //memcpy(value, STK_buffer + k, len);
+ 686   4                                              //use no lv format (not a inbound message) 
+ 687   4                                              #if UNICODE_SUPPORT
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = decode_ucs28(STK_buffer + k, STK_buffer + k, len);        
+                                                      }
+                                                      #endif
+ 692   4                                              len = VAS_substitute(FALSE, STK_buffer + k, len, STK_buffer + size, 255 - size);
+ 693   4                                              //m_free(value);
+ 694   4                                              j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, STK_buffer + size);
+ 695   4                                              k += temp[0];
+ 696   4                                              attr = 1;
+ 697   4                                              //clear_list(&_const_list, 0x01, 0xFF);         //clear all variables (freeup memory)
+ 698   4                                              while(k < size) {
+ 699   5                                                      len = STK_buffer[k];
+ 700   5                                                      temp[0] = len;                  //backup length
+ 701   5                                                      value = m_alloc(len + 2);
+ 702   5                                                      //value[0] = attr;              //item id
+ 703   5                                                      memcpy(value + 1, STK_buffer + k + 1, len);
+ 704   5                                                      value[len + 1] = 0;
+ 705   5                                                      #if UNICODE_SUPPORT
+                                                              if(tag & 0x80) {                        //encode to 8 bit
+                                                                      len = decode_ucs28(value + 1, STK_buffer + k + 1, len); 
+                                                              }
+                                                              #endif
+ 710   5                                                      STK_buffer[k] = attr;
+ 711   5                                                      j += SAT_file_push(j, (STK_TAG_ITEM & 0x7F), len + 1, STK_buffer + k);
+ 712   5                                                      len = temp[0];                  //restore backup length                 
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 13  
+
+ 713   5                                                      len += 1;
+ 714   5                                                      k += len;
+ 715   5                                                      len = STK_buffer[k];
+ 716   5                                                      if(len == 0) {
+ 717   6                                                              len = temp[0];            //load from backup
+ 718   6                                                              //k++;                                  //skip length
+ 719   6                                                              value[0] = STK_buffer[k + 1];           //skip var
+ 720   6                                                              set_variable(&_const_list, attr++, len + 1, value);
+ 721   6                                                              m_free(value);
+ 722   6                                                              k++;                    //skip byte
+ 723   6                                                      } else {
+ 724   6                                                              m_free(value);
+ 725   6                                                              STK_buffer[k] = STK_buffer[k + 1 + len];                //skip var
+ 726   6                                                              set_variable(&_const_list, attr++, len + 1, STK_buffer + k);
+ 727   6                                                              len += 1;               //increment index by length
+ 728   6                                                              k += len;               //skip byte
+ 729   6                                                      }
+ 730   5                                                      k++;
+ 731   5                                              }
+ 732   4                                              //list_dump(_const_list);
+ 733   4                                              status = APDU_STK_RESPONSE | j;
+ 734   4                                              goto exit_decode;
+ 735   4      #endif
+ 736   4      #if (IVAS_PROVIDE_LOCAL_INFORMATION_ALLOCATED)
+ 737   4                                      case VAS_PROVIDE_LOCAL_INFORMATION:
+ 738   4                                              attr = STK_buffer[k++];
+ 739   4                                              vas_cvid = STK_buffer[k];
+ 740   4                                              j += VAS_push_header(j, (PROVIDE_LOCAL_INFORMATION & 0x7F), attr, STK_DEV_ME);
+ 741   4                                              status = APDU_STK_RESPONSE | j;
+ 742   4                                              vas_state |= (VAS_STATE_WAIT_VARIABLE | VAS_STATE_VAR_LOCALINFO);
+ 743   4                                              goto exit_decode;
+ 744   4      #endif
+ 745   4      #if (IVAS_PLAY_TONE_ALLOCATED)
+                                              case VAS_PLAY_TONE:
+                                                      j += VAS_push_header(j, (PLAY_TONE & 0x7F), attr, STK_DEV_ME);
+                                                      k = 3;
+                                                      len = STK_buffer[k++];
+                                                      temp[0] = len;
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = decode_ucs28(STK_buffer + k, STK_buffer + k, len);        
+                                                      }
+                                                      j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, STK_buffer + k);
+                                                      k += temp[0];
+                                                      j += SAT_file_push(j, (STK_TAG_TONE & 0x7F), 1, STK_buffer);
+                                                      j += SAT_file_push(j, (STK_TAG_DURATION & 0x7F), 1, STK_buffer + 1);
+                                                      status = APDU_STK_RESPONSE | j;
+                                                      goto exit_decode;
+              #endif
+ 761   4      #if (IVAS_SETUP_IDLE_MODE_TEXT_EXTENDED_ALLOCATED)
+                                              case VAS_SETUP_IDLE_MODE_TEXT_EXTENDED:
+                                                      temp[3] = STK_buffer[k++];
+                                                      goto show_idle_text;
+              #endif
+ 766   4      #if     (IVAS_SETUP_IDLE_MODE_TEXT_ALLOCATED)
+                                              case VAS_SETUP_IDLE_MODE_TEXT:
+                                                      temp[3] = size;
+              #endif
+ 770   4      #if     (IVAS_SETUP_IDLE_MODE_TEXT_ALLOCATED || IVAS_SETUP_IDLE_MODE_TEXT_EXTENDED_ALLOCATED)
+                                                      show_idle_text:
+                                                      j += VAS_push_header(j, (SET_UP_IDLE_TEXT & 0x7F), 0, STK_DEV_ME);
+                                                      //variable substitution including reference
+                                                      k = 3;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 14  
+
+                                                      len = temp[k++];        //k=3
+                                                      value = m_alloc(len + 1);
+                                                      memcpy(value, STK_buffer + k, len);
+                                                      //use no lv format (not a inbound message)       
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = decode_ucs28(value, value, len);  
+                                                      }
+                                                      len = VAS_substitute(FALSE, value, len, STK_buffer + 1, 255);
+                                                      m_free(value);
+                                                      STK_buffer[0] = 0xF6;                                           //DCS
+                                                      j += SAT_file_push(j, (STK_TAG_TEXT_STRING & 0x7F), len + 1, STK_buffer);
+                                                      status = APDU_STK_RESPONSE | j;
+                                                      goto exit_decode;
+              #endif
+ 789   4      #if (IVAS_REFRESH_ALLOCATED)
+ 790   4                                      case VAS_REFRESH:
+ 791   4                                              j += VAS_push_header(j, (REFRESH & 0x7F), STK_buffer[k++], STK_DEV_ME);
+ 792   4                                              len = STK_buffer[k++];
+ 793   4                                              j += SAT_file_push(j, (STK_TAG_FILE_LIST & 0x7F), len, STK_buffer + k);
+ 794   4                                              status = APDU_STK_RESPONSE | j;
+ 795   4                                              goto exit_decode;
+ 796   4      #endif
+ 797   4      #if (IVAS_SETUP_CALL_EXTENDED_ALLOCATED)
+                                              case VAS_SETUP_CALL_EXTENDED:
+                                                      k = 1;
+                                                      len = STK_buffer[k++];
+                                                      k += len;
+                                                      len = STK_buffer[k++];
+                                                      k += len;
+                                                      temp[4] = STK_buffer[k++];              //address format specifier
+                                                      cvar = get_variable(&_var_list, STK_buffer[k++]);
+                                                      value = NULL;
+                                                      while(k < size) {
+                                                              len = STK_buffer[k++];
+                                                              if(STK_buffer[k] == 0) {
+                                                                      value = m_alloc(len);
+                                                                      memcpy(value, STK_buffer + k + 1, len - 1);
+                                                                      temp[3] = len - 1;
+                                                              }
+                                                              k += len;
+                                                      }
+                                                      k = 1;
+                                                      goto show_setup_call;
+              #endif
+ 819   4      #if (IVAS_SETUP_CALL_ALLOCATED)
+                                              case VAS_SETUP_CALL:
+                                                      k = 1;
+                                                      cvar = NULL;
+                                                      len = STK_buffer[k++];
+                                                      value = m_alloc(len);
+                                                      memcpy(value, STK_buffer + k, len);
+                                                      temp[3] = len;
+                                                      k += len;
+              #endif
+ 829   4      #if (IVAS_SETUP_CALL_ALLOCATED || IVAS_SETUP_CALL_EXTENDED_ALLOCATED)
+                                                      show_setup_call:
+                                                      attr = STK_buffer[0];
+                                                      j += VAS_push_header(j, (SET_UP_CALL & 0x7F), attr, STK_DEV_ME);
+                                                      if(value != NULL) {             //alpha identifier
+                                                              //can be outdone from setup_call or setup_call_extended, depends on value reference, use substitutio
+             -n
+                                                              //never change any STK_buffer value below command size, use STK_buffer+size as temporary
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 15  
+
+                                                              temp[3] = VAS_substitute(FALSE, value, temp[3], STK_buffer + size, 255 - size);
+                                                              j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), temp[3], STK_buffer + size);
+                                                              m_free(value);
+                                                      }
+                                                      if(cvar != NULL) {              //address for extended
+                                                              value = m_alloc(cvar->length + 2);
+                                                              value[0] = temp[4];
+                                                              value[1] = cvar->length;
+                                                              memcpy(value + 2, cvar->buffer, cvar->length);
+                                                              j += SAT_file_push(j, (STK_TAG_ADDRESS & 0x7F), cvar->length + 2, value);
+                                                              m_free(value);  
+                                                      }
+                                                      len = STK_buffer[k++];          //capability
+                                                      j += SAT_file_push(j, (STK_TAG_CAPABILITY & 0x7F), len, STK_buffer + k);
+                                                      k += len;
+                                                      len = STK_buffer[k++];          //duration
+                                                      j += SAT_file_push(j, (STK_TAG_DURATION & 0x7F), len, STK_buffer + k);  
+                                                      k += len;
+                                                      len = STK_buffer[k++];          //address for non extended
+                                                      if(cvar == NULL) {
+                                                              j += SAT_file_push(j, (STK_TAG_ADDRESS & 0x7F), len, STK_buffer + k);   
+                                                      }
+                                                      k += len;
+                                                      status = APDU_STK_RESPONSE | j;
+                                                      goto exit_decode;
+              #endif
+ 862   4      #if (IVAS_SEND_USSD_ALLOCATED)
+ 863   4                                      case VAS_SEND_USSD:
+ 864   4                                              j += VAS_push_header(j, (SEND_USSD & 0x7F), 0, STK_DEV_NETWORK);
+ 865   4                                              len = STK_buffer[k++];
+ 866   4                                              value = m_alloc(len + 1);
+ 867   4                                              memcpy(value, STK_buffer + k + 1, len);
+ 868   4                                              //server inbound message  
+ 869   4                                              k += len;
+ 870   4                                              #if UNICODE_SUPPORT
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = decode_ucs28(value, value, len);  
+                                                      }
+                                                      #endif
+ 875   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer + size, 255 - size);
+ 876   4                                              m_free(value);
+ 877   4                                              value = m_alloc(len + 1);
+ 878   4                                              memcpy(value, STK_buffer + size, len);
+ 879   4                                              value[len] = 0;
+ 880   4                                              j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, value);
+ 881   4                                              m_free(value);
+ 882   4                                              len = STK_buffer[k++];
+ 883   4                                              temp[0] = len;
+ 884   4                                              memcpy(STK_buffer + size, STK_buffer + k, len);
+ 885   4                                              #if UNICODE_SUPPORT
+                                                      if(tag & 0x80) {                        //encode to 8 bit
+                                                              len = encode_82ucs(STK_buffer + size, STK_buffer + size, len);  
+                                                      }
+                                                      #endif
+ 890   4                                              j += SAT_file_push(j, (STK_TAG_USSD_STRING & 0x7F), len, STK_buffer + size);
+ 891   4                                              k += temp[0];
+ 892   4                                              while(k < size) {
+ 893   5                                                      len = STK_buffer[k++];
+ 894   5                                                      if(STK_buffer[k] == 0) {
+ 895   6                                                              vas_cvid = STK_buffer[k+1];
+ 896   6                                                      }
+ 897   5                                                      k += len;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 16  
+
+ 898   5                                              }
+ 899   4                                              status = APDU_STK_RESPONSE | j;
+ 900   4                                              goto exit_decode;
+ 901   4      #endif
+ 902   4      #if (IVAS_SEND_SM_EXTENDED_ALLOCATED)
+ 903   4                                      case VAS_SEND_SM_EXTENDED:
+ 904   4                                              ///TODO :       PID+DCS not implemented
+ 905   4                                              j += VAS_push_header(j, (SEND_SHORT_MESSAGE & 0x7F), 0, STK_DEV_NETWORK);
+ 906   4                                              len = STK_buffer[k++];
+ 907   4                                              value = m_alloc(len + 1);
+ 908   4                                              memcpy(value, STK_buffer + k + 1, len);
+ 909   4                                              k += len;
+ 910   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer + size, 255 - size);
+ 911   4                                              m_free(value);
+ 912   4                                              value = m_alloc(len + 1);
+ 913   4                                              memcpy(value, STK_buffer + size, len);
+ 914   4                                              value[len] = 0;
+ 915   4                                              j += SAT_file_push(j, (STK_TAG_ALPHA & 0x7F), len, value);
+ 916   4                                              m_free(value);
+ 917   4                                              temp[0] = STK_buffer[k++];              //PID
+ 918   4                                              temp[1] = STK_buffer[k++];              //DCS
+ 919   4                                              temp[4] = STK_buffer[k++];              //address format specifier
+ 920   4                                              cvar = get_variable(&_var_list, STK_buffer[k++]);
+ 921   4                                              if(cvar != NULL) {              
+ 922   5                                                      address = m_alloc(cvar->length + 2);
+ 923   5                                                      address[0] = temp[4];
+ 924   5                                                      address[1] = cvar->length;
+ 925   5                                                      memcpy(address + 2, cvar->buffer, cvar->length);        
+ 926   5                                              } else {
+ 927   5                                                      address = NULL;
+ 928   5                                              }
+ 929   4                                              temp[0] = STK_buffer[k++];
+ 930   4                                              temp[1] = k;
+ 931   4                                              k += len;
+ 932   4                                              while(k < size) {
+ 933   5                                                      len = STK_buffer[k++];
+ 934   5                                                      if(STK_buffer[k] == 0) {
+ 935   6                                                              temp[3] = STK_buffer[k+1];              //address format specifier
+ 936   6                                                              cvar = get_variable(&_var_list, STK_buffer[k+2]);
+ 937   6                                                              if(cvar != NULL) {                      //smsc address tag
+ 938   7                                                                      value = m_alloc(cvar->length + 2);
+ 939   7                                                                      value[0] = temp[3];     //address format specifier
+ 940   7                                                                      value[1] = cvar->length;
+ 941   7                                                                      memcpy(value + 2, cvar->buffer, cvar->length);
+ 942   7                                                                      j += SAT_file_push(j, (STK_TAG_ADDRESS & 0x7F), cvar->length + 2, value);
+ 943   7                                                                      m_free(value);
+ 944   7                                                              }
+ 945   6                                                      }
+ 946   5                                                      k += len;
+ 947   5                                              }
+ 948   4                                              k = temp[1];
+ 949   4                                              len = temp[0];
+ 950   4                                              //submit SMS with variable reference
+ 951   4                                              //variable substitution
+ 952   4                                              value = m_alloc(len + 1);
+ 953   4                                              memcpy(value, STK_buffer + k, len);
+ 954   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer, 255);
+ 955   4                                              m_free(value);
+ 956   4                                              value = m_alloc(len + 1);
+ 957   4                                              memcpy(value, STK_buffer, len);
+ 958   4                                              value[len] = 0;
+ 959   4                                              len = encode_SMSTPDU(SMS_TYPE_SUBMIT, 0x7F, 0xF6, len, address, value, STK_buffer);     //SMS submit
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 17  
+
+*** WARNING C182 IN LINE 959 OF FRAMEWORK\VAS.C: pointer to different objects
+ 960   4                                              j += SAT_file_push(j, (STK_TAG_SMS_TPDU & 0x7F), len, STK_buffer);
+ 961   4                                              m_free(address);
+ 962   4                                              status = APDU_STK_RESPONSE | j;
+ 963   4                                              goto exit_decode;
+ 964   4      #endif
+ 965   4      #if (IVAS_SEND_SM_ALLOCATED)
+ 966   4                                      case VAS_SEND_SM:
+ 967   4                                              ///TODO :       PID+DCS not implemented
+ 968   4                                              j += VAS_push_header(j, (SEND_SHORT_MESSAGE & 0x7F), 0, STK_DEV_NETWORK);
+ 969   4                                              temp[0] = STK_buffer[k++];              //PID
+ 970   4                                              temp[1] = STK_buffer[k++];              //DCS
+ 971   4                                              len = STK_buffer[k++];
+ 972   4                                              address = m_alloc(len);
+ 973   4                                              memcpy(address, STK_buffer + k, len);
+ 974   4                                              k += len;
+ 975   4                                              len = STK_buffer[k++];
+ 976   4                                              if(len != 0) {
+ 977   5                                                      j += SAT_file_push(j, (STK_TAG_ADDRESS & 0x7F), len, STK_buffer + k);
+ 978   5                                                      k += len;
+ 979   5                                              }
+ 980   4                                              len = STK_buffer[k++];
+ 981   4                                              //submit SMS with variable reference
+ 982   4                                              //variable substitution
+ 983   4                                              value = m_alloc(len + 1);
+ 984   4                                              memcpy(value, STK_buffer + k, len);
+ 985   4                                              len = VAS_substitute(FALSE, value, len, STK_buffer, 255);
+ 986   4                                              m_free(value);
+ 987   4                                              value = m_alloc(len + 1);
+ 988   4                                              memcpy(value, STK_buffer, len);
+ 989   4                                              value[len] = 0;
+ 990   4                                              len = encode_SMSTPDU(SMS_TYPE_SUBMIT, temp[0], temp[1], len, address, value, STK_buffer);       //SMS submi
+             -t
+*** WARNING C182 IN LINE 990 OF FRAMEWORK\VAS.C: pointer to different objects
+ 991   4                                              j += SAT_file_push(j, (STK_TAG_SMS_TPDU & 0x7F), len, STK_buffer);
+ 992   4                                              m_free(address);
+ 993   4                                              status = APDU_STK_RESPONSE | j;
+ 994   4                                              goto exit_decode;
+ 995   4      #endif
+ 996   4      #if (IVAS_TIMER_MANAGEMENT_ALLOCATED)
+                                              case VAS_TIMER_MANAGEMENT:                              //NOT IMPLEMENTED
+                                                      break;
+              #endif
+1000   4      #if (IVAS_LAUNCH_BROWSER_EXTENDED_ALLOCATED)
+1001   4                                      case VAS_LAUNCH_BROWSER_EXTENDED:
+1002   4      #endif 
+1003   4      #if (IVAS_LAUNCH_BROWSER_ALLOCATED)
+                                              case VAS_LAUNCH_BROWSER:                                //NOT IMPLEMENTED
+              #endif
+1006   4      #if (IVAS_LAUNCH_BROWSER_EXTENDED_ALLOCATED || IVAS_LAUNCH_BROWSER_ALLOCATED)
+1007   4                                              break;
+1008   4      #endif
+1009   4      #if (IVAS_SKIP_ALLOCATED)
+1010   4                                      case VAS_SKIP:
+1011   4                                              if(size == 1) { 
+1012   5                                                      vas_skip = (int16)((int8)STK_buffer[0]);
+1013   5                                              }
+1014   4                                              if(size == 2) {
+1015   5                                                      vas_skip = *(int16 *)STK_buffer;
+1016   5                                              }
+1017   4                                              //return 0x9C00 | vas_skip;
+1018   4                                              goto next_instruction;          //next instruction
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 18  
+
+1019   4      #endif
+1020   4      #if (IVAS_EXIT_ALLOCATED)
+1021   4                                      case VAS_EXIT:
+1022   4                                              finish_decode:
+1023   4                                              vas_PC = 0;
+1024   4                                              vas_PL = 0;
+1025   4                                              clear_list(&_var_list, 0x01, 0xFF);             //clear all variables (freeup memory)
+1026   4                                              status = APDU_SUCCESS;
+1027   4                                              goto exit_decode;
+1028   4      #endif
+1029   4      #if (IVAS_NEW_CONTEXT_ALLOCATED)
+1030   4                                      case VAS_NEW_CONTEXT:
+1031   4                                              attr = STK_buffer[k++];
+1032   4                                              switch(attr) {                     //start from 0x01, 0x00 is invalid variable
+1033   5                                                      case 0: clear_list(&_var_list, 0x01, 0xDF);     break;
+1034   5                                                      case 1: clear_list(&_var_list, 0xE0, 0xFF);     break;
+1035   5                                                      case 2: clear_list(&_var_list, 0x01, 0xFF);     break;
+1036   5                                                      default: break;
+1037   5                                              } 
+1038   4                                              goto next_instruction;
+1039   4      #endif
+1040   4      #if (IVAS_SET_EXTENDED_ALLOCATED)
+1041   4                                      case VAS_SET_EXTENDED:
+1042   4      #endif    
+1043   4      #if (IVAS_SET_ALLOCATED)
+1044   4                                      case VAS_SET:
+1045   4      #endif
+1046   4      #if (IVAS_SET_ALLOCATED || IVAS_SET_EXTENDED_ALLOCATED)
+1047   4                                              set_variable(&_var_list, STK_buffer[0], size - 1, STK_buffer + 1);
+1048   4                                              goto next_instruction;
+1049   4      #endif
+1050   4      #if (IVAS_SET_RETURN_TAR_VALUE_ALLOCATED)
+1051   4                                      case VAS_SET_RETURN_TAR_VALUE:                  //TAR index 1-255
+1052   4                                              value = m_alloc(sizeof(fs_handle));
+1053   4                                              if(value != NULL) {
+1054   5                                                      _select(value, FID_MF);
+*** WARNING C182 IN LINE 1054 OF FRAMEWORK\VAS.C: pointer to different objects
+1055   5                                                      _select(value, FID_WIB);
+*** WARNING C182 IN LINE 1055 OF FRAMEWORK\VAS.C: pointer to different objects
+1056   5                                                      if(_select(value, FID_WTAR) >= 0x9F00) {
+*** WARNING C182 IN LINE 1056 OF FRAMEWORK\VAS.C: pointer to different objects
+1057   6                                                              k = STK_buffer[0] - 1;
+1058   6                                                              if(_readrec(value, k, STK_buffer, 5) == APDU_SUCCESS) {
+*** WARNING C182 IN LINE 1058 OF FRAMEWORK\VAS.C: pointer to different objects
+1059   7                                                                      p348_set_tar(STK_buffer + 1);
+1060   7                                                              } 
+1061   6                                                      }
+1062   5                                                      m_free(value);
+1063   5                                              }
+1064   4                                              goto next_instruction;
+1065   4      #endif
+1066   4      #if (IVAS_BRANCH_ON_VAR_VALUE_ALLOCATED)
+1067   4                                      case VAS_BRANCH_ON_VAR_VALUE:
+1068   4                                              cvar = get_variable(&_var_list, STK_buffer[k++]);
+1069   4                                              while(k < size) {
+1070   5                                                      len = STK_buffer[k++];
+1071   5                                                      if(memcmp(STK_buffer + k, cvar->buffer, len - 1) == 0) {
+1072   6                                                              vas_skip = (int16)((int8)STK_buffer[k + len - 1]);
+1073   6                                                              goto next_instruction;
+1074   6                                                      }
+1075   5                                                      k += len;                       
+1076   5                                              }
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 19  
+
+1077   4                                              goto next_instruction;
+1078   4      #endif
+1079   4      #if (IVAS_CHECK_TERMINAL_PROFILE_ALLOCATED)
+                                              case VAS_CHECK_TERMINAL_PROFILE:                        //NOT IMPLEMENTED
+                                                      goto next_instruction;
+              #endif
+1083   4      #if (IVAS_SUBSTRING_ALLOCATED)
+1084   4                                      case VAS_SUBSTRING:
+1085   4                                              cvar = get_variable(&_var_list, STK_buffer[1]);
+1086   4                                              value = m_alloc(STK_buffer[3]);
+1087   4                                              memcpy(value, cvar->buffer + STK_buffer[2], STK_buffer[3]);
+1088   4                                              set_variable(&_var_list, STK_buffer[0], STK_buffer[3], value);
+1089   4                                              m_free(value);
+1090   4                                              goto next_instruction;
+1091   4      #endif
+1092   4      #if (IVAS_EXECUTE_LOCAL_SCRIPT_ALLOCATED)
+1093   4                                      case VAS_EXECUTE_LOCAL_SCRIPT:
+1094   4                                              len = STK_buffer[0]; 
+1095   4                                              value = m_alloc(len);
+1096   4                                              if(len != 0) {
+1097   5                                                      memcpy(value, STK_buffer + 1, len);
+1098   5                                                      len = VAS_substitute(FALSE, value, len, STK_buffer + 1, 255);
+1099   5                                                      m_free(value);
+1100   5                                                      value = m_alloc(sizeof(fs_handle));
+1101   5                                                      _select(value, FID_MF);
+*** WARNING C182 IN LINE 1101 OF FRAMEWORK\VAS.C: pointer to different objects
+1102   5                                                      _select(value, FID_WIB);
+*** WARNING C182 IN LINE 1102 OF FRAMEWORK\VAS.C: pointer to different objects
+1103   5                                                      if(_select(value, FID_WSCRADDR) <= 0x9F00) goto exit_execute_local;
+*** WARNING C182 IN LINE 1103 OF FRAMEWORK\VAS.C: pointer to different objects
+1104   5                                                      k = 2;
+1105   5                                                      //use absolute addressing on EFscript_address
+1106   5                                                      while(1) {
+1107   6                                                              if(_readbin(value, k, STK_buffer + 5, 6)!= APDU_SUCCESS) goto exit_execute_local;
+*** WARNING C182 IN LINE 1107 OF FRAMEWORK\VAS.C: pointer to different objects
+1108   6                                                              if(memcmp(STK_buffer + 1, STK_buffer + 5, 4) == 0) goto start_execute_local;
+1109   6                                                              k += 6;
+1110   6                                                      }
+1111   5                                                      start_execute_local:
+1112   5                                                      VAS_plugin_init(*((uint16 *)(STK_buffer + 9)));                 //change to plugin execution
+1113   5                                              }
+1114   4                                              exit_execute_local:
+1115   4                                              m_free(value);
+1116   4                                              goto next_instruction;
+1117   4      #endif
+1118   4      #if (IVAS_ADD_SUBSTRACT_ALLOCATED)
+                                              case VAS_ADD_SUBSTRACT:
+                                                      //allocate source operand first
+                                                      if(size > 2) {          //use source variable
+                                                              cvar = get_variable(&_var_list, STK_buffer[1]);         //get destination variable
+                                                              len = cvar->length;                                                             //calculating temporary variable length based on destination variable
+                                                              value = m_alloc(cvar->length);
+                                                              memset(value, 0, cvar->length);                                 //zeroing variable for padding
+                                                              //source variable
+                                                              cvar = get_variable(&_var_list, STK_buffer[2]);         //get source variable
+                                                              j = cvar->length;                                                               //calculating source variable size
+                                                              for(k = (len - 1); k != 0, j != 0; k--, j--) {  //copying original value (source)
+                                                                      value[k] = cvar->buffer[k];             
+                                                              }
+                                                              //destination variable
+                                                              cvar = get_variable(&_var_list, STK_buffer[1]);
+                                                              k = len - 1;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 20  
+
+                                                      } else {
+                                                              cvar = get_variable(&_var_list, STK_buffer[1]);
+                                                              value = m_alloc(cvar->length);
+                                                              memset(value, 0, cvar->length);
+                                                              value[cvar->length - 1] = 1;
+                                                              len = cvar->length;
+                                                              k = len - 1;
+                                                      }
+                                                      //operation
+                                                      attr = 0;                                                                                       //use attr as carry/borrow
+                                                      while(k != 0) {
+                                                              if(STK_buffer[0] & 0x01) {              //substraction
+                                                                      status = cvar->buffer[k] - (value[k] + attr);           //use status as temporary variable
+                                                              } else {                                        //addition
+                                                                      status = cvar->buffer[k] + (value[k] + attr);           //use status as temporary variable
+                                                              }
+                                                              attr = 0;                                               //clear carry/borrow flag       
+                                                              if(status > 0xFF) {                             //overflow to carry/borrow flag
+                                                                      attr = 1;                          
+                                                              }
+                                                              cvar->buffer[k] = (uchar)status;                        
+                                                      }
+                                                      m_free(value);
+                                                      goto next_instruction;
+              #endif
+1160   4      #if (IVAS_CONVERT_VARIABLE_ALLOCATED)
+1161   4                                      case VAS_CONVERT_VARIABLE:                      //NOT IMPLEMENTED
+1162   4                                              goto next_instruction;
+1163   4      #endif
+1164   4      #if (IVAS_GROUP_UNGROUP_VARIABLE_ALLOCATED)
+                                              case VAS_GROUP_UNGROUP_VARIABLE:
+                                                      attr = STK_buffer[k++];
+                                                      j = STK_buffer[k++];                                                            //j = variable id (grouped variable)
+                                                      if(attr & 1) {                                                                  //ungroup variable
+                                                              cvar = get_variable(&_var_list, j);                     //get source variable
+                                                              j = 0;                                                                          //j is unused anymore
+                                                              while(j < cvar->length && k < size) {           //STK_buffer[k] = variable id
+                                                                      len = cvar->buffer[j++];
+                                                                      set_variable(&_var_list, STK_buffer[k++], len, cvar->buffer + j);
+                                                                      j += len;
+                                                              }
+                                                      } else {                                //group variable
+                                                              len = 0;
+                                                              while(k < size) {
+                                                                      cvar = get_variable(&_var_list, STK_buffer[k++]);               //get source variable
+                                                                      STK_buffer[size + len++] = cvar->length;                                        //insert L to destination STK_buffer
+                                                                      memcpy(STK_buffer + size + len, cvar->buffer, cvar->length);
+                                                                      len += cvar->length;
+                                                              }
+                                                              //set new variable                                                                                      
+                                                              set_variable(&_var_list, j, len, STK_buffer + size);
+                                                      }
+                                                      goto next_instruction;
+              #endif
+1189   4      #if (IVAS_SWAP_NIBBLES_ALLOCATED)
+                                              case VAS_SWAP_NIBBLES:
+                                                      cvar = get_variable(&_var_list, STK_buffer[1]);
+                                                      for(len = 0; len < cvar->length; len++) {
+                                                              temp[0] = cvar->buffer[len];
+                                                              cvar->buffer[len] = ((cvar->buffer[len] >> 4) | (temp[0] << 4));
+                                                      }
+                                                      goto next_instruction;
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 21  
+
+              #endif
+1198   4      #if (IVAS_PLUGIN_ALLOCATED)
+1199   4                                      case VAS_PLUGIN:
+1200   4                                              //VAS_decode_plugin(STK_buffer, size);
+1201   4                                              vas_cvid = STK_buffer[k++];                             //variable out
+1202   4                                              len = STK_buffer[k++];                          //length of plugin name
+1203   4                                              
+1204   4                                              //every terminal response should be route to activated plugin
+1205   4                                              //enter plugin mode
+1206   4                                              vas_mode = VAS_MODE_PLUGIN;
+1207   4                                              
+1208   4                                              k += len;       
+1209   4                                              len = STK_buffer[k++];                          //length of input string
+1210   4                                              //allocate-copy, substitute variable reference, reallocate-copy
+1211   4                                              vas_cistr = (uchar *)m_alloc(len);
+1212   4                                              memcpy(vas_cistr, STK_buffer + k, len + 1);
+1213   4                                              len = VAS_substitute(FALSE, vas_cistr, len, STK_buffer + k, 128);
+1214   4                                              m_free(vas_cistr);
+1215   4                                              vas_cistr = (uchar *)m_alloc(len + 1);
+1216   4                                              vas_cistr[0] = len;
+1217   4                                              memcpy(vas_cistr + 1, STK_buffer + k, len);
+1218   4      
+1219   4      #if     VAS_MDIL_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "MDIL", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_MDIL; 
+                                                              j = mdil_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;
+                                                      }
+              #endif
+1227   4                                      
+1228   4      #if VAS_VDIL_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "VDIL", len) == TRUE) { 
+                                                              vas_mode |= VAS_PLUGIN_VDIL;
+                                                              j = vdil_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;
+                                                      }
+              #endif
+1236   4                                      
+1237   4      #if VAS_DITR_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "DITR", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_DITR; 
+                                                              j = ditr_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;       
+                                                      }
+              #endif
+1245   4                                      
+1246   4      #if VAS_MASL_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "MASL", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_MASL;
+                                                              j = masl_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;       
+                                                      }
+              #endif
+1254   4                                      
+1255   4      #if VAS_DECR_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "DECR", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_DECR;
+                                                              j = decr_decode();
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 22  
+
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;       
+                                                      }
+              #endif
+1263   4                                      
+1264   4      #if VAS_ENCR_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "ENCR", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_ENCR; 
+                                                              j = encr_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;       
+                                                      }
+              #endif
+1272   4      
+1273   4      #if     VAS_ICCID_ALLOCATED
+                                                      if(VAS_strcmp(STK_buffer + 2, "*ICCID", len) == TRUE) {
+                                                              vas_mode |= VAS_PLUGIN_ICCID; 
+                                                              j = iccid_decode();
+                                                              if(j == 0) goto next_instruction;
+                                                              goto exit_decode;       
+                                                      }
+              #endif
+1281   4                                              //no plugin found, exit plugin mode, skip this instruction, release memory
+1282   4                                              VAS_exit_plugin();
+1283   4                                              break;
+1284   4      #endif
+1285   4                                      /* Administrative Commands */
+1286   4                                      case VAS_INSTALL_PLUGIN :
+1287   4                                      case VAS_REMOVE_PLUGIN:
+1288   4                                      case VAS_SET_SCRIPT_TRIGGER_MODE:
+1289   4                                      case VAS_GET_SCRIPT_TRIGGER_MODE:
+1290   4                                      case VAS_GET_MENU:
+1291   4                                      case VAS_SCRIPT_INFO:
+1292   4                                      default:
+1293   4                                              break;
+1294   4                              }
+1295   3                      } else {
+1296   3                              vas_skip--;
+1297   3                      }
+1298   2              }
+1299   1              exit_decode:
+1300   1              /*if(vas_PC == vas_PL && vas_state != VAS_STATE_WAIT_RESPONSE) {
+1301   1                              
+1302   1              }*/
+1303   1              if(j != 0) {
+1304   2                      status = SAT_file_flush(j);
+1305   2              }
+1306   1              return status;
+1307   1      }
+*** WARNING C280 IN LINE 555 OF FRAMEWORK\VAS.C: 'send_short_message': unreferenced label
+1308          
+1309          uchar VAS_strcmp(uchar * a, uchar * b, uchar len) _REENTRANT_ {
+1310   1              uchar i = 0;
+1311   1              uchar c;
+1312   1              for(i=0;i<len;i++) {
+1313   2                      c = b[i] - 0x20;                        //to uppercase (capitalization)
+1314   2                      if(a[i] != b[i] && a[i] != c) return FALSE; 
+1315   2              }
+1316   1              return TRUE;    
+1317   1      }
+1318          
+1319          #endif
+C51 COMPILER V7.01  VAS                                                                    01/25/2014 09:07:24 PAGE 23  
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   7957    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     30    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  26 WARNING(S),  0 ERROR(S)

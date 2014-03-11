@@ -1,0 +1,1973 @@
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE YGGDRASIL
+OBJECT MODULE PLACED IN .\Debug\Output\yggdrasil.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE Yggdrasil\yggdrasil.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBU
+                    -G PRINT(.\Debug\List\yggdrasil.lst) OBJECT(.\Debug\Output\yggdrasil.obj)
+
+stmt level    source
+
+   1          /* Yggdrasil micro kernel provide services between smart card and the ME 
+   2           *
+   3           * Copyright 2010, Agus Purwanto.
+   4           * All rights reserved.
+   5           *
+   6           * 
+   7           */
+   8          
+   9          #include "yggdrasil.h"
+  10          #include "application.h"
+  11          #include "..\defs.h"
+  12          #include "..\drivers\ioman.h"
+  13          #include "..\misc\mem.h"
+  14          #include "..\asgard\file.h"
+  15          #include "..\asgard\fs.h"
+  16          #include "..\asgard\security.h"
+  17          #include "..\auth\A3A8.h"
+  18          #include "..\midgard\midgard.h"
+  19          #include "..\asgard\sys_file.h"
+  20          #include "..\ISO7816\ISO7816.h"
+  21          #include "..\NORFlash\NORFlash.h"
+  22          #include "..\liquid.h"
+  23          #include "..\framework\vas.h"
+  24          #include "..\framework\sms.h"
+  25          #include "..\framework\des.h"
+  26          #include <string.h>
+  27          
+  28          //extern apdu_command *iobuf;
+  29          extern fs_table fs_info;
+  30          //BYTEX v_chv_status[0x10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };        //jangan diinisialisasi, 
+             -biar ketika reset nilainya tetap
+  31          
+  32          //HALFWX free_space = 0;
+  33          uchar get_resp_length;
+  34          uchar response_length; 
+  35          uchar * response_data = NULL;
+  36          //uchar response[0x20];
+  37          os_config _os_config;  
+  38          //uchar xdata yggdrasil_state;
+  39          #if 0
+              fs_handle _ygg_fs _at_ 0x4F8;   
+              #else
+  42          fs_handle _ygg_fs;
+  43          #endif   
+  44          
+  45          BYTEC appkey[] = "H3imdall";
+  46          BYTEC tokenkey[] = "R46N4RoK"; 
+  47          BYTEC auth_mask[] = { 0x59, 0x36, 0x36, 0x64, 0x72, 0x40, 0x73, 0x69 };
+  48          
+  49          extern BYTEX    iso7816_buffer[263];
+  50          //extern BYTEX  IOBuf[];
+  51          #define ResponseBuf     (iso7816_buffer) 
+  52          #define apdu_le_value   *(iso7816_buffer+262)
+  53          
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 2   
+
+  54          #define HALFWSWAP(x) (((x>>8)&0xff) | ((x<<8)&0xff00)) 
+  55          uchar * auth_token = NULL;                      //software authentication
+  56          
+  57          //0 = comand only no response
+  58          //1 = command only with response
+  59          //2 = command with data no response
+  60          //3 = command with data with response
+  61          /*BYTEC gsm_class_case[] = {
+  62          //      0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F
+  63                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //0
+  64                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //1
+  65                  2,0,0,0,2,0,2,0,2,0,0,0,2,0,0,0, //2
+  66                  0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0, //3
+  67                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //4
+  68                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //5
+  69                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //6
+  70                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //7
+  71                  0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0, //8
+  72                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //9
+  73                  0,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0, //A
+  74                  1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0, //B
+  75                  1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //C
+  76                  0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0, //D
+  77                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //E
+  78                  0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0, //F
+  79          };
+  80          
+  81          BYTEC yggdrasil_class_case[] = {
+  82          //      0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F
+  83                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //0
+  84                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //1
+  85                  2,0,0,0,2,0,0,0,0,0,0,0,0,0,0,1, //2
+  86                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //3
+  87                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //4
+  88                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //5
+  89                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //6
+  90                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //7
+  91                  0,2,1,0,0,0,0,0,0,0,2,0,0,0,0,0, //8
+  92                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //9
+  93                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //A
+  94                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //B
+  95                  2,2,2,2,0,0,0,0,0,0,0,0,0,2,0,0, //C
+  96                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //D
+  97                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, //E
+  98                  0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0, //F
+  99          };       */
+ 100          
+ 101          void Initialize_Hardware() _REENTRANT_
+ 102          {
+ 103   1              //inisialisasi eeprom
+ 104   1              //inisialisasi interrupt(jika ada)
+ 105   1              //inisialisasi watchdog timer(self recovery system)
+ 106   1      
+ 107   1              //inisialisasi driver2
+ 108   1              //printf(" * initializing all drivers\n");
+ 109   1              ioman_init();
+ 110   1      }
+ 111          
+ 112          void Initialize_Operating_System() _REENTRANT_
+ 113          {
+ 114   1              register uint16 sw;
+ 115   1              //printf(" * initializing midgard memory manager\n");
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 3   
+
+ 116   1              m_init_alloc();                 //init memori manager
+ 117   1              //ioman_send_atr();             //send answer to reset, operating system response
+ 118   1              //iobuf = (apdu_command *)m_alloc(sizeof(apdu_command));                //untuk memori buffer digunakan memori statis
+ 119   1              //printf(" * initializing asgard file system\n");
+ 120   1              _os_config.os_state = 0;
+ 121   1              _os_config.os_state |= (YGG_ST_NO_INIT | YGG_ST_ACTIVATED);        //no file system available, YGG_NO_INIT, d
+             -efault state
+ 122   1              //sprintf(iso7816_buffer, "");
+ 123   1              if(fs_init() == FS_UNFORMATTED)
+ 124   1              {
+ 125   2                      //_os_config.os_state |= YGG_ST_NO_INIT;           //no file system available, YGG_NO_INIT
+ 126   2                      //Save_State();
+ 127   2              }
+ 128   1              else
+ 129   1              {
+ 130   2                      //printf(" * mounting existing file system\n");
+ 131   2                      Load_State(); 
+ 132   2                      if((_os_config.os_state & YGG_ST_ACTIVATED) == 0) {
+ 133   3                              //initialize default file system (shared with local application) 
+ 134   3                              _select(&_ygg_fs, FID_MF);                                              //auto select FID MF
+ 135   3                              #if 0
+                                      Initialize_User_App();
+                                      #endif
+ 138   3                      }
+ 139   2                      //_os_config.os_state |= YGG_ST_NO_INIT;           //no file system available, YGG_NO_INIT
+ 140   2              }
+ 141   1      }
+*** WARNING C280 IN LINE 114 OF YGGDRASIL\YGGDRASIL.C: 'sw': unreferenced local variable
+ 142          
+ 143          //Send_Status digunakan untuk mengambil attribut2 dari file/direktori yang sedang aktif
+ 144          //merupakan fungsi internal dari kernel, tidak untuk dishare
+ 145          // SEND_STATUS
+ 146          #define STATUS_DIRECTORY                1
+ 147          #define STATUS_FILE                             2
+ 148          #define STATUS_ALL                              3
+ 149          uchar Send_Status(uchar mode, uchar * ResponseBuf) _REENTRANT_ {
+ 150   1              ef_header * curfile = NULL;
+ 151   1              fs_handle temp_fs;
+ 152   1              chv_file cf;
+ 153   1              memcpy(&temp_fs, &_ygg_fs, sizeof(fs_handle));
+ 154   1              switch(mode) {
+ 155   2                      case STATUS_DIRECTORY:
+ 156   2                              temp_fs.cur_ptr = temp_fs.cur_dir;
+ 157   2                              curfile = file_get_current_header(&temp_fs);
+ 158   2                              break;
+ 159   2                      case STATUS_ALL:
+ 160   2                              curfile = file_get_current_header(&temp_fs);
+ 161   2                              break;          
+ 162   2              }
+ 163   1              //df_header * curdir = (df_header *)curfile;
+ 164   1              //siap mengisi iobuf
+ 165   1              //response_df * df_res = ((response_df *)ResponseBuf);
+ 166   1              //response_ef * ef_res = ((response_ef *)ResponseBuf);
+ 167   1              
+ 168   1              if(curfile->type == T_EF)       //response untuk EF
+ 169   1              {         
+ 170   2                      //memset(ResponseBuf, 0, 7);
+ 171   2                      ((response_ef *)ResponseBuf)->rfu_1 = 0;
+ 172   2                      ((response_ef *)ResponseBuf)->file_size = curfile->size;
+ 173   2                      ((response_ef *)ResponseBuf)->fid = curfile->fid;
+ 174   2                      //ef_res->fid2 = curfile->FID & 0x00ff;
+ 175   2                      ((response_ef *)ResponseBuf)->type = curfile->type;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 4   
+
+ 176   2                      //memcpy((uchar *)(ResponseBuf + 7), (uchar *)(curfile + 11), 8);
+ 177   2                      if(curfile->type != EF_CYCLIC) {
+ 178   3                              //((response_ef *)ResponseBuf)->increase_allowed = curfile->inc;
+ 179   3                              ((response_ef *)ResponseBuf)->increase_allowed = 0x00;
+ 180   3                      } else {
+ 181   3                              if((curfile->acc_inc & 0x0F) != ACC_NVR) {
+ 182   4                                      ((response_ef *)ResponseBuf)->increase_allowed = 0x40;
+ 183   4                              } else {
+ 184   4                                      ((response_ef *)ResponseBuf)->increase_allowed = 0x00;
+ 185   4                              }
+ 186   3                      }
+ 187   2                      ((response_ef *)ResponseBuf)->acc_rw = curfile->acc_rw;
+ 188   2                      ((response_ef *)ResponseBuf)->acc_inc = (curfile->acc_inc & 0x0F);              //do not show OTA access
+ 189   2                      ((response_ef *)ResponseBuf)->acc_ri = curfile->acc_ri;
+ 190   2                      ((response_ef *)ResponseBuf)->status = curfile->status;
+ 191   2                      ((response_ef *)ResponseBuf)->next_length = 2;
+ 192   2                      ((response_ef *)ResponseBuf)->structure = curfile->structure;
+ 193   2                      ((response_ef *)ResponseBuf)->rec_length = curfile->rec_size;
+ 194   2                      m_free(curfile);
+ 195   2                      #if _DMA_DEBUG
+                              //barren_eject(curfile);
+                              #endif
+ 198   2                      return EF_RESPONSE_SIZE;
+ 199   2              } else {
+ 200   2                      //if(((df_header *)curfile)->file_char != 0) { m_free(curfile); return 0; }
+ 201   2                      //memset(ResponseBuf, 0, 0x17);                                 //response untuk DF/MF
+ 202   2                      ((response_df *)ResponseBuf)->rfu_1 = 0;
+ 203   2                      ((response_df *)ResponseBuf)->total_memory = fs_freespace();    //total memori bebas
+ 204   2                      //df_res->total_memory = 0;     //total memori bebas
+ 205   2                      ((response_df *)ResponseBuf)->fid = ((df_header *)curfile)->fid;
+ 206   2                      //df_res->fid2 = curdir->FID & 0x00ff;
+ 207   2                      ((response_df *)ResponseBuf)->type = ((df_header *)curfile)->type;
+ 208   2                      ((response_df *)ResponseBuf)->rfu_2 = 0;
+ 209   2                      ((response_df *)ResponseBuf)->rfu_3 = 0;
+ 210   2                      ((response_df *)ResponseBuf)->rfu_4 = 0;
+ 211   2                      ((response_df *)ResponseBuf)->rfu_5 = 0;
+ 212   2                      ((response_df *)ResponseBuf)->rfu_6 = 0;
+ 213   2                      ((response_df *)ResponseBuf)->next_length = 0x0A;       //next data length(gsm specific)
+ 214   2                      chv_get_config(ACC_CHV1, &cf);
+ 215   2                      ((response_df *)ResponseBuf)->gsm.file_char = 0x11;             //0x1B (previous value)
+ 216   2                      if((cf.status & CHV_ENABLED) == 0) {
+ 217   3                              ((response_df *)ResponseBuf)->gsm.file_char |= 0x80;
+ 218   3                      }
+ 219   2                      /*switch(cf->status) {                  //file characteristics
+ 220   2                              case CHV_UNBLOCK:
+ 221   2                              case CHV_ENABLE:
+ 222   2                                      df_res->gsm.file_char = 0x13;   //angka 0x13 cuman mengikuti keluaran kartu flexi               0x13
+ 223   2                                      break;
+ 224   2                              default:
+ 225   2                              case CHV_BLOCK:
+ 226   2                              case CHV_DISABLE:
+ 227   2                                      df_res->gsm.file_char = 0x13 | 0x80;    //angka 0x13 cuman mengikuti keluaran kartu flexi (karena tergant
+             -ung hw)        0x93
+ 228   2                                      break;
+ 229   2                      }*/
+ 230   2                      //printf("file char = %x\n", chv->status);
+ 231   2                      ((response_df *)ResponseBuf)->gsm.number_of_df = ((df_header *)curfile)->num_of_df;
+ 232   2                      ((response_df *)ResponseBuf)->gsm.number_of_ef = ((df_header *)curfile)->num_of_ef;
+ 233   2                      ((response_df *)ResponseBuf)->gsm.number_of_chv = 0x04; //cuman mengikuti keluaran kartu flexi
+ 234   2                      //((response_df *)ResponseBuf)->gsm.rfu_1 = 0;
+ 235   2                      //if(cf->pin_attempts <= cf->pin_max_attempts) {
+ 236   2                      ((response_df *)ResponseBuf)->gsm.chv1 = (0x80 + (cf.pin_max_attempts - cf.pin_attempts)); 
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 5   
+
+ 237   2                      //} else {
+ 238   2                              //((response_df *)ResponseBuf)->gsm.chv1 = 0x80;
+ 239   2                      //}
+ 240   2                      //if(cf->puk_attempts <= cf->puk_max_attempts) {
+ 241   2                      ((response_df *)ResponseBuf)->gsm.unblock_chv1 = (0x80 + (cf.puk_max_attempts - cf.puk_attempts));
+ 242   2                      //} else {
+ 243   2                              //((response_df *)ResponseBuf)->gsm.unblock_chv1 = 0x80;
+ 244   2                      //}
+ 245   2                      //m_free(cf);
+ 246   2                      #if _DMA_DEBUG
+                              //barren_eject(cf);
+                              #endif
+ 249   2                      chv_get_config(ACC_CHV2, &cf);
+ 250   2                      //if(cf->pin_attempts <= cf->pin_max_attempts) {
+ 251   2                      ((response_df *)ResponseBuf)->gsm.chv2 = (0x80 + (cf.pin_max_attempts - cf.pin_attempts)); 
+ 252   2                      //} else {
+ 253   2                              //((response_df *)ResponseBuf)->gsm.chv2 = 0x80;
+ 254   2                      //}
+ 255   2                      //if(cf->puk_attempts <= cf->puk_max_attempts) {
+ 256   2                      ((response_df *)ResponseBuf)->gsm.unblock_chv2 = (0x80 + (cf.puk_max_attempts - cf.puk_attempts));
+ 257   2                      //} else {
+ 258   2                              //((response_df *)ResponseBuf)->gsm.unblock_chv2 = 0x80;
+ 259   2                      //}
+ 260   2                      //m_free(cf);
+ 261   2                      #if _DMA_DEBUG
+                              //barren_eject(cf);
+                              #endif
+ 264   2                      //((response_df *)ResponseBuf)->gsm.rfu_2 = 0;
+ 265   2                      m_free(curfile);
+ 266   2                      #if _DMA_DEBUG
+                              //barren_eject(curdir);
+                              #endif
+ 269   2                      return DF_RESPONSE_SIZE;
+ 270   2              }
+ 271   1      }
+ 272          
+ 273          void gsm_response(uchar * buffer, uchar length) _REENTRANT_ {
+ 274   1              if(response_data != NULL) {
+ 275   2                      m_free(response_data);
+ 276   2                      response_data = NULL;
+ 277   2              }
+ 278   1              response_data = (uchar *)m_alloc(length + 1);
+ 279   1              ((response_buffer *)response_data)->length = length;
+ 280   1              memcpy(((response_buffer *)response_data)->buffer, buffer, length);                     
+ 281   1      } 
+ 282          
+ 283          #if (LIQUID_ALLOCATED)
+ 284          fs_handle stk_fs; 
+ 285          uchar _tres_cntr = 0;
+ 286          extern uint16 _stk_menu_offset; 
+ 287          extern uint16 _stk_menu_current;
+ 288          extern uint16 _stk_menu_anchor;
+ 289          #endif  
+ 290          
+ 291          #if (VAS_ALLOCATED)
+ 292          uchar sat_init_state = SAT_MENU_INIT;
+ 293          #endif
+ 294          
+ 295          uint16 Yggdrasil_Decode(apdu_command * command) //hindari pemakaian memori dinamis pada kernel, kemungkina
+             -n leak menjadi lebih besar
+ 296          {
+ 297   1              uint16 status;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 6   
+
+ 298   1              uchar len;
+ 299   1              uint16 offset;
+ 300   1      #if LIQUID_ALLOCATED
+ 301   1              uchar i, tag, state, size, res, dtag;
+ 302   1              stk_config stknode;
+ 303   1              uchar callback_result;
+ 304   1              uchar terminal_result;
+ 305   1      #endif
+ 306   1              response_length = 0;
+ 307   1              //OPERATING SYSTEM INTERNAL CLASS APDU
+ 308   1              //case CLA_YGGDRASIL:
+ 309   1              if(command->CLA == CLA_YGGDRASIL) {
+ 310   2                      switch(command->INS)
+ 311   2                      {  
+ 312   3                              case INS_SELECT :               //select file/direktori
+ 313   3                                      ygg_ins_select:
+ 314   3                                      Get_Data();
+ 315   3                                      len = command->P3;      //simpan dulu P3 ke len sehingga jika ada perubahan pd buffer nilainya masih tersel
+             -amatkan
+ 316   3                                      if((command->P1|command->P2) == 0) {
+ 317   4                                              if(len != 0x02) {
+ 318   5                                                      response_length = 0;
+ 319   5                                                      return (APDU_WRONG_LENGTH | 0x02); //wrong length .OR. requested length
+ 320   5                                              }
+ 321   4                                              //memcopy(buf, command->bytes, 0, len);
+ 322   4                                              /*status = _select(&_ygg_fs, *((uint16 *)command->bytes));
+ 323   4                                              len = Send_Status(command->bytes);
+ 324   4                                              status & 0xFF00
+ 325   4                                              get_resp_length = len;
+ 326   4                                              response_length = len;  */  
+ 327   4                                              status = _select(&_ygg_fs, *((uint16 *)command->bytes));
+ 328   4                                              response_length = 0;
+ 329   4                                              get_resp_length = Send_Status(STATUS_ALL, command->bytes);
+ 330   4                                              gsm_response(command->bytes, get_resp_length);
+ 331   4                                              //system file (abort select)
+ 332   4                                              //if(response_length == 0) { _select(FID_MF); return APDU_SUCCESS; }
+ 333   4                                              //gsm_response(command->bytes, response_length); 
+ 334   4                                              //status &= 0xFF00;
+ 335   4                                              return status;
+ 336   4                                      } else {
+ 337   4                                              return APDU_WRONG_PARAMETER;    //wrong p1,p2
+ 338   4                                      }
+ 339   3                                      //response disini
+ 340   3                                      //tidak ada response(cuman sw1 dan sw2)
+ 341   3                                      //cu_rcd = 0;   //reset no record untuk operasi next dan prev
+ 342   3                                      return status;
+ 343   3                                                      
+ 344   3                              case INS_READ_BINARY :  //read binary   
+ 345   3                                      ygg_ins_readbin:
+ 346   3                                      len =  command->P3;
+ 347   3                                      offset = ((uint16)((command->P1<<8) | command->P2));
+ 348   3                                      //printf("offset : %i\n", (uint16)((command->P1<<8) | command->P2));   
+ 349   3                                      response_length = 0;
+ 350   3                                      if((status = _check_access(&_ygg_fs, FILE_READ)) == APDU_SUCCESS) {
+ 351   4                                              status = _readbin(&_ygg_fs, offset, command, len);
+*** WARNING C182 IN LINE 351 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+ 352   4                                              response_length = len;
+ 353   4                                      }
+ 354   3                                      if(status != APDU_SUCCESS) {
+ 355   4                                              //memclear(command, len);
+ 356   4                                              memset(command, 0, len);
+ 357   4                                      }
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 7   
+
+ 358   3                                      return status;
+ 359   3      
+ 360   3                              case INS_READ_RECORD :  //read record  
+ 361   3                                      ygg_ins_readrec:
+ 362   3                                      len = command->P3;
+ 363   3                                      
+ 364   3                                      response_length = 0;
+ 365   3                                      if((status = _check_access(&_ygg_fs, FILE_READ)) == APDU_SUCCESS) {
+ 366   4                                              switch(command->P2) {
+ 367   5                                                      case P_NEXT_REC :
+ 368   5                                                                      status = _readrec_next(&_ygg_fs, (uchar *)command, len);
+ 369   5                                                              break;
+ 370   5                                                      case P_PREV_REC :
+ 371   5                                                                      status = _readrec_prev(&_ygg_fs, (uchar *)command, len);
+ 372   5                                                              break;
+ 373   5                                                      case P_ABS_REC :
+ 374   5                                                                      //currcd = command->P1;
+ 375   5                                                                      //record dimulai dari 1, padahal fungsi _readrec dari 0
+ 376   5                                                                      status = _readrec(&_ygg_fs, command->P1 - 1, (uchar *)command, len);
+ 377   5                                                              break;
+ 378   5                                                      default :
+ 379   5                                                              response_length = 0;
+ 380   5                                                              return APDU_WRONG_PARAMETER;
+ 381   5                                                              break;
+ 382   5                                              }
+ 383   4                                              response_length = len;
+ 384   4                                              if(status != APDU_SUCCESS) {
+ 385   5                                                      //memclear((uchar *)command, len);
+ 386   5                                                      memset((uchar *)command, 0, len);
+ 387   5                                              }
+ 388   4                                      }
+ 389   3                                      return status;
+ 390   3                                                              
+ 391   3                              case INS_UPDATE_BINARY :        //update binary   
+ 392   3                                      ygg_ins_writebin:
+ 393   3                                      Get_Data();
+ 394   3                                      len =  command->P3;
+ 395   3                                      offset = ((uint16)((command->P1<<8) | command->P2));
+ 396   3                                      response_length = 0;
+ 397   3                                      if((status = _check_access(&_ygg_fs, FILE_WRITE)) == APDU_SUCCESS) {
+ 398   4                                              status = _writebin(&_ygg_fs, offset, command->bytes, len);
+ 399   4                                              response_length = 0;
+ 400   4                                              if(status != APDU_SUCCESS) {
+ 401   5                                                      memset((uchar *)command, 0, len);
+ 402   5                                              }
+ 403   4                                      }
+ 404   3                                      return status;
+ 405   3                                                      
+ 406   3                              case INS_UPDATE_RECORD :        //update record   
+ 407   3                                      ygg_ins_writerec:
+ 408   3                                      Get_Data();
+ 409   3                                      len = command->P3; 
+ 410   3                                      if((status = _check_access(&_ygg_fs, FILE_WRITE)) == APDU_SUCCESS) {
+ 411   4                                              switch(command->P2) {
+ 412   5                                                      case P_NEXT_REC :
+ 413   5                                                                      status = _writerec_next(&_ygg_fs, command->bytes, len);
+ 414   5                                                              break;
+ 415   5                                                      case P_PREV_REC :
+ 416   5                                                                      status = _writerec_prev(&_ygg_fs, command->bytes, len);
+ 417   5                                                              break;
+ 418   5                                                      case P_ABS_REC :
+ 419   5                                                                      //currcd = command->P1;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 8   
+
+ 420   5                                                                      //record dimulai dari 1, padahal fungsi _writerec dari 0
+ 421   5                                                                      status = _writerec(&_ygg_fs, command->P1 - 1, command->bytes, len);
+ 422   5                                                              break;
+ 423   5                                                      default :
+ 424   5                                                              response_length = 0;
+ 425   5                                                              return APDU_WRONG_PARAMETER;
+ 426   5                                                              break;
+ 427   5                                              }
+ 428   4                                              response_length = 0;
+ 429   4                                      }
+ 430   3                                      return status;
+ 431   3      
+ 432   3                              case INS_REHABILITATE :         //rehabilitate  
+ 433   3                                      ygg_ins_rehab:
+ 434   3                                      len = command->P3;
+ 435   3                                      if((command->P1|command->P2) == 0) {
+ 436   4                                              if(len != 0x00) {
+ 437   5                                                      response_length = 0;
+ 438   5                                                      return (APDU_WRONG_LENGTH | 0x00); //wrong length .OR. requested length
+ 439   5                                              }
+ 440   4                                              if((status = _check_access(&_ygg_fs, FILE_REHABILITATE)) == APDU_SUCCESS) {
+ 441   5                                                      status = _rehabilitate(&_ygg_fs);
+ 442   5                                                      response_length = 0;
+ 443   5                                              }
+ 444   4                                      } else {
+ 445   4                                              return APDU_WRONG_PARAMETER;    //wrong p1,p2
+ 446   4                                      }
+ 447   3                                      return status;
+ 448   3                                                              
+ 449   3                              case INS_INVALIDATE :           //invalidate
+ 450   3                                      ygg_ins_invalid:
+ 451   3                                      len = command->P3;
+ 452   3                                      if((command->P1|command->P2) == 0) {
+ 453   4                                              if(len != 0x00) {
+ 454   5                                                      response_length = 0;
+ 455   5                                                      return (APDU_WRONG_LENGTH | 0x00); //wrong length .OR. requested length
+ 456   5                                              } 
+ 457   4                                              if((status = _check_access(&_ygg_fs, FILE_INVALIDATE)) == APDU_SUCCESS) {
+ 458   5                                                      status = _invalidate(&_ygg_fs);
+ 459   5                                                      response_length = 0;
+ 460   5                                              }
+ 461   4                                      } else {
+ 462   4                                              return APDU_WRONG_PARAMETER;    //wrong p1,p2
+ 463   4                                      }
+ 464   3                                      return status;
+ 465   3      
+ 466   3                              case INS_VERIFY_CHV:            //admin or system login           
+ 467   3                                      ygg_ins_verify_chv:
+ 468   3                                      Get_Data();
+ 469   3                                      response_length = 0;
+ 470   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 471   3                                      if(command->P3 == 0x08) {
+ 472   4                                              if(command->P1 == 0x00) {
+ 473   5                                                      switch(command->P2) {
+ 474   6                                                              case ACC_ADM:
+ 475   6                                                                      status = verifyCHV(ACC_ADM, command->bytes);
+ 476   6                                                                      break;
+ 477   6                                                              case ACC_SYS:
+ 478   6                                                                      status = getCHVstatus(ACC_ADM);                 //check admin login
+ 479   6                                                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 480   6                                                                      status = verifyCHV(ACC_SYS, command->bytes);
+ 481   6                                                                      break;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 9   
+
+ 482   6                                                              default:
+ 483   6                                                                      return APDU_WRONG_PARAMETER;
+ 484   6                                                                      break;
+ 485   6                                                      } 
+ 486   5                                                      //if(status & CHV_BLOCKED) return APDU_AUTH_BLOCKED;
+ 487   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+ 488   5                                                      //return APDU_SECURITY_STATE_ERROR;
+ 489   5                                              } else {
+ 490   5                                                      return APDU_WRONG_PARAMETER;
+ 491   5                                              }
+ 492   4                                      } else {
+ 493   4                                              return APDU_WRONG_LENGTH | 0x10;
+ 494   4                                      }
+ 495   3                                      return status;                          
+ 496   3      
+ 497   3                              case INS_CHANGE_CHV:            //admin or system change key    
+ 498   3                                      ygg_ins_change_chv:
+ 499   3                                      Get_Data();
+ 500   3                                      response_length = 0;
+ 501   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 502   3                                      if(command->P3 == 0x10) {
+ 503   4                                              if(command->P1 ==0x00) {
+ 504   5                                                      switch(command->P2) {
+ 505   6                                                              case ACC_ADM : 
+ 506   6                                                                      status = getCHVstatus(ACC_ADM);                 //check admin login
+ 507   6                                                                      if(status & CHV_VERIFIED) return APDU_SECURITY_STATE_ERROR;
+ 508   6                                                                      status = changeCHV(ACC_ADM, command->bytes, (command->bytes+8));
+ 509   6                                                                      break;
+ 510   6                                                              case ACC_SYS :
+ 511   6                                                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 512   6                                                                      if(status & CHV_VERIFIED) return APDU_SECURITY_STATE_ERROR;
+ 513   6                                                                      status = changeCHV(ACC_SYS, command->bytes, (command->bytes+8));
+ 514   6                                                                      break;
+ 515   6                                                              default :
+ 516   6                                                                      return APDU_WRONG_PARAMETER;
+ 517   6                                                                      break;
+ 518   6                                                      }
+ 519   5                                                      //return status;
+ 520   5                                                      //if(status == CHV_BLOCK) return APDU_AUTH_BLOCKED;
+ 521   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+ 522   5                                                      //return APDU_SECURITY_STATE_ERROR;
+ 523   5                                              } else {
+ 524   5                                                      return APDU_WRONG_PARAMETER;
+ 525   5                                              }
+ 526   4                                      } else {
+ 527   4                                              return APDU_WRONG_LENGTH | 0x10;
+ 528   4                                      }
+ 529   3                                      return status;
+ 530   3      
+ 531   3                              case INS_FILE_DELETE:                           //0xC0  //00    00      02      [FID2]                          Remove with the specified FID
+ 532   3                                      Get_Data();
+ 533   3                                      response_length = 0;
+ 534   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 535   3                                      status = getCHVstatus(ACC_ADM);                 //check system login
+ 536   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 537   3                                      len = command->P3;      //simpan dulu P3 ke len sehingga jika ada perubahan pd buffer nilainya masih tersel
+             -amatkan
+ 538   3                                      if((command->P1|command->P2) == 0) {
+ 539   4                                              if(len != 0x02) {
+ 540   5                                                      response_length = 0;
+ 541   5                                                      return (APDU_WRONG_LENGTH | 0x02); //wrong length .OR. requested length
+ 542   5                                              }
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 10  
+
+ 543   4                                              status = _remove(&_ygg_fs, *((uint16 *)command->bytes));
+ 544   4                                              response_length = 0;
+ 545   4                                      } else {
+ 546   4                                              return APDU_WRONG_PARAMETER;    //wrong p1,p2
+ 547   4                                      }
+ 548   3                                      return status;
+ 549   3      
+ 550   3                              case INS_FILE_CREATE:
+ 551   3                                      Get_Data();
+ 552   3                                      response_length = 0;
+ 553   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 554   3                                      status = getCHVstatus(ACC_ADM);                 //check system login
+ 555   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 556   3                                      //if(command->P1 != 0) return APDU_WRONG_PARAMETER;     //wrong p1,p2
+ 557   3                                      switch(command->P2) {
+ 558   4                                              case 0x0D:
+ 559   4                                                      if(command->P3 != 0x02) {
+ 560   5                                                              response_length = 0;
+ 561   5                                                              return (APDU_WRONG_LENGTH | 0x02); //wrong length .OR. requested length
+ 562   5                                                      }
+ 563   4                                                      status = _createdirectory(&_ygg_fs, *((uint16 *)command->bytes), command->P1);
+ 564   4                                                      //status = _select(fromhex(command->bytes, 2));
+ 565   4                                                      response_length = 0;
+ 566   4                                                      break;
+ 567   4                                              case 0x01: 
+ 568   4                                                      if(command->P3 != 0x07) {
+ 569   5                                                              response_length = 0;
+ 570   5                                                              return (APDU_WRONG_LENGTH | 0x07); //wrong length .OR. requested length
+ 571   5                                                      }
+ 572   4                                                      status = _createfilebin(&_ygg_fs, *((uint16 *)command->bytes), command->bytes[2], command->bytes[3],
+             - command->bytes[4], *((uint16 *)(command->bytes + 5)));
+ 573   4                                                      //status = _select(fromhex(command->bytes, 2));
+ 574   4                                                      response_length = 0;
+ 575   4                                                      break;
+ 576   4                                              case 0x02:
+ 577   4                                                      if(command->P3 != 0x08) {
+ 578   5                                                              response_length = 0;
+ 579   5                                                              return (APDU_WRONG_LENGTH | 0x08); //wrong length .OR. requested length
+ 580   5                                                      }
+ 581   4                                                      status = _createfilerec(&_ygg_fs, *((uint16 *)command->bytes), command->bytes[2], command->bytes[3],
+             - command->bytes[4], *((uint16 *)(command->bytes + 5)), command->bytes[7]);
+ 582   4                                                      //status = _select(fromhex(command->bytes, 2));
+ 583   4                                                      response_length = 0;
+ 584   4                                                      break;
+ 585   4                                              case 0x03:
+ 586   4                                                      if(command->P3 != 0x08) {
+ 587   5                                                              response_length = 0;
+ 588   5                                                              return (APDU_WRONG_LENGTH | 0x08); //wrong length .OR. requested length
+ 589   5                                                      }
+ 590   4                                                      status = _createfilecyclic(&_ygg_fs, *((uint16 *)command->bytes), command->bytes[2], command->bytes[
+             -3], command->bytes[4], *((uint16 *)(command->bytes + 5)), command->bytes[7]);
+ 591   4                                                      //status = _select(fromhex(command->bytes, 2));
+ 592   4                                                      response_length = 0;
+ 593   4                                                      break;
+ 594   4                                              default:
+ 595   4                                                      return APDU_WRONG_PARAMETER;    //wrong p1,p2
+ 596   4                                                      break;  
+ 597   4                                      }
+ 598   3                                      return status;
+ 599   3      
+ 600   3                              //////////////////////////SYSTEM COMMAND///////////////////////////
+ 601   3                              case INS_FS_FORMAT:                             //0xF0
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 11  
+
+ 602   3                                      response_length = 0;
+ 603   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 604   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 605   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 606   4                                      }
+ 607   3                                      switch(command->P1) {
+ 608   4                                              case 1:
+ 609   4                                                      fs_format(0x2000);              //8K
+ 610   4                                                      break;
+ 611   4                                              case 2:
+ 612   4                                                      fs_format(0x4000);              //16K
+ 613   4                                                      break;
+ 614   4                                              case 3:
+ 615   4                                                      fs_format(0x8000);              //32K
+ 616   4                                                      break;
+ 617   4                                              case 4:
+ 618   4                                                      fs_format(0x10000);             //64K
+ 619   4                                                      break; 
+ 620   4                                              default:
+ 621   4                                                      return APDU_WRONG_PARAMETER;
+ 622   4                                      }
+ 623   3                                      if(fs_init()==FS_UNFORMATTED) return APDU_MEMORY_PROBLEM;                               //reinitialize file system
+ 624   3                                      //_os_config.os_state |= YGG_ST_NO_INIT; 
+ 625   3                                      Save_State();
+ 626   3                                      return APDU_SUCCESS;
+ 627   3      
+ 628   3      
+ 629   3                              /*case INS_FS_DEFRAG:                           //0xFD  //00    00      00                                      Defrag file system (reserved command)
+ 630   3                                      response_length = 0;
+ 631   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 632   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 633   3                                      if(status != CHV_VERIFIED) return APDU_SECURITY_STATE_ERROR;
+ 634   3                                      return APDU_INSTRUCTION_INVALID;*/
+ 635   3                              case INS_FS_LOCK:                               //0xF7  //00    00      00                                      Lock file system (reserved command)
+ 636   3                                      response_length = 0;
+ 637   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 638   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 639   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 640   3                                      _os_config.os_state &= ~YGG_ST_NO_INIT;
+ 641   3                                      Save_State();
+ 642   3                                      return APDU_SUCCESS;
+ 643   3      
+ 644   3                              case INS_FS_UNLOCK:                             //0xF8  //00    00      00                                      Unlock file system (reserved command)
+ 645   3                                      response_length = 0;
+ 646   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 647   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 648   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 649   3                                      _os_config.os_state |= YGG_ST_NO_INIT;
+ 650   3                                      Save_State();
+ 651   3                                      return APDU_SUCCESS;
+ 652   3      
+ 653   3                              case INS_FS_STATUS:                             //0xF2  //00    00      10                                      File system status                              
+ 654   3                                      response_length = 0;
+ 655   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 656   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 657   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 658   3                                      return APDU_INSTRUCTION_INVALID;
+ 659   3      
+ 660   3                              case INS_OS_STATUS:
+ 661   3                                      response_length = 0;
+ 662   3                                      //if(_os_config.os_state & YGG_ST_NO_INIT) return APDU_MEMORY_PROBLEM;
+ 663   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 12  
+
+ 664   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 665   3                                      if(command->P3 != 0x10) return APDU_WRONG_LENGTH;
+ 666   3                                      ((os_status *)(command))->os_tag = 'Y';
+ 667   3                                      ((os_status *)(command))->os_ver = YGGDRASIL_VERSION;                   //kernel version 
+ 668   3                                      ((os_status *)(command))->os_state = _os_config.os_state;                       //os status     (locked/unlocked, stk enable/d
+             -isable, stk load, sleep)
+ 669   3                                      ((os_status *)(command))->fs_ver = fs_info.fs_ver;                      //file system version
+ 670   3                                      ((os_status *)(command))->fs_mod = fs_info.fs_mod;                      //16 bit/32 bit
+ 671   3                                      ((os_status *)(command))->fs_ssize = fs_info.sector_size;                       //sector size
+ 672   3                                      ((os_status *)(command))->heap_size = m_get_allocated_space();                  //allocated heap                                        (memory)
+ 673   3                                      ((os_status *)(command))->total_heap = MEM_HEAP_SIZE;           //total heap size, free+allocated       (memory)
+ 674   3                                      ((os_status *)(command))->used_space = fs_get_allocated_space();                //allocated space                                       (flash)
+ 675   3                                      ((os_status *)(command))->total_space = fs_info.fs_size;                //total partition                                       (flash)
+ 676   3                                      //memcopy(iobuf, &_os_config, 0, sizeof(os_status));
+ 677   3                                      response_length = command->P3;
+ 678   3                                      return APDU_SUCCESS;
+ 679   3      
+ 680   3                              case INS_ENABLE_APP:                                            //enable user app
+ 681   3                                      response_length = 0;
+ 682   3                                      //status = getCHVstatus(ACC_SYS);                       //check system login
+ 683   3                                      //if(status != CHV_VERIFIED) return APDU_INCONTRADICTION_W_CHV;
+ 684   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 685   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 686   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 687   4                                      }
+ 688   3                                      _os_config.os_state |= YGG_ST_ENABLE_APP;
+ 689   3                                      Save_State();
+ 690   3                                      return APDU_SUCCESS;
+ 691   3      
+ 692   3                              case INS_DISABLE_APP:                                           //disable user app
+ 693   3                                      response_length = 0;
+ 694   3                                      //status = getCHVstatus(ACC_SYS);                       //check system login
+ 695   3                                      //if(status != CHV_VERIFIED) return APDU_INCONTRADICTION_W_CHV;
+ 696   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 697   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 698   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 699   4                                      }
+ 700   3                                      _os_config.os_state &= ~(YGG_ST_ENABLE_APP);
+ 701   3                                      Save_State();
+ 702   3                                      return APDU_SUCCESS;
+ 703   3      
+ 704   3                              case INS_LOAD_APP:                                                      //load downloaded app (temporary space) to user program space
+ 705   3                                      response_length = 0;      
+ 706   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 707   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 708   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 709   4                                      }
+ 710   3                                      //status = getCHVstatus(ACC_SYS);                       //check system login
+ 711   3                                      //if(status != CHV_VERIFIED) return APDU_INCONTRADICTION_W_CHV;
+ 712   3                                      //_os_config.os_state &= ~(YGG_ST_LOAD_APP);
+ 713   3                                      //Save_State();
+ 714   3                                      //status = Load_User_App();
+ 715   3                                      status = ioman_program_copy(0x8000, 0xC000, 0x4000);
+ 716   3                                      return status;
+ 717   3      
+ 718   3                              case INS_WRITE_APP:                                                     //write an app to temporary space
+ 719   3                                      Get_Data();
+ 720   3                                      response_length = 0;  
+ 721   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 722   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 723   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 724   4                                      }
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 13  
+
+ 725   3                                      //status = getCHVstatus(ACC_SYS);                       //check system login
+ 726   3                                      //if(status != CHV_VERIFIED) return APDU_INCONTRADICTION_W_CHV;
+ 727   3                                      offset = ((uint16)((command->P1<<8) | command->P2));  
+ 728   3                                      for(len=0; len<command->P3 && len != command->P3; len+=8) {
+ 729   4                                              des_decode(appkey, command->bytes + len, command->bytes + len);
+ 730   4                                              //DES_Operation(0, 1, bytes + len, appkey, appkey, bytes + len);
+ 731   4                                      }        
+ 732   3                                      status = Write_Temp_Space(offset, command->bytes, command->P3);
+ 733   3                                      return status;
+ 734   3      
+ 735   3                              case INS_LOAD_BOOTLOADER:
+ 736   3                                      response_length = 0;
+ 737   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 738   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 739   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 740   4                                      }
+ 741   3                                      //status = getCHVstatus(ACC_SYS);                       //check system login
+ 742   3                                      //if(status != CHV_VERIFIED) return APDU_INCONTRADICTION_W_CHV;
+ 743   3                                      ioman_set_to_bootloader();
+ 744   3                                      return APDU_SUCCESS;
+ 745   3      
+ 746   3                              case INS_GET_TOKEN:
+ 747   3                                      if(command->P3 != 8) return APDU_WRONG_LENGTH;
+ 748   3                                      if(auth_token != NULL) m_free(auth_token);              //check if auth token exist
+ 749   3                                      auth_token = (uchar *)m_alloc(8);
+ 750   3                                      Random_Number_Generator(auth_token, 8);
+ 751   3                                      for(len=0;len<8;len++) {
+ 752   4                                              command->bytes[len] = auth_token[len] ^ auth_mask[len];
+ 753   4                                      }
+ 754   3                                      DES_Encrypt(tokenkey, command->bytes, command);
+*** WARNING C182 IN LINE 754 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+ 755   3                                      response_length = 8;
+ 756   3                                      status = APDU_SUCCESS;
+ 757   3                                      return status;
+ 758   3                              /*case 0xE1:
+ 759   3                                      memcopy(command, auth_token, 0, 8);
+ 760   3                                      response_length = 8;
+ 761   3                                      status = APDU_SUCCESS;
+ 762   3                                      return status; */
+ 763   3      
+ 764   3                              case INS_SOFT_AUTH:
+ 765   3                                      if(command->P3 != 8) return APDU_WRONG_LENGTH;
+ 766   3                                      Get_Data();
+ 767   3                                      if(auth_token == NULL) return APDU_FATAL_ERROR;
+ 768   3                                      status = APDU_AUTH_BLOCKED;
+ 769   3                                      if(memcmp(auth_token, command->bytes, 8) == 0) {
+ 770   4                                              chv_set_status(ACC_ADM, CHV_VERIFIED);    //logged on
+ 771   4                                              chv_set_status(ACC_SYS, CHV_VERIFIED);
+ 772   4                                              m_free(auth_token);
+ 773   4                                              auth_token = NULL;
+ 774   4                                              status = APDU_SUCCESS;
+ 775   4                                      }
+ 776   3                                      return status;
+ 777   3      
+ 778   3                              case INS_WRITE_FLASH:
+ 779   3                                      Get_Data();
+ 780   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 781   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 782   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 783   4                                      }
+ 784   3                                      offset = (uint16)(command->P1) << 8 | (command->P2);
+ 785   3                                      ioman_write_buffer(offset, command->bytes, command->P3);
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 14  
+
+ 786   3                                      response_length = 0;
+ 787   3                                      return APDU_SUCCESS;
+ 788   3      
+ 789   3                              case INS_READ_FLASH:    
+ 790   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 791   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 792   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 793   4                                      }
+ 794   3                                      len = command->P3;
+ 795   3                                      offset = (uint16)(command->P1) << 8 | (command->P2);
+ 796   3                                      ioman_read_buffer(offset, command, len);
+*** WARNING C182 IN LINE 796 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+ 797   3                                      response_length = len;
+ 798   3                                      return APDU_SUCCESS;
+ 799   3      
+ 800   3                              case INS_ERASE_FLASH:   
+ 801   3                                      if((_os_config.os_state & YGG_ST_NO_INIT) == 0) {
+ 802   4                                              status = getCHVstatus(ACC_SYS);                 //check system login
+ 803   4                                              if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 804   4                                      }
+ 805   3                                      ioman_erase_all();
+ 806   3                                      response_length = 0;
+ 807   3                                      return APDU_SUCCESS;
+ 808   3      
+ 809   3                              case INS_BIFROST:       
+ 810   3                                      Get_Data();                                                     //bifrost production mechanism
+ 811   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 812   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 813   3                                      //if(command->P3 != 0x10) return APDU_WRONG_LENGTH;
+ 814   3                                      return Bifrost_Decode(command->bytes, command->P3);
+ 815   3      
+ 816   3                              case INS_AUTH_FSH:
+ 817   3                                      Get_Data();                                                             
+ 818   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 819   3                                      if((status & CHV_VERIFIED) == 0) return APDU_SECURITY_STATE_ERROR;
+ 820   3                                      if(command->P3 != 0x40) return APDU_WRONG_LENGTH; 
+ 821   3                                      //if(command->P3 != 0x10) return APDU_WRONG_LENGTH;
+ 822   3                                      len = fs_generate_FSH(command->bytes + 0x40);
+ 823   3                                      if(memcmp(command->bytes, command->bytes + 0x40, 0x40) == 0) {
+ 824   4                                              _os_config.os_state &= ~YGG_ST_ACTIVATED;
+ 825   4                                              Save_State();
+ 826   4                                              return APDU_SUCCESS;
+ 827   4                                      }
+ 828   3                                      return APDU_MEMORY_PROBLEM;
+ 829   3      
+ 830   3                              case INS_GEN_FSH:                                                               
+ 831   3                                      status = getCHVstatus(ACC_SYS);                 //check system login
+ 832   3                                      if((status & CHV_VERIFIED) == 0) return APDU_INSTRUCTION_INVALID;
+ 833   3                                      if(command->P1 != 0x02) return APDU_INSTRUCTION_INVALID;
+ 834   3                                      if(command->P2 != 0x70) return APDU_INSTRUCTION_INVALID; 
+ 835   3                                      len = fs_generate_FSH(command->bytes);
+ 836   3                                      if(command->P3 != len) return APDU_WRONG_LENGTH;
+ 837   3                                      memcpy(command, command->bytes, len);
+ 838   3                                      response_length = len;
+ 839   3                                      return APDU_SUCCESS;
+ 840   3      
+ 841   3                              case INS_WRITE_SERNUM:  
+ 842   3                                      Get_Data();     
+ 843   3                                      len = command->P3;
+ 844   3                                      MMU_SEL=1; 
+ 845   3                                      rP3 = 7;                                                                        //update bank 1 
+ 846   3                                      //memcpy(, command->bytes, 0x10);
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 15  
+
+ 847   3                                      //if(Erase_Page((BYTEX *)0x8020) != SUCCESS) return APDU_FLASH_WERROR;
+ 848   3                                      ReadFlash(IOBuf, 0x8020, 0x10);
+ 849   3                                      for(offset = 0; offset < 0x10; offset++) {
+ 850   4                                              if(IOBuf[offset] != 0xFF) return APDU_FLASH_WERROR;
+ 851   4                                      }
+ 852   3                                      Write_Bytes((BYTEX *)0x8020, (BYTEX *)command->bytes, 0x10);
+ 853   3                                      //memcpy(IOBuf, command->bytes, len);
+ 854   3                                      //if(UpdateFlash(0x8020, IOBuf, 0x10) != SUCCESS) return APDU_FLASH_WERROR;
+ 855   3                                      //memset(command, 0, len);
+ 856   3                                      //memcpy(command, IOBuf, 0x10);
+ 857   3                                      //response_length = len;
+ 858   3                                      response_length = 0;
+ 859   3                                      return APDU_SUCCESS;
+ 860   3      
+ 861   3                              case INS_READ_SERNUM:   
+ 862   3                                      len = command->P3;
+ 863   3                                      MMU_SEL=1; 
+ 864   3                                      rP3 = 7;                                                                        //update bank 1 
+ 865   3                                      //ReadFlash(IOBuf, 0x8020, 0x10);
+ 866   3                                      memset(command, 0, len);
+ 867   3                                      ReadFlash(command, 0x8020, 0x10);
+*** WARNING C182 IN LINE 867 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+ 868   3                                      response_length = len;
+ 869   3                                      return APDU_SUCCESS;
+ 870   3      
+ 871   3                              default:
+ 872   3                                      response_length = 0;
+ 873   3                                      return APDU_INSTRUCTION_INVALID;
+ 874   3                      }
+ 875   2                              //break;
+ 876   2      
+ 877   2              //GSM11 STANDARD CLASS APDU     
+ 878   2              } else if(command->CLA == CLA_GSM11) {
+ 879   2                      switch(command->INS)
+ 880   2                      {
+ 881   3                              case INS_GET_RESPONSE :
+ 882   3                                      if(response_data != NULL) {
+ 883   4                                              if(command->P3 > ((response_buffer *)response_data)->length) return APDU_WRONG_LENGTH;
+ 884   4                                              Set_Response(((response_buffer *)response_data)->buffer, command->P3);
+ 885   4                                              m_free(response_data);
+ 886   4                                              response_data = NULL;
+ 887   4                                      }
+ 888   3                                      //status = (fetch_len)?(APDU_STK_RESPONSE | fetch_len):APDU_SUCCESS;
+ 889   3                                      /*if(lst == INS_RUN_GSM_ALGORITHM) {
+ 890   3                                              Set_Response(STK_buffer + 240, command->P3);
+ 891   3                                              status = APDU_SUCCESS;
+ 892   3                                      } else {
+ 893   3                                              Set_Response(command->bytes, command->P3);
+ 894   3                                              status = (fetch_len)?(APDU_STK_RESPONSE | fetch_len):APDU_SUCCESS;
+ 895   3                                      }*/
+ 896   3                                      status = SAT_status();
+ 897   3                                      return status;
+ 898   3                              case INS_SELECT :               //select file/direktori
+ 899   3                                      goto ygg_ins_select;
+ 900   3                              case INS_STATUS :               //get status file/direktori
+ 901   3                                      //lst = INS_STATUS;
+ 902   3                                      len =  command->P3;
+ 903   3                                      if((command->P1|command->P2) == 0) {
+ 904   4                                              memset(command->bytes, 0, len);
+ 905   4                                              response_length = Send_Status(STATUS_DIRECTORY, command->bytes);
+ 906   4                                              if(len > response_length) {
+ 907   5                                                      response_length = len;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 16  
+
+ 908   5                                                      status = (APDU_WRONG_LENGTH | response_length); //wrong length .OR. requested length
+ 909   5                                              } else {
+ 910   5                                                      response_length = len;
+ 911   5                                                      status = APDU_SUCCESS;
+ 912   5                                              } 
+ 913   4                                      } else {
+ 914   4                                              response_length = 0;
+ 915   4                                              status = APDU_WRONG_PARAMETER;  //wrong p1,p2
+ 916   4                                      }
+ 917   3                                      Set_Response(command->bytes, response_length);
+ 918   3                                      //return system_tick(); 
+ 919   3                                      return SAT_status();    
+ 920   3                              case INS_READ_BINARY :  //read binary
+ 921   3                                      goto ygg_ins_readbin;
+ 922   3                              case INS_READ_RECORD :  //read record
+ 923   3                                      goto ygg_ins_readrec;                           
+ 924   3                              case INS_UPDATE_BINARY :        //update binary  
+ 925   3                                      goto ygg_ins_writebin;                  
+ 926   3                              case INS_UPDATE_RECORD :        //update record
+ 927   3                                      goto ygg_ins_writerec;          
+ 928   3                              case INS_VERIFY_CHV :   
+ 929   3                                      Get_Data();
+ 930   3                                      response_length = 0;
+ 931   3                                      Set_Response(command->bytes, 0);
+ 932   3                                      if(command->P3 == 0x08) {
+ 933   4                                              if(command->P1 ==0x00) {
+ 934   5                                                      switch(command->P2) {
+ 935   6                                                              case ACC_CHV1 :
+ 936   6                                                              case ACC_CHV2 :
+ 937   6                                                                      status = chv_verify(command->P2, command->bytes);
+ 938   6                                                                      break;
+ 939   6                                                              default :
+ 940   6                                                                      status = APDU_WRONG_PARAMETER;
+ 941   6                                                                      break;
+ 942   6                                                      }
+ 943   5                                                      //if(status & CHV_BLOCKED) return APDU_AUTH_BLOCKED;
+ 944   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+ 945   5                                                      //return APDU_SECURITY_STATE_ERROR;
+ 946   5                                              } else {
+ 947   5                                                      status = APDU_WRONG_PARAMETER;
+ 948   5                                              }
+ 949   4                                      } else {
+ 950   4                                              status = APDU_WRONG_LENGTH | 0x08;
+ 951   4                                      }
+ 952   3                                      return status;          
+ 953   3                              case INS_REHABILITATE :         //rehabilitate
+ 954   3                                      goto ygg_ins_rehab;                     
+ 955   3                              case INS_INVALIDATE :           //invalidate
+ 956   3                                      goto ygg_ins_invalid;                           
+ 957   3                              case INS_CHANGE_CHV     :
+ 958   3                                      Get_Data();     
+ 959   3                                      //lst = INS_CHANGE_CHV;
+ 960   3                                      response_length = 0;
+ 961   3                                      //Set_Response(command->bytes, 0);
+ 962   3                                      if(command->P3 == 0x10) {
+ 963   4                                              if(command->P1 ==0x00) {
+ 964   5                                                      switch(command->P2) {
+ 965   6                                                              case ACC_CHV1 :
+ 966   6                                                              case ACC_CHV2 :
+ 967   6                                                                      status = chv_change(command->P2, command->bytes, (command->bytes+8));
+ 968   6                                                                      break;
+ 969   6                                                              default :
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 17  
+
+ 970   6                                                                      status = APDU_WRONG_PARAMETER;
+ 971   6                                                                      break;
+ 972   6                                                      }
+ 973   5                                                      //if(status == CHV_BLOCK) return APDU_AUTH_BLOCKED;
+ 974   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+ 975   5                                                      //return APDU_SECURITY_STATE_ERROR;
+ 976   5                                              } else {
+ 977   5                                                      status = APDU_WRONG_PARAMETER;
+ 978   5                                              }
+ 979   4                                      } else {
+ 980   4                                              status = APDU_WRONG_LENGTH | 0x10;
+ 981   4                                      }
+ 982   3                                      return status;          
+ 983   3                              case INS_DISABLE_CHV :          //operasi disable hanya mendukung CHV1 saja
+ 984   3                                      Get_Data();
+ 985   3                                      //lst = INS_DISABLE_CHV;
+ 986   3                                      response_length = 0;
+ 987   3                                      //Set_Response(command->bytes, 0);
+ 988   3                                      if(command->P3 == 0x08) {
+ 989   4                                              if(command->P1 ==0x00) {
+ 990   5                                                      switch(command->P2) {
+ 991   6                                                              case ACC_CHV1 :
+ 992   6                                                                      //status = chv_get_status(ACC_CHV1);
+ 993   6                                                                      status = chv_disable(ACC_CHV1, command->bytes);
+ 994   6                                                                      break;
+ 995   6                                                              default :
+ 996   6                                                                      status = APDU_WRONG_PARAMETER;
+ 997   6                                                                      break;
+ 998   6                                                      }
+ 999   5                                                      //if(status == CHV_BLOCK) return APDU_AUTH_BLOCKED;
+1000   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+1001   5                                                      //return APDU_SECURITY_STATE_ERROR; 
+1002   5                                              } else {
+1003   5                                                      status = APDU_WRONG_PARAMETER;
+1004   5                                              }
+1005   4                                      } else {
+1006   4                                              status = APDU_WRONG_LENGTH | 0x08;
+1007   4                                      }
+1008   3                                      return status;                          
+1009   3                              case INS_ENABLE_CHV :           //operasi enable hanya mendukung CHV1 saja
+1010   3                                      Get_Data();
+1011   3                                      //lst = INS_ENABLE_CHV;
+1012   3                                      response_length = 0;
+1013   3                                      //Set_Response(command->bytes, 0);
+1014   3                                      if(command->P3 == 0x08) {
+1015   4                                              if(command->P1 ==0x00) {
+1016   5                                                      switch(command->P2) {
+1017   6                                                              case ACC_CHV1 :
+1018   6                                                                      //status = chv_get_status(ACC_CHV1);
+1019   6                                                                      status = chv_enable(ACC_CHV1, command->bytes);
+1020   6                                                                      break;
+1021   6                                                              default :
+1022   6                                                                      status = APDU_WRONG_PARAMETER;
+1023   6                                                                      break;
+1024   6                                                      }
+1025   5                                                      //if(status == CHV_BLOCK) return APDU_AUTH_BLOCKED;
+1026   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+1027   5                                                      //return APDU_SECURITY_STATE_ERROR;
+1028   5                                              } else {
+1029   5                                                      status = APDU_WRONG_PARAMETER;
+1030   5                                              }
+1031   4                                      } else {
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 18  
+
+1032   4                                              status = APDU_WRONG_LENGTH | 0x08;
+1033   4                                      }
+1034   3                                      return status;                          
+1035   3                              case INS_UNBLOCK_CHV :
+1036   3                                      Get_Data();
+1037   3                                      //lst = INS_UNBLOCK_CHV;
+1038   3                                      response_length = 0; 
+1039   3                                      //Set_Response(command->bytes, 0);
+1040   3                                      if(command->P3 == 0x10) {
+1041   4                                              if(command->P1 ==0x00) {
+1042   5                                                      switch(command->P2) {
+1043   6                                                              case 0x00 :             //khusus operasi unblock CHV1
+1044   6                                                                      status = chv_unblock(ACC_CHV1, (command->bytes+8), command->bytes);
+1045   6                                                                      break;
+1046   6                                                              case ACC_CHV2 :
+1047   6                                                                      status = chv_unblock(ACC_CHV2, (command->bytes+8), command->bytes);
+1048   6                                                                      break;
+1049   6                                                              default :
+1050   6                                                                      status = APDU_WRONG_PARAMETER;
+1051   6                                                                      break;
+1052   6                                                      }
+1053   5                                                      //if(status == CHV_BLOCK) return APDU_AUTH_BLOCKED;
+1054   5                                                      //if(status == CHV_VERIFIED) return APDU_SUCCESS;
+1055   5                                                      //return APDU_SECURITY_STATE_ERROR;
+1056   5                                              } else {
+1057   5                                                      status = APDU_WRONG_PARAMETER;
+1058   5                                              }
+1059   4                                      } else {
+1060   4                                              status = APDU_WRONG_LENGTH | 0x10;
+1061   4                                      }
+1062   3                                      return status;                                          
+1063   3                              case INS_SEEK : 
+1064   3                                      Get_Data();
+1065   3                                      //lst = INS_SEEK;
+1066   3                                      response_length = 0;
+1067   3                                      if((status = _check_access(&_ygg_fs, FILE_READ)) == APDU_SUCCESS) {
+1068   4                                              status = _seek(&_ygg_fs, command->P2, command->bytes, command->bytes, command->P3);
+1069   4                                              if((status & 0xFF00) == APDU_SUCCESS_RESPONSE) {
+1070   5                                                      switch(command->P2 >> 4) {
+1071   6                                                              case 0:
+1072   6                                                                      response_length = 0;
+1073   6                                                                      //Set_Response(command->bytes, 0);
+1074   6                                                                      return APDU_SUCCESS;
+1075   6                                                              case 1:
+1076   6                                                                      response_length = 0;
+1077   6                                                                      command->bytes[0] = status & 0xff;
+1078   6                                                                      //get_resp_length = 1;
+1079   6                                                                      //Set_Response(command->bytes, 1);
+1080   6                                                                      gsm_response(command->bytes, 1);
+1081   6                                                                      return APDU_SUCCESS_RESPONSE | 1;
+1082   6                                                              default:
+1083   6                                                                      response_length = 0;
+1084   6                                                                      //Set_Response(command->bytes, 0);
+1085   6                                                                      return APDU_WRONG_PARAMETER;
+1086   6                                                      }
+1087   5                                              } 
+1088   4                                      }
+1089   3                                      //Set_Response(command->bytes, 0);
+1090   3                                      return status;                          
+1091   3                              case INS_INCREASE :     
+1092   3                                      Get_Data();
+1093   3                                      //lst = INS_INCREASE;   
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 19  
+
+1094   3                                      response_length = 0;
+1095   3                                      len = command->P3;
+1096   3                                      command->P3 = 0;
+1097   3                                      //status = _increaserec(command->P3, command->bytes);
+1098   3                                      response_length = 0;
+1099   3                                      if((status = _check_access(&_ygg_fs, FILE_INCREASE)) == APDU_SUCCESS) {
+1100   4                                              status = _increase(&_ygg_fs, *(uint32 *)&command->P3, command->bytes, len);
+1101   4                                              //APDU_SUCCESS_RESPONSE | 1;
+1102   4                                              response_length = 0;
+1103   4                                      }
+1104   3                                      if((status & 0xFF00) == APDU_SUCCESS_RESPONSE) {
+1105   4                                              response_length = (uchar)status;                //simpan response length hasil increase untuk keperluan get respons
+             -e
+1106   4                                      }
+1107   3                                      gsm_response(command->bytes, response_length);
+1108   3                                      //Set_Response(command->bytes, response_length);
+1109   3                                      return status;          
+1110   3                              case INS_RUN_GSM_ALGORITHM:     //run GSM algorithm COMP128-1
+1111   3                                      Get_Data();
+1112   3                                      //lst = INS_RUN_GSM_ALGORITHM;
+1113   3                                      len = command->P3;
+1114   3                                      if((command->P1|command->P2) == 0) {
+1115   4                                              if(len != A3A8_INPUT_SIZE) {
+1116   5                                                      response_length = 0;
+1117   5                                                      return APDU_OUT_OF_RANGE;
+1118   5                                              }
+1119   4                                              response_length = Authenticate_GSM(command->bytes, command->bytes);
+1120   4                                              //response_length = 0;
+1121   4                                              gsm_response(command->bytes, response_length);
+1122   4                                              status = APDU_SUCCESS_RESPONSE | response_length;
+1123   4                                              //memcopy(buf, iobuf->bytes, 0, A3A8_INPUT_SIZE);
+1124   4                                              //nilai KI disimpan pada system file yang hanya bisa diakses kernel
+1125   4                                      } else {
+1126   4                                              response_length = 0;
+1127   4                                              status = APDU_WRONG_PARAMETER;  //wrong p1,p2
+1128   4                                      }
+1129   3                                      //Set_Response(command->bytes, response_length);
+1130   3                                      return status;
+1131   3                                      break;  
+1132   3                              case INS_SLEEP :
+1133   3                                      //lst = INS_SLEEP;
+1134   3                                      //Set_Response(command->bytes, 0);
+1135   3                                      return APDU_SUCCESS;
+1136   3      
+1137   3      /////////////////////////////////////////////SIM APPLICATION TOOLKIT HANDLER//////////////////////////////
+             -///////////////////
+1138   3                              case INS_TERMINAL_PROFILE:
+1139   3                                      Get_Data();
+1140   3                                      status = APDU_SUCCESS;
+1141   3                                      len = command->P3;
+1142   3                                      SAT_profile_download(command->bytes, command->P3);              //liquid profile download  
+1143   3                                      //if(SAT_init(command->bytes, 0) == 0) return APDU_STK_OVERLOAD;                //clear SAT temporary file and fille
+             -d it with terminal response
+1144   3                                      if(VAS_activated()) {
+1145   4      #if (VAS_ALLOCATED)
+1146   4                                              if(sat_init_state == SAT_MENU_INIT) {
+1147   5                                                      status = VAS_menu();
+1148   5                                                      sat_init_state = SAT_EVENT_INIT;
+1149   5                                              }
+1150   4      #endif
+1151   4                                      } else {
+1152   4      #if (LIQUID_ALLOCATED) 
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 20  
+
+1153   4                                              status = liquid_profile();
+1154   4      #endif
+1155   4                                      }
+1156   3                                      //_stk_state = ROOTMENU;
+1157   3                                      //Set_Response(command->bytes, len);
+1158   3                                      return status;
+1159   3                              case INS_TERMINAL_RESPONSE:                     //result processing
+1160   3                                      Get_Data();
+1161   3                                      status = APDU_SUCCESS;
+1162   3                                      //STK_pop(command->bytes, &tag, &size, STK_buffer);
+1163   3                                      //memcpy(command->bytes, STK_buffer, size);
+1164   3                                      if(VAS_activated()) {   
+1165   4      #if (VAS_ALLOCATED)
+1166   4                                              //if(SAT_init(command->bytes, 0) == 0) return APDU_STK_OVERLOAD;                //clear SAT temporary file and fill
+             -ed it with terminal response
+1167   4                                              //if(vas_state == VAS_STATE_WAIT_RESPONSE) return 0x9C00;               //ignore terminal response on wait respons
+             -e
+1168   4                                              switch(sat_init_state) {
+1169   5                                                      case SAT_MENU_INIT:
+1170   5                                                              status = VAS_menu();            
+1171   5                                                              sat_init_state = SAT_EVENT_INIT;
+1172   5                                                              if(status != APDU_SUCCESS) break;
+1173   5                                                      case SAT_EVENT_INIT:
+1174   5                                                              //sat_init_state = SAT_DEFAULT;
+1175   5                                                              status = VAS_event();
+1176   5                                                              sat_init_state = SAT_STARTUP_INIT;
+1177   5                                                              if(status != APDU_SUCCESS) break;
+1178   5                                                      case SAT_STARTUP_INIT: 
+1179   5                                                              status = VAS_startup();
+1180   5                                                              sat_init_state = SAT_DEFAULT;
+1181   5                                                              if(status != APDU_SUCCESS) break;
+1182   5                                                      case SAT_DEFAULT:
+1183   5                                                              status = SAT_status();                                                                                  //check if data already fetched
+1184   5                                                              if(status == APDU_SUCCESS) {
+1185   6                                                                      //if((vas_state & 0x0F) != WAIT_FOR
+1186   6                                                                      status = VAS_fetch(command->bytes, command->P3);
+1187   6                                                              }
+1188   5                                                              break;
+1189   5                                              }
+1190   4      #endif
+1191   4                                      } else {
+1192   4      #if (LIQUID_ALLOCATED)  
+1193   4                                              res = 0;
+1194   4                                              i = 0;
+1195   4                                              len = command->P3;                      //total size   
+1196   4                                              if(SAT_init(command->bytes, len) == 0) return APDU_STK_OVERLOAD;                //clear SAT temporary file and fill
+             -ed it with terminal response
+1197   4                                              if(_stk_menu_current == 0xFFFF) {
+1198   5                                                      _stk_menu_current = 0;
+1199   5                                                      _stk_menu_offset = 0;
+1200   5                                                      goto exit_response;
+1201   5                                              }
+1202   4                                              process_response:
+1203   4                                              callback_result = CALLBACK_SUCCESS;
+1204   4                                              terminal_result = STK_RES_SUCCESS;
+1205   4                                              //status = SAT_response();
+1206   4                                              //stknode = (stk_config *)m_alloc(sizeof(stk_config));          //current stk node
+1207   4                                              //file_readbin(&stk_fs, _stk_menu_anchor, stknode, sizeof(stk_config)); 
+1208   4                                              while(i != len) {
+1209   5                                                      i += SAT_file_pop(i, &tag, &size, STK_buffer);
+1210   5                                                      tag |= 0x80; 
+1211   5                                                      switch(tag) {                   //TERMINAL HANDLER
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 21  
+
+1212   6                                                              case STK_TAG_CMD_DETAIL:
+1213   6                                                              case STK_TAG_DEV_ID: break;                     //don't process this tag
+1214   6                                                              case STK_TAG_ITEM_ID:  
+1215   6                                                                      state = (STK_buffer[0] & 0x0F);
+1216   6                                                                      //stknode = (stk_config *)m_alloc(sizeof(stk_config));  
+1217   6                                                                      _readbin(&stk_fs, _stk_menu_anchor, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1217 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1218   6                                                                      if(stknode.child == 0) break;
+1219   6                                                                      _stk_menu_offset = stknode.child;
+1220   6                                                                      _readbin(&stk_fs, _stk_menu_offset, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1220 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1221   6                                                                      res = 0;
+1222   6                                                                      while(++res != state) {
+1223   7                                                                              _stk_menu_offset = stknode.sibling;
+1224   7                                                                              if(_stk_menu_offset == 0) { return APDU_SUCCESS; }
+1225   7                                                                              _readbin(&stk_fs, _stk_menu_offset, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1225 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1226   7                                                                              //if(_stk_menu_offset == 0) break;
+1227   7                                                                              //else 
+1228   7                                                                              //res ++;
+1229   7                                                                      } 
+1230   6                                                                      _stk_menu_offset = stknode.child;
+1231   6                                                                      break;
+1232   6                                                              case STK_TAG_RESULT:   //cek result
+1233   6                                                                      terminal_result = STK_buffer[0];
+1234   6                                                                      _readbin(&stk_fs, _stk_menu_current, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1234 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1235   6                                                                      _stk_menu_offset = stknode.sibling;
+1236   6                                                                      break;
+1237   6                                                              default: 
+1238   6                                                                      break;
+1239   6                                                      }         
+1240   5                                                      /* callback mechanism */
+1241   5                                                      _readbin(&stk_fs, _stk_menu_current, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1241 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1242   5                                                      callback_result = user_callback(stknode.state, tag, size, STK_buffer);
+1243   5                                                      switch((callback_result >> 5) & 0x03) {
+1244   6                                                              case 1:                                         //message only (error/warning), return to tree (stay in current node)
+1245   6                                                                      //callback_result |= 1;                  
+1246   6                                                              case 0:                                         //message only (goto next node)  
+1247   6                                                                      if(callback_result == 0) break;
+1248   6                                                                      _readbin(&stk_fs, _stk_menu_current, &stknode, sizeof(stk_config));       //redundant
+*** WARNING C182 IN LINE 1248 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1249   6                                                                      if(stknode.child == 0) break;
+1250   6                                                                      _stk_menu_offset = stknode.child;
+1251   6                                                                      _readbin(&stk_fs, _stk_menu_offset, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1251 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1252   6                                                                      res = 0;
+1253   6                                                                      while(++res != (callback_result & 0x0F)) {
+1254   7                                                                              _stk_menu_offset = stknode.sibling;
+1255   7                                                                              if(_stk_menu_offset == 0) { return APDU_SUCCESS; }
+1256   7                                                                              _readbin(&stk_fs, _stk_menu_offset, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1256 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1257   7                                                                              //if(_stk_menu_offset == 0) break;
+1258   7                                                                      }
+1259   6                                                                      i = len;                //quit decode
+1260   6                                                                      goto finish_decode;
+1261   6                                                                      
+1262   6              //#define CALLBACK_STAY_NODE            (1<<5)
+1263   6              //#define CALLBACK_TAMPER_RESULT        (1<<6)
+1264   6              //#define CALLBACK_FORCE_END            (1<<7)
+1265   6                                                              case 3:                                                 //tamper STK tree operation (stay in current node)
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 22  
+
+1266   6                                                                      //callback_result |= 1;
+1267   6                                                              case 2:                                                 //tamper STK tree operation (goto next node)
+1268   6                                                                      status = SAT_status();
+1269   6                                                                      //return status;
+1270   6                                                                      //if(callback_result & 0x40) _stk_menu_offset = _stk_menu_current;              //stay node
+1271   6                                                                      _stk_menu_offset = stknode.sibling;             //next node
+1272   6                                                                      if(_stk_menu_offset == 0) { 
+1273   7                                                                              _stk_menu_offset = 0xFFFF;      //disable liquid handler
+1274   7                                                                      } 
+1275   6                                                                      if(callback_result & CALLBACK_FORCE_END) {              //cek force end
+1276   7                                                                              _stk_menu_offset = 0xFFFF;
+1277   7                                                                      } 
+1278   6                                                                      goto finish_decode;
+1279   6                                                                      break;
+1280   6                                                      }
+1281   5                                                      //}
+1282   5                                                      //m_free(stknode);      
+1283   5                                              } 
+1284   4                                              //default state
+1285   4                                              switch(terminal_result) {
+1286   5                                                      case STK_RES_NETWORK_FAIL:      //result only warning, select current node (worth retrying)
+1287   5                                                      case STK_RES_ME_FAIL:      
+1288   5                                                      case STK_RES_USER_TIMEOUT:
+1289   5                                                      case STK_RES_USER_ABORT:                                
+1290   5                                                              //_readbin(_stk_menu_offset, STK_buffer, sizeof(stk_config));
+1291   5                                                              //_readbin(_stk_menu_offset + sizeof(stk_config), STK_buffer, ((stk_config *)STK_buffer)->length);
+1292   5                                                              if(++_tres_cntr < 4) {
+1293   6                                                                      _stk_menu_offset = _stk_menu_current;
+1294   6                                                                      break;
+1295   6                                                              }
+1296   5                                                      case STK_RES_ME_ERROR:          // error 
+1297   5                                                      case STK_RES_ME_TYPE_ERROR:
+1298   5                                                      case STK_RES_ME_DATA_ERROR:
+1299   5                                                      case STK_RES_ME_NUM_ERROR:
+1300   5                                                      case STK_RES_ERROR:
+1301   5                                                      case STK_RES_SMS_ERROR:                 //result is error
+1302   5                                                      case STK_RES_SS_ERROR: //ME unable to process (not worth retrying)
+1303   5                                                               _stk_menu_offset = 0xFFFF;
+1304   5                                                               status = APDU_STK_OVERLOAD;
+1305   5                                                               break;
+1306   5                                                      case STK_RES_TRANSACTION_ABORT:                 //skip node on transaction abort
+1307   5                                                      case STK_RES_PARTIAL:
+1308   5                                                      case STK_RES_MISSING:
+1309   5                                                      case STK_RES_REFRESH:
+1310   5                                                      case STK_RES_NO_ICON:
+1311   5                                                      case STK_RES_MOD_CALL:
+1312   5                                                      case STK_RES_LIMIT_SERVICE:
+1313   5                                                      case STK_RES_SUCCESS:      //result success, select child node (direct child)
+1314   5                                                              _tres_cntr = 0;  
+1315   5                                                              if(_stk_menu_offset == 0) { 
+1316   6                                                                      _stk_menu_offset = 0xFFFF;      //disable liquid handler
+1317   6                                                                      //fetch_len = 0;
+1318   6                                                                      status = APDU_SUCCESS;
+1319   6                                                              }
+1320   5                                                              break; 
+1321   5                                                      default:                                                                //terminate session
+1322   5                                                      case STK_RES_TERMINATED:
+1323   5                                                      case STK_RES_NO_USER_RESPONSE:
+1324   5                                                              _tres_cntr = 0;
+1325   5                                                              _stk_menu_offset = 0xFFFF;                
+1326   5                                                              //fetch_len = 0;          
+1327   5                                                              status = APDU_SUCCESS;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 23  
+
+1328   5                                                              goto finish_decode;
+1329   5                                                              break;
+1330   5                                                      case STK_RES_HELP_REQUIRED:                              //stay on current node   
+1331   5                                                              _tres_cntr = 0;
+1332   5                                                              _stk_menu_offset = _stk_menu_current;
+1333   5                                                              break;
+1334   5                                                      case STK_RES_BACKWARD:
+1335   5                                                              _tres_cntr = 0;
+1336   5                                                              _readbin(&stk_fs, _stk_menu_current, &stknode, sizeof(stk_config));     
+*** WARNING C182 IN LINE 1336 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1337   5                                                              _stk_menu_offset = stknode.parent;
+1338   5                                                              if(_stk_menu_offset == 0) { 
+1339   6                                                                      _stk_menu_offset = 0xFFFF;      //disable liquid handler
+1340   6                                                                      //fetch_len = 0;        
+1341   6                                                                      status = APDU_SUCCESS;
+1342   6                                                              }
+1343   5                                                              goto finish_decode;                     //don't execute callback
+1344   5                                                              break;
+1345   5                                              }
+1346   4                                              finish_decode:
+1347   4                                              if(_stk_menu_offset != 0xFFFF) {         //liquid handler
+1348   5                                                      _readbin(&stk_fs, _stk_menu_offset, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1348 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1349   5                                                      if(stknode.parent == 0xFFFF) goto exit_response;                //uninitialized tree structure (invalid parent)
+1350   5                                                      len = stknode.length;
+1351   5                                                      //check terminal profile first before sending any proactive SIM command here
+1352   5                                                      //and return the appropriate terminal response
+1353   5                                                      //.....
+1354   5                                                      if(liquid_proactive_check(stknode.tag) == 0) goto exit_response;        //proactive not supported
+1355   5                                      
+1356   5                                                      //..end of profile checking
+1357   5                                                      //set menu anchor for several operation
+1358   5                                                      //if((callback_result & CALLBACK_STAY_NODE) == 0) {
+1359   5                                                      if(stknode.tag == 0x25) { _stk_menu_anchor = _stk_menu_offset; }
+1360   5                                                      if(stknode.tag == 0x24) _stk_menu_anchor = _stk_menu_offset;
+1361   5                                                      if((callback_result & CALLBACK_STAY_NODE) == 0) {
+1362   6                                                              _stk_menu_current = _stk_menu_offset;
+1363   6                                                      }
+1364   5                                                      if((callback_result & CALLBACK_TAMPER_RESULT) == 0) {                   //use default action tree
+1365   6                                                              _readbin(&stk_fs, _stk_menu_offset + sizeof(stk_config), STK_buffer, len);
+1366   6                                                              status = SAT_response(STK_buffer, len);
+1367   6                                                      }                                                                                                                       //return 91XX
+1368   5                                              } else {        
+1369   5                                                      if((callback_result & CALLBACK_STAY_NODE) == 0) {
+1370   6                                                              _stk_menu_anchor = 0;
+1371   6                                                              _stk_menu_current = 0xFFFF;
+1372   6                                                      }
+1373   5                                              }                       
+1374   4                                              if(callback_result & CALLBACK_STAY_NODE) { 
+1375   5                                                      _readbin(&stk_fs, _stk_menu_current, &stknode, sizeof(stk_config));
+*** WARNING C182 IN LINE 1375 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1376   5                                                      if(stknode.parent != 0) {
+1377   6                                                              _stk_menu_current = stknode.parent;
+1378   6                                                              _stk_menu_offset = _stk_menu_current;
+1379   6                                                      }
+1380   5                                              }         
+1381   4                                              if(callback_result & CALLBACK_FORCE_END) {              //cek force end
+1382   5                                                      _stk_menu_anchor = 0;
+1383   5                                                      _stk_menu_current = 0xFFFF;
+1384   5                                              }
+1385   4                                              //m_free(stknode);
+1386   4      #endif
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 24  
+
+1387   4                                      }
+1388   3                                      exit_response:
+1389   3                                      return status;
+1390   3                              case INS_ENVELOPE:
+1391   3                                      Get_Data();
+1392   3                                      status = APDU_SUCCESS;
+1393   3                                      if(VAS_activated()) {
+1394   4      #if (VAS_ALLOCATED)
+1395   4                                              //if(vas_state == VAS_STATE_WAIT_RESPONSE) {
+1396   4                                              status = VAS_execute(command->bytes);
+1397   4                                              goto exit_response;     
+1398   4      #endif
+1399   4                                      } else {
+1400   4      #if (LIQUID_ALLOCATED)
+1401   4                                              //status = SAT_envelope(command->bytes, command->P3); 
+1402   4                                              SAT_pop(command->bytes, &dtag, &size, STK_buffer);
+1403   4                                              memcpy(command->bytes, STK_buffer, size); 
+1404   4                                              res = 0;
+1405   4                                              i = 0;
+1406   4                                              len = size;                     //total size
+1407   4                                              if(SAT_init(command->bytes, len) == 0) return APDU_STK_OVERLOAD;
+1408   4                                              switch(dtag) {
+1409   5                                                      case ENV_TAG_MENU:         //MENU SELECTION     
+1410   5                                                              if(liquid_profile_check(TERMINAL_MENU_SELECT) == 0) break;
+1411   5                                                              goto process_response;          //lempar ke TERMINAL RESPONSE
+1412   5                                                              //status = SAT_response();
+1413   5                                                              break;
+1414   5                                                      /*case ENV_TAG_SMS_PP:   //SMS POINT TO POINT
+1415   5                                                              if(liquid_profile_check(TERMINAL_SMSPP_DOWNLOAD) == 0) break;
+1416   5                                                              status = decode_SMSPP(command->bytes, len);
+1417   5                                                              break;
+1418   5                                                      case ENV_TAG_SMS_CB:   //SMS CELL BROADCAST     
+1419   5                                                              if(liquid_profile_check(TERMINAL_SMSCB_DOWNLOAD) == 0) break;
+1420   5                                                              status = decode_SMSCB(command->bytes, len);
+1421   5                                                              break;*/
+1422   5                                                      case ENV_TAG_CALL:         //CALL CONTROL
+1423   5                                      
+1424   5                                                              break;
+1425   5                                                      case ENV_TAG_SMS_PP:
+1426   5                                                      case ENV_TAG_SMS_CB:
+1427   5                                                      case ENV_TAG_EVENT:
+1428   5                                                              //goto process_response;                //lempar ke TERMINAL RESPONSE
+1429   5                                                              //break;
+1430   5                                                      case ENV_TAG_TIMER:
+1431   5                                                              //len = command->P3;                    //total size
+1432   5                                                              //goto process_response;                //lempar ke TERMINAL RESPONSE
+1433   5                                                              while(i != len) {
+1434   6                                                                      i += SAT_file_pop(i, &tag, &size, STK_buffer);
+1435   6                                                                      tag |= 0x80; 
+1436   6                                                                      switch(tag) {                   //TERMINAL HANDLER
+1437   7                                                                              case STK_TAG_CMD_DETAIL:
+1438   7                                                                              case STK_TAG_DEV_ID: break;                     //don't process this tag
+1439   7                                                                              case STK_TAG_ITEM_ID:  
+1440   7                                                                                      //break;
+1441   7                                                                              case STK_TAG_RESULT:   //cek result
+1442   7                                                                                      //terminal_result = STK_buffer[0];
+1443   7                                                                                      //file_readbin(&stk_fs, _stk_menu_current, stknode, sizeof(stk_config));
+1444   7                                                                                      //_stk_menu_offset = stknode->sibling;
+1445   7                                                                              default: break;
+1446   7                                                                              case STK_TAG_TIMER_IDENTIFIER:
+1447   7                                                                                      res = STK_buffer[0];
+1448   7                                                                                      break; 
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 25  
+
+1449   7                                                                              case STK_TAG_TIMER_VALUE:
+1450   7                                                                                      //file_readbin(&stk_fs, _stk_menu_current, stknode, sizeof(stk_config));
+1451   7                                                                                      if(dtag == ENV_TAG_TIMER) {
+1452   8                                                                                              //timer_callback(res, tag, size, STK_buffer);
+1453   8                                                                                      }
+1454   7                                                                                      break;
+1455   7                                                                              case STK_TAG_SMS_TPDU:
+1456   7                                                                                      if(dtag == ENV_TAG_SMS_PP) {  
+1457   8                                                                                              status = decode_SMSTPDU(1, STK_buffer);
+1458   8                                                                                      }
+1459   7                                                                                      if(dtag == ENV_TAG_SMS_CB) {
+1460   8                                                                                              status = decode_SMSTPDU(0, STK_buffer);
+1461   8                                                                                      }
+1462   7                                                                                      break;
+1463   7                                                                      }
+1464   6                                                              }
+1465   5                                                              //status = SAT_status();
+1466   5                                                              break;
+1467   5                                                      //default: return APDU_FATAL_ERROR;             //UNKNOWN TAG 
+1468   5                                              }
+1469   4      #endif
+1470   4                                      }
+1471   3                                      return status;
+1472   3                              case INS_FETCH:
+1473   3      #if VAS_ALLOCATED
+1474   3                                      if(vas_state == VAS_STATE_WAIT_RESPONSE) {
+1475   4                                              vas_state = VAS_STATE_NORMAL;           //normal execution
+1476   4                                      }
+1477   3      #endif
+1478   3                                      SAT_read(command->bytes, command->P3);
+1479   3                                      //fetch_len = 0;
+1480   3                                      SAT_cleanup();
+1481   3                                      status = APDU_SUCCESS;
+1482   3                                      //status = liquid_fetch(command->bytes, command->P3);
+1483   3                                      //SAT_cleanup();
+1484   3                                      Set_Response(command->bytes, command->P3);
+1485   3                                      return status;
+1486   3      /////////////////////////////////////////END OF SIM APPLICATION TOOLKIT HANDLER///////////////////////////
+             -///////////////////
+1487   3                              //case 0x55:
+1488   3                              //      while(1);
+1489   3                              default:
+1490   3                                      //Set_Response(command->bytes, 0);
+1491   3                                      return APDU_INSTRUCTION_INVALID;                                        
+1492   3                      }
+1493   2              }
+1494   1              return APDU_CLASS_INVALID;
+1495   1              /*{
+1496   1              //      default:
+1497   1                      if(_os_config.os_state & YGG_ST_ENABLE_APP) {
+1498   1                              return Execute_User_App(command);
+1499   1                      } else {
+1500   1                              response_length = 0;
+1501   1                              return APDU_CLASS_INVALID;
+1502   1                      }
+1503   1                      //break;
+1504   1              }*/
+1505   1      }
+*** WARNING C280 IN LINE 467 OF YGGDRASIL\YGGDRASIL.C: 'ygg_ins_verify_chv': unreferenced label
+*** WARNING C280 IN LINE 498 OF YGGDRASIL\YGGDRASIL.C: 'ygg_ins_change_chv': unreferenced label
+1506          
+1507          #define PM_CMD_START    0
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 26  
+
+1508          #define PM_CMD_ICCID    1
+1509          #define PM_CMD_DISPIN1  2
+1510          #define PM_CMD_ENPIN1   3
+1511          #define PM_CMD_PUK1             5
+1512          #define PM_CMD_PUK2             6
+1513          #define PM_CMD_PIN1             9
+1514          #define PM_CMD_PIN2             10
+1515          #define PM_CMD_PIN3             11
+1516          #define PM_CMD_ADM              12
+1517          #define PM_CMD_SYS              14
+1518          #define PM_CMD_IMSI             0x10
+1519          #define PM_CMD_ACC              0x11
+1520          #define PM_CMD_KI               0x12
+1521          #define PM_CMD_OTAKEY   0x13
+1522          #define PM_CMD_0348KEY00        0x20
+1523          #define PM_CMD_0348KEY01        0x21
+1524          #define PM_CMD_0348KEY02        0x22
+1525          #define PM_CMD_0348KEY03        0x23
+1526          #define PM_CMD_0348KEY04        0x24
+1527          #define PM_CMD_0348KEY05        0x25
+1528          #define PM_CMD_0348KEY06        0x26
+1529          #define PM_CMD_0348KEY07        0x27
+1530          #define PM_CMD_0348KEY08        0x28
+1531          #define PM_CMD_0348KEY09        0x29
+1532          #define PM_CMD_0348KEY10        0x2A
+1533          #define PM_CMD_0348KEY11        0x2B
+1534          #define PM_CMD_0348KEY12        0x2C
+1535          #define PM_CMD_0348KEY13        0x2D
+1536          #define PM_CMD_0348KEY14        0x2E
+1537          #define PM_CMD_0348KEY15        0x2F
+1538          #define PM_CMD_0348KEY16        0x30
+1539          #define PM_CMD_0348KEY17        0x31
+1540          #define PM_CMD_0348KEY18        0x32
+1541          #define PM_CMD_0348KEY19        0x33
+1542          #define PM_CMD_0348KEY20        0x34
+1543          #define PM_CMD_0348KEY21        0x35
+1544          #define PM_CMD_0348KEY22        0x36
+1545          #define PM_CMD_0348KEY23        0x37
+1546          #define PM_CMD_0348KEY24        0x38
+1547          #define PM_CMD_0348KEY25        0x39
+1548          #define PM_CMD_0348KEY26        0x3A
+1549          #define PM_CMD_0348KEY27        0x3B
+1550          #define PM_CMD_0348KEY28        0x3C
+1551          #define PM_CMD_0348KEY29        0x3D
+1552          #define PM_CMD_0348KEY30        0x3E
+1553          #define PM_CMD_0348KEY31        0x3F
+1554          
+1555          uint16 Bifrost_Decode(uchar * buffer, uchar length) _REENTRANT_ {
+1556   1              uint16 status = APDU_SUCCESS;
+1557   1              uchar i = 0;
+1558   1              uchar size;
+1559   1              uchar tag;
+1560   1              fs_handle temp_fs;
+1561   1              chv_file chv;
+1562   1              while(i < length) {
+1563   2                      tag = buffer[i++];
+1564   2                      size = buffer[i++];
+1565   2                      switch(tag) {
+1566   3                              case PM_CMD_START:
+1567   3                                      break;
+1568   3                              case PM_CMD_ICCID:
+1569   3                                      _select(&temp_fs, FID_MF);
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 27  
+
+1570   3                                      status = _select(&temp_fs, FID_ICCID);
+1571   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1572   3                                      status = _writebin(&temp_fs, 0, buffer + i, size); 
+1573   3                                      if(status != APDU_SUCCESS) return status;
+1574   3                                      break;
+1575   3                              case PM_CMD_DISPIN1:
+1576   3                                      chv_get_config(1, &chv);
+1577   3                                      chv_disable(1, chv.pin); 
+1578   3                                      //m_free(chv);
+1579   3                                      break;
+1580   3                              case PM_CMD_ENPIN1:
+1581   3                                      chv_get_config(1, &chv);
+1582   3                                      chv_enable(1, chv.pin);
+1583   3                                      //m_free(chv);
+1584   3                                      break; 
+1585   3                              case PM_CMD_PUK1:
+1586   3                                      chv_get_config(1, &chv);
+1587   3                                      memcpy(chv.puk, buffer + i, 8);
+1588   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (0 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1588 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1589   3                                      //m_free(chv);
+1590   3                                      break;
+1591   3                              case PM_CMD_PUK2:
+1592   3                                      chv_get_config(2, &chv);
+1593   3                                      memcpy(chv.puk, buffer + i, 8);
+1594   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (1 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1594 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1595   3                                      //m_free(chv);
+1596   3                                      break;
+1597   3                              case PM_CMD_PIN1: 
+1598   3                                      chv_get_config(1, &chv);
+1599   3                                      memcpy(chv.pin, buffer + i, 8);
+1600   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (0 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1600 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1601   3                                      //m_free(chv);
+1602   3                                      break;
+1603   3                              case PM_CMD_PIN2:
+1604   3                                      chv_get_config(2, &chv);
+1605   3                                      memcpy(chv.pin, buffer + i, 8);
+1606   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (1 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1606 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1607   3                                      //m_free(chv);
+1608   3                                      break;
+1609   3                              case PM_CMD_PIN3:
+1610   3                                      break;
+1611   3                              case PM_CMD_ADM:
+1612   3                                      chv_get_config(4, &chv);
+1613   3                                      memcpy(chv.pin, buffer + i, 8);
+1614   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (3 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1614 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1615   3                                      //m_free(chv);
+1616   3                                      break;
+1617   3                              case PM_CMD_SYS:
+1618   3                                      chv_get_config(6, &chv);
+1619   3                                      memcpy(chv.pin, buffer + i, 8);
+1620   3                                      ioman_write_buffer(CHV_DATA_OFFSET + (5 * sizeof(chv_file)), &chv, sizeof(chv_file));
+*** WARNING C182 IN LINE 1620 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1621   3                                      //m_free(chv);
+1622   3                                      break;
+1623   3                              case PM_CMD_IMSI:  
+1624   3                                      _select(&temp_fs, FID_MF);
+1625   3                                      _select(&temp_fs, FID_GSM);
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 28  
+
+1626   3                                      status = _select(&temp_fs, FID_IMSI);
+1627   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1628   3                                      status = _writebin(&temp_fs, 0, buffer + i, size); 
+1629   3                                      if(status != APDU_SUCCESS) return status;
+1630   3                                      break;
+1631   3                              case PM_CMD_ACC:
+1632   3                                      _select(&temp_fs, FID_MF);
+1633   3                                      _select(&temp_fs, FID_GSM);
+1634   3                                      status = _select(&temp_fs, FID_ACC);
+1635   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1636   3                                      status = _writebin(&temp_fs, 0, buffer + i, size);
+1637   3                                      if(status != APDU_SUCCESS) return status;
+1638   3                                      break;
+1639   3                              case PM_CMD_KI:   
+1640   3                                      _select(&temp_fs, FID_MF);
+1641   3                                      _select(&temp_fs, FID_LIQUID);
+1642   3                                      status = _select(&temp_fs, FID_AUTHKEY);
+1643   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1644   3                                      status = _writebin(&temp_fs, 0, buffer + i, size);
+1645   3                                      if(status != APDU_SUCCESS) return status;
+1646   3                                      break;
+1647   3                              case PM_CMD_OTAKEY:
+1648   3                                      _select(&temp_fs, FID_MF);
+1649   3                                      _select(&temp_fs, FID_LIQUID);
+1650   3                                      status = _select(&temp_fs, FID_RFMKEY);
+1651   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1652   3                                      status = _writebin(&temp_fs, 0, buffer + i, size);
+1653   3                                      if(status != APDU_SUCCESS) return status;
+1654   3                                      break;
+1655   3                              case PM_CMD_0348KEY00:
+1656   3                              case PM_CMD_0348KEY01:
+1657   3                              case PM_CMD_0348KEY02:
+1658   3                              case PM_CMD_0348KEY03:
+1659   3                              case PM_CMD_0348KEY04:
+1660   3                              case PM_CMD_0348KEY05:
+1661   3                              case PM_CMD_0348KEY06:
+1662   3                              case PM_CMD_0348KEY07:
+1663   3                              case PM_CMD_0348KEY08:
+1664   3                              case PM_CMD_0348KEY09:
+1665   3                              case PM_CMD_0348KEY10:
+1666   3                              case PM_CMD_0348KEY11:
+1667   3                              case PM_CMD_0348KEY12:
+1668   3                              case PM_CMD_0348KEY13:
+1669   3                              case PM_CMD_0348KEY14:
+1670   3                              case PM_CMD_0348KEY15:
+1671   3                              case PM_CMD_0348KEY16:
+1672   3                              case PM_CMD_0348KEY17:
+1673   3                              case PM_CMD_0348KEY18:
+1674   3                              case PM_CMD_0348KEY19:
+1675   3                              case PM_CMD_0348KEY20:
+1676   3                              case PM_CMD_0348KEY21:
+1677   3                              case PM_CMD_0348KEY22:
+1678   3                              case PM_CMD_0348KEY23:
+1679   3                              case PM_CMD_0348KEY24:
+1680   3                              case PM_CMD_0348KEY25:
+1681   3                              case PM_CMD_0348KEY26:
+1682   3                              case PM_CMD_0348KEY27:
+1683   3                              case PM_CMD_0348KEY28:
+1684   3                              case PM_CMD_0348KEY29:
+1685   3                              case PM_CMD_0348KEY30:
+1686   3                              case PM_CMD_0348KEY31: 
+1687   3                                      _select(&temp_fs, FID_MF);
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 29  
+
+1688   3                                      _select(&temp_fs, FID_LIQUID);
+1689   3                                      status = _select(&temp_fs, FID_0348_KEY);
+1690   3                                      if(status < APDU_SUCCESS_RESPONSE) return status;
+1691   3                                      status = _writerec(&temp_fs, (tag & 0x3F), buffer + i, size);
+1692   3                                      if(status != APDU_SUCCESS) return status;
+1693   3                                      break;
+1694   3                              default:
+1695   3                                      if(tag > 0x3F) {        
+1696   4                                              _select(&temp_fs, FID_MF);
+1697   4                                              _select(&temp_fs, FID_LIQUID);
+1698   4                                              status = _select(&temp_fs, FID_WIBKEY);
+1699   4                                              if(status < APDU_SUCCESS_RESPONSE) return status;
+1700   4                                              status = _writerec(&temp_fs, (tag & 0x3F), buffer + i, size);
+1701   4                                              if(status != APDU_SUCCESS) return status;
+1702   4                                      }
+1703   3                                      break;  
+1704   3                      }
+1705   2                      i += size;
+1706   2              }
+1707   1              return status;
+1708   1      }
+1709          
+1710          void Set_Response(uchar * buffer, uchar length) _REENTRANT_ {
+1711   1              /*switch(ISO7816_case()) {
+1712   1                      case 0:                                 //no data, no response
+1713   1                      case 2:                                 //with data, no response
+1714   1                              get_resp_length = length;
+1715   1                              memcopy(iobuf + 5, buffer, 0, length);
+1716   1                              break;
+1717   1                      case 1:                                 //no data, with response
+1718   1                      case 3:                                 //with data, with response
+1719   1                              response_length = length;
+1720   1                              break;
+1721   1                      default: */
+1722   1              /*if(apdu_le_value != 0) {              //iso7816-3 case 2 or 4
+1723   1                      length = apdu_le_value;
+1724   1              } */
+1725   1              /*_iso7816_case += 1;
+1726   1              if(_iso7816_case == 4) {
+1727   1                      memcopy(iso7816_buffer + 5, buffer, 0, length);    //copy to temp buffer
+1728   1                      get_resp_length = length;
+1729   1                      response_length = 0;
+1730   1              } else {*/
+1731   1                      //get_resp_length = 0;
+1732   1              memcpy(iso7816_buffer, buffer, length);    //copy to temp buffer
+1733   1              get_resp_length = 0;
+1734   1              response_length = length;
+1735   1              //}
+1736   1                              //break;
+1737   1              //}
+1738   1      }
+1739          
+1740          void Get_Data() _REENTRANT_ {
+1741   1              //register uchar i;      
+1742   1              TX_NULL_BYTE_OFF(8000)
+1743   1              send_byte(iso7816_buffer[1]);                   //send acknowledgement in order to and wait for data
+1744   1              _iso7816_state = YGG_RECEIVE_DATA;
+1745   1              //_iso7816_case = 3;                                                     //command+data only (no response)
+1746   1              while(_iso7816_state != ISO7816_RUNNING);
+1747   1              //ISO_DelayETU();                
+1748   1              //_iso7816_state = ISO7816_RUNNING;
+1749   1              TX_NULL_BYTE_ON(8000)
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 30  
+
+1750   1      }
+1751          
+1752          void Load_State() _REENTRANT_ {
+1753   1              ioman_read_buffer(YGG_ALLOCATION_CONFIG_OFFSET, &_os_config, sizeof(os_config));
+*** WARNING C182 IN LINE 1753 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1754   1              if(_os_config.os_tag != 'Y') {
+1755   2                      _os_config.os_state = 0;                //default state
+1756   2                      Save_State();
+1757   2              }
+1758   1      }
+1759          
+1760          void Save_State() _REENTRANT_ {
+1761   1              _os_config.os_tag = 'Y';
+1762   1              ioman_write_buffer(YGG_ALLOCATION_CONFIG_OFFSET, &_os_config, sizeof(os_config));
+*** WARNING C182 IN LINE 1762 OF YGGDRASIL\YGGDRASIL.C: pointer to different objects
+1763   1      }
+1764          
+1765          uint16 Load_User_App(void) _REENTRANT_ {        //copy program from temp space to program space, maximum program
+             - size 12KB
+1766   1              register uint16 status;
+1767   1              //register uchar state = _os_config.os_state;
+1768   1              //_os_config.os_state &= ~YGG_ST_ENABLE_APP;            //disable user app
+1769   1              //Save_State();                                                                 //save state
+1770   1              status = ioman_program_copy(0x8000, 0xC000, 0x4000);            //program copy
+1771   1              //_os_config.os_state = state;                                  //restore state
+1772   1              //Save_State();                                                                 //save state
+1773   1              return status;
+1774   1      }
+1775          
+1776          uint16 Write_Temp_Space(uint16 pos, uchar * bytes, uint16 length) _REENTRANT_ {
+1777   1              //write app is encrypted
+1778   1              uint16 len;
+1779   1              //uint16 size = length;
+1780   1              //Write_Temp_Space(offset, command->bytes, command->P3);
+1781   1              if(pos < 0x8000) return APDU_OUT_OF_RANGE;   
+1782   1              if((pos + length) > 0x8000) {                   //range 0x8000-0xffff
+1783   2                      //pos += 0xA000;
+1784   2                      return ioman_write_program(pos, bytes, length);
+1785   2              } else {
+1786   2                      return APDU_OUT_OF_RANGE;
+1787   2              }
+1788   1      }
+*** WARNING C280 IN LINE 1778 OF YGGDRASIL\YGGDRASIL.C: 'len': unreferenced local variable
+1789          
+1790          uint16 Load_Temp_Space(void) _REENTRANT_ {      
+1791   1              _os_config.os_state |= YGG_ST_LOAD_APP;
+1792   1              return APDU_SUCCESS;
+1793   1      } 
+1794          
+1795          uint16 Auth_COMP128(uchar * inbuf, uchar * outbuf) _REENTRANT_ {
+1796   1              uint16 status = APDU_SUCCESS;
+1797   1              /*uchar * temp = m_alloc(A3A8_INPUT_SIZE);
+1798   1              memcopy(temp, inbuf, 0, A3A8_INPUT_SIZE);
+1799   1              status = auth_A3A8(temp, _os_config.gsm_ki, outbuf);
+1800   1              m_free(temp); */
+1801   1              return status;
+1802   1      }
+*** WARNING C280 IN LINE 1795 OF YGGDRASIL\YGGDRASIL.C: 'inbuf': unreferenced local variable
+*** WARNING C280 IN LINE 1795 OF YGGDRASIL\YGGDRASIL.C: 'outbuf': unreferenced local variable
+1803          
+1804          /*void Yggdrasil_Main() {
+1805                  unsigned short i=0;
+C51 COMPILER V7.01  YGGDRASIL                                                              01/25/2014 09:07:15 PAGE 31  
+
+1806                  switch(yggdrasil_state) {
+1807                          case YGG_DORMANT:
+1808                                  IoInit(0x11);                                           //      H/W initial
+1809                                  Send_ATR();                                                     //      Send ATR
+1810                                  yggdrasil_state = YGG_READY;    
+1811                                  break;
+1812                          case YGG_READY:
+1813                                  iso7816_buffer[0] = receive_byte();             //CLA
+1814                                  iso7816_buffer[1] = receive_byte();             //INS
+1815                                  iso7816_buffer[2] = receive_byte();             //P1
+1816                                  iso7816_buffer[3] = receive_byte();             //P2
+1817                                  iso7816_buffer[4] = receive_byte();             //P3
+1818                                  for(i=5;i<(5 + iso7816_buffer[4]);i++) {
+1819                                           iso7816_buffer[i] = receive_byte();
+1820                                  }
+1821                                  _iso7816_state = ISO7816_RUNNING;
+1822                                  break;
+1823                          case YGG_RUNNING:
+1824                                  switch(iso7816_buffer[0]) {
+1825                                          case 0xff:                                                      //default iso7816 system class
+1826                                                  PPS_Handler(iso7816_buffer);
+1827                                                  break;
+1828                                          default:
+1829                                                  Tx_Status(Command_Interpreter(iso7816_buffer));
+1830                                                  break;
+1831                                  }
+1832                                  _iso7816_state = ISO7816_READY;
+1833                                  break;
+1834                          case YGG_STOP:
+1835                                  break;
+1836                  }
+1837          } */
+1838          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   8011    ----
+   CONSTANT SIZE    =     26    ----
+   XDATA SIZE       =     46      26
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  29 WARNING(S),  0 ERROR(S)

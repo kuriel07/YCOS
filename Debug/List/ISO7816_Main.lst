@@ -1,0 +1,330 @@
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE ISO7816_MAIN
+OBJECT MODULE PLACED IN .\Debug\Output\ISO7816_Main.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE ISO7816\ISO7816_Main.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEB
+                    -UG PRINT(.\Debug\List\ISO7816_Main.lst) OBJECT(.\Debug\Output\ISO7816_Main.obj)
+
+stmt level    source
+
+   1          #include "_17BD_UserCode.h"
+   2          #include "defs.h"
+   3          #include "config.h"     
+   4          #include "..\yggdrasil\yggdrasil.h"
+   5          #include "..\drivers\ioman.h"
+   6          #include "..\ISO7816\ISO7816.h"
+   7          #include "..\NORFlash\NORFlash.h"
+   8          #include "..\misc\mem.h"
+   9          #include <intrins.h>
+  10          
+  11          //BYTE  SWptr;
+  12          HALFWX  Foffset;
+  13          BYTEX   PPSFlag;
+  14          //BYTEX         gCommand[5];
+  15          //BYTEX IOBuf[512];
+  16          //BYTEX FlashBuffer[512];
+  17          //uchar _iso7816_le;
+  18          uchar _iso7816_ins;
+  19          uchar _iso7816_cla;
+  20          //uchar _iso7816_case;
+  21          BYTEX   _iso7816_state;
+  22          BYTEX   iso7816_buffer[263];
+  23          BYTEX   FlashBuffer[512];
+  24          //sfr   xbp = 0x7e;
+  25          //BYTEX IOBuf[512];
+  26          //BYTEX IOBuf[] = (iso7816_buffer+5);
+  27          
+  28          //BYTEC ATR[]={0x3B,0x18,0x96,0x00,0x17,0xBD,0x10,0x00,0x00,0x90,0x00};
+  29          //BYTEC ATR[]={0x3B,0x1A,0x96,0x00,0x17,0xBD,0x10,0x59,0x43,0x4F,0x53,0x02,0x00};
+  30          
+  31          //TS = 0x3B, direct conversion, 3F=inverse
+  32          //T0 = 0x1A, 1=TA available, A=length for history bytes
+  33          //TA1 = 0xA8, Fmax=5Mhz, Fi=512, Di=32, 3.57Mhz/16, 230K
+  34          //BYTEC ATR[]= {0x3B, 0x1A, 0x95, 0x00, 0x17, 0xBD, 0x10, 0x59, 0x43, 0x4F, 0x53, 0x31, 0x00};
+  35          #if VAS_ALLOCATED 
+  36          BYTEC   ATR[]= {0x3B, ATR_LENGTH, ATR_PPS, 0x00, ATR_CHIP_ID, ATR_CHIP_TYPE, ATR_CHIP_VER, ATR_OS_NAME, ATR_
+             -OS_YEAR, ATR_OS_CUSTOMER, ATR_OS_REV, ATR_OS_VER, ATR_FS_VER, ATR_APP_FRAMEWORKS, ATR_WIB_PLUGINS, ATR_CHECKSUM, 0x00}; 
+  37          #else
+              BYTEC   ATR[]= {0x3B, ATR_LENGTH, ATR_PPS, 0x00, ATR_CHIP_ID, ATR_CHIP_TYPE, ATR_CHIP_VER, ATR_OS_NAME, ATR_
+             -OS_YEAR, ATR_OS_CUSTOMER, ATR_OS_REV, ATR_OS_VER, ATR_FS_VER, ATR_APP_FRAMEWORKS, ATR_CHECKSUM, 0x00};
+              #endif 
+  40          //BYTEC ATR[]={0x3B,0x1A,0x11,0x00,0x17,0xBD,0x10,0x59,0x43,0x4F,0x53,0xB4,0x00};
+  41          //BYTEC ATR[]={0x3B, 0x1D, 0x95, 0x04, 0x01, 0x7F, 0x3F, 0x10, 0x04, 0x17, 0x01, 0x04, 0x21, 0x31, 0x11, 0
+             -x20 };
+  42          //BYTEC SW[12]={0x90,0x00,0x6D,0x00,0x6C,0x00,0x65,0x01,0x6A,0x00,0x65,0x04};
+  43          //                                 Success, Invalid INS, P3 err, Write err, P1P2 err, Verify err
+  44          
+  45          void ISO7816_init(void) {
+  46   1              IE_EA = 1;                              //global interrupt enable bit
+  47   1              IE_UART = 1;                    //enable uart interrupt
+  48   1              //CLKSEL = 0x00;                        //7.5Mhz internal clock
+  49   1              //rP1=0;
+  50   1              //MMU_SEL = 0;
+  51   1              Initialize_Hardware();
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 2   
+
+  52   1              _iso7816_state = ISO7816_DORMANT;
+  53   1      }  
+  54          
+  55          
+  56          /*uchar ISO7816_case(void) {
+  57                  switch(_iso7816_cla) {
+  58                          case CLA_GSM11:
+  59                                  return gsm_class_case[_iso7816_ins];
+  60                          case CLA_YGGDRASIL:
+  61                                  return yggdrasil_class_case[_iso7816_ins];
+  62                          default:
+  63                                  return 0;                       
+  64                  }
+  65                  return 0;
+  66          } */
+  67          //====================================================
+  68          extern uchar get_resp_length;
+  69          //      Main process
+  70          void ISO7816_main(void)
+  71          {
+  72   1              //register uint16 i=0;
+  73   1              //register uint16 len;
+  74   1              uint16 sw;
+  75   1              while(1) {
+  76   2                      switch(_iso7816_state) {
+  77   3                              case ISO7816_DORMANT: 
+  78   3                                      VDCON = 0x00;                                           //      VD closed
+  79   3                                      FDCON = 0X00;                                           //      FD closed
+  80   3                                      IoInit(0x11);                                           //      H/W initial      
+  81   3                                      //rP0 = 0x00;                                                   //      disable output, low voltage level
+  82   3                                      Tx_n_Bytes(1, ATR);                                     //kirim 3B       (ask for T=0 protocol) 
+  83   3                                      Initialize_Hardware();                                                    
+  84   3                                      Initialize_Operating_System();           
+  85   3                                      Send_ATR();     //      Send ATR
+  86   3                                      _iso7816_state = ISO7816_RECEIVE_CMD;
+  87   3                                      Sleep_Mode();
+  88   3                                      break;
+  89   3                              case ISO7816_WAIT_PPS:
+  90   3      
+  91   3                                      break;
+  92   3                              case ISO7816_READY:             
+  93   3                                      //Sleep_Mode();                 //      Power down mode after thread has been executed
+  94   3                                      /*_iso7816_cla = iso7816_buffer[0] = receive_byte();            //CLA
+  95   3                                      _iso7816_ins = iso7816_buffer[1] = receive_byte();              //INS
+  96   3                                      iso7816_buffer[2] = receive_byte();             //P1
+  97   3                                      iso7816_buffer[3] = receive_byte();             //P2
+  98   3                                      iso7816_buffer[4] = receive_byte();             //P3
+  99   3                                      len = (5 + iso7816_buffer[4]);
+ 100   3                                      
+ 101   3                                      if(len > 5) {
+ 102   3                                              //if(iso7816_buffer[1] == 0xA4) {
+ 103   3                                              send_byte(iso7816_buffer[1]);
+ 104   3                                              //send_byte(0);
+ 105   3                                              for(i=5;i<len;i++) {
+ 106   3                                                      iso7816_buffer[i] = receive_byte();
+ 107   3                                              } 
+ 108   3                                              //}
+ 109   3                                      }
+ 110   3                                      //iso7816_buffer[5] = receive_byte();
+ 111   3                                      //iso7816_buffer[6] = receive_byte();
+ 112   3                                      _iso7816_state = ISO7816_RUNNING;  */
+ 113   3                                      break;
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 3   
+
+ 114   3                              case ISO7816_RECEIVE_CMD:
+ 115   3                                      /*if(_os_config.os_state & YGG_ST_LOAD_APP) {      //load app into user program space
+ 116   3                                              //Sleep_Mode(); 
+ 117   3                                              Load_User_App();
+ 118   3                                              _os_config.os_state &= ~(YGG_ST_LOAD_APP);
+ 119   3                                              Save_State();
+ 120   3                                      }
+ 121   3                                      if(_os_config.os_state & YGG_ST_SLEEP) {                   //sleep MCU
+ 122   3                                              Sleep_Mode();
+ 123   3                                              _os_config.os_state &= ~(YGG_ST_SLEEP);
+ 124   3                                      } */
+ 125   3                                      //do nothing
+ 126   3                                      break;
+ 127   3                              case ISO7816_SEND_ACK:
+ 128   3                                      send_byte(iso7816_buffer[1]);                   //send acknowledgement in order to and wait for data
+ 129   3                                      _iso7816_state = YGG_RECEIVE_DATA;
+ 130   3                                      break;
+ 131   3                              case ISO7816_RECEIVE_DATA:
+ 132   3                                      //do nothing
+ 133   3                                      break;
+ 134   3                              case ISO7816_WAIT_LE:           //wait for at least 1 etu 
+ 135   3                                      break;
+ 136   3                              case ISO7816_RUNNING:
+ 137   3                                      switch(iso7816_buffer[0]) {
+ 138   4                                              case 0xff:                                                      //default iso7816 system class
+ 139   4                                                      PPS_Handler(iso7816_buffer);
+ 140   4                                                      break;
+ 141   4                                              default:
+ 142   4                                                      TX_NULL_BYTE_ON(8000)
+ 143   4                                                      StartTimeoutSequence();
+ 144   4                                                      //if(iso7816_buffer[1] == 0xC0 && iso7816_buffer[0] == _iso7816_cla) {                                                                  //get response
+ 145   4                                                              /*if(iso7816_buffer[4] > get_resp_length) {                             //check for response length       
+ 146   4                                                                      //return (APDU_WRONG_LENGTH | get_resp_length);         //wrong length .OR. requested length
+ 147   4                                                                      sw = (APDU_WRONG_LENGTH | get_resp_length);     //wrong length .OR. requested length
+ 148   4                                                              } else {
+ 149   4                                                                      get_resp_length = iso7816_buffer[4];
+ 150   4                                                                      //Set_Response(command->bytes, get_resp_length); 
+ 151   4                                                                      _iso7816_ins = iso7816_buffer[1];
+ 152   4                                                                      memcopy(iso7816_buffer, iso7816_buffer + 5, 0, get_resp_length);
+ 153   4                                                                      response_length = get_resp_length;
+ 154   4                                                                      get_resp_length = 0;
+ 155   4                                                                      sw = APDU_SUCCESS;
+ 156   4                                                              }*/
+ 157   4                                                      //} else {
+ 158   4                                                      _iso7816_cla = iso7816_buffer[0];
+ 159   4                                                      _iso7816_ins = iso7816_buffer[1];
+ 160   4                                                      sw = Yggdrasil_Decode((apdu_command *)iso7816_buffer);
+ 161   4                                                      //}
+ 162   4                                                      
+ 163   4                                                      if(_os_config.os_state & YGG_ST_LOAD_APP) {
+ 164   5                                                              if(Load_User_App() == APDU_SUCCESS) {
+ 165   6                                                                      _os_config.os_state     &= ~YGG_ST_LOAD_APP;
+ 166   6                                                                      Save_State();
+ 167   6                                                              }
+ 168   5                                                      }
+ 169   4                                                      EndTimeoutSequence();
+ 170   4                                                      TX_NULL_BYTE_OFF(8000)
+ 171   4                                                      ioman_transmit(response_length, _iso7816_ins, iso7816_buffer, sw);
+ 172   4                                                      //Response();
+ 173   4                                                      //TxStatus(SWptr);                                      //      Tx SW
+ 174   4                                                      break;
+ 175   4                                      }
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 4   
+
+ 176   3                                      _iso7816_state = ISO7816_RECEIVE_CMD;
+ 177   3                                      Sleep_Mode();
+ 178   3                                      break;
+ 179   3                              case ISO7816_STOP:                      //if the operation didn't response within 2 sec then cancel all pending operation
+ 180   3                                      EndTimeoutSequence();
+ 181   3                                      TX_NULL_BYTE_OFF(8000)
+ 182   3                                      ioman_transmit(0, _iso7816_ins, iso7816_buffer, APDU_FATAL_ERROR);
+ 183   3                                      _iso7816_state = ISO7816_RECEIVE_CMD;
+ 184   3                                      Initialize_Operating_System();
+ 185   3                                      break;
+ 186   3                      }
+ 187   2              }
+ 188   1              /*if(ISO7816_Time == 0)
+ 189   1              {
+ 190   1                      IoInit(0x11);                                           //      H/W initial
+ 191   1                      Send_ATR();                                                     //      Send ATR
+ 192   1                      PPSFlag = 0;                                            //      Enable PPS
+ 193   1                      ISO7816_Time ++;
+ 194   1                      return;                                                         //      Return to the main process after sending ATR    
+ 195   1              }
+ 196   1              if(RcvAPDU())                                                   //      Rcv APDU,include PPS
+ 197   1              {       
+ 198   1                      Foffset = (P1 << 8) + P2;                       //      Start address of flash reading/writing
+ 199   1                      SWptr = SUCCESS;                                        //      9000
+ 200   1      
+ 201   1                      TX_NULL_BYTE_ON(8000)
+ 202   1                      CMMD_Handle();
+ 203   1                      TX_NULL_BYTE_OFF(8000)
+ 204   1                      
+ 205   1                      Response();
+ 206   1                      TxStatus(SWptr);                                        //      Tx SW
+ 207   1              } */
+ 208   1      }
+ 209          
+ 210          //====================================================
+ 211          //      ISO/IEC 7816 commands handling
+ 212          void    Send_ATR(void)
+ 213          {
+ 214   1              uint16 i;
+ 215   1              //for(i=0;i<400;i++);                           //delay ATR     
+ 216   1              /*for(i=0;i<10000;i++) {                                //delay ATR     
+ 217   1                      _nop_();
+ 218   1              }*/
+ 219   1              Tx_n_Bytes(sizeof(ATR)-1, ATR+1);        //kirim data selanjutnya
+ 220   1      }
+*** WARNING C280 IN LINE 214 OF ISO7816\ISO7816_MAIN.C: 'i': unreferenced local variable
+ 221          
+ 222          //====================================================
+ 223          //      Receive APDU
+ 224          #if 0
+              BYTE    RcvAPDU(void)
+              {
+                      iso7816_buffer[0] = receive_byte();
+                      if(iso7816_buffer[0] == 0xFF)
+                      {       
+                              iso7816_buffer[1] = receive_byte();
+                              iso7816_buffer[2] = receive_byte();
+                              iso7816_buffer[3] = receive_byte();
+                              if(iso7816_buffer[1] == 0x10 && PPSFlag == 0)           //      PPS
+                              {       
+                                      PPS();                                                  //      Set baud rate
+                                      PPSFlag = 1;                                    //      PPS is enabled for the 1st time only
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 5   
+
+                              }
+                      }
+                      else if(iso7816_buffer[0] == 0x00)
+                      {       
+                              iso7816_buffer[1] = receive_byte();
+                              iso7816_buffer[2] = receive_byte();
+                              iso7816_buffer[3] = receive_byte();
+                              iso7816_buffer[4] = receive_byte();
+              
+                              if((iso7816_buffer[1] == WRFLASH || iso7816_buffer[1] == UDFLASH || iso7816_buffer[1] == ERFLASH || (iso
+             -7816_buffer[1] == DESOPER && iso7816_buffer[3] != 0x10)) && iso7816_buffer[4] != 0) 
+                              {                                                               
+                                      send_byte(iso7816_buffer[1]);
+                                      Rx_n_Bytes(iso7816_buffer[4]);
+                              }
+                              return  1;
+                      }
+                      return  0;
+              }
+              #endif
+ 256          
+ 257          //====================================================
+ 258          //      ISO/IEC 7816 commands handling
+ 259          //      Format: 00 5x P1 P2 P3 
+ 260          
+ 261          
+ 262          
+ 263          USHORT PPS_Handler(BYTEX * buffer) {
+ 264   1              switch(buffer[1]) {
+ 265   2                      case 0x10:
+ 266   2                              Set_PPS(buffer);
+ 267   2                              return APDU_SUCCESS;
+ 268   2                      default:   
+ 269   2                              return APDU_INSTRUCTION_INVALID;
+ 270   2              }
+ 271   1      }
+ 272          
+ 273          //====================================================
+ 274          //      Tx response data
+ 275          /*void  Response(void)
+ 276          {
+ 277                  if((INS == RDFLASH || INS == CRCCALL || INS == GETRDMN || (INS == DESOPER && P2 == 0x10)) && SWptr == SUC
+             -CESS)
+ 278                  {       
+ 279                          send_byte(INS);                                         //      Procedure byte in Case 2 APDU,followed with Le data
+ 280          
+ 281                          if(INS == RDFLASH && P3 == 0x00)
+ 282                                  Tx_n_Bytes(0x100,IOBuf);
+ 283                          else
+ 284                                  Tx_n_Bytes(P3,IOBuf);
+ 285                  }
+ 286          }*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    316    ----
+   CONSTANT SIZE    =     17    ----
+   XDATA SIZE       =    781       4
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+C51 COMPILER V7.01  ISO7816_MAIN                                                           01/25/2014 09:07:12 PAGE 6   
+
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

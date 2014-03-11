@@ -1,0 +1,1013 @@
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE FS
+OBJECT MODULE PLACED IN .\Debug\Output\fs.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE asgard\fs.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\
+                    -Debug\List\fs.lst) OBJECT(.\Debug\Output\fs.obj)
+
+stmt level    source
+
+   1          /* A bottom layer of Asgard File System, which encapsulating internal
+   2           * access to eeprom or flash memory of the file system itself
+   3           *
+   4           * Copyright 2010, Agus Purwanto.
+   5           * All rights reserved.
+   6           *
+   7           * 
+   8           */
+   9          
+  10          #include "..\defs.h"
+  11          #include "fs.h"
+  12          #include "..\drivers\ioman.h"
+  13          //#include "file.h"
+  14          #include "security.h"
+  15          //#include "crc.h"
+  16          #include "..\misc\mem.h"
+  17          //#include "..\misc\barrenkalaheapcalc.h"
+  18          #include "..\midgard\midgard.h"
+  19          #include <string.h>
+  20          //#include "..\NORFlash\NORFlash.h"
+  21          
+  22          //ef_table table;
+  23          
+  24          //static uchar _fs_buffer[FS_BUFFER_SIZE];
+  25          #if ASGARD_VERSION==3
+              fs_handle * fs_init(hw_rca * rca)
+              {
+                      uchar fs_buffer[SECTOR_SIZE];                                                           //we didn't know the actual sector size of the file system, use defa
+             -ult (32, minimum)
+                      fs_handle * fs = malloc(sizeof(fs_handle));
+                      ioman_read(rca, 0, fs_buffer, SECTOR_SIZE);
+                      m_memcopy(&fs->fs_table, fs_buffer, sizeof(ef_table));          //initialize file system table
+                      fs->current_alloc_ptr = ALLOCATION_TABLE_OFFSET;                        //set to start of alloc table
+                      if(fs->fs_table.fs_type[0] == 'A' 
+                              && fs->fs_table.fs_type[1] == 'S' 
+                              && fs->fs_table.fs_type[2] == 'G') {                                    //valid asgard system
+                              if(fs->fs_table.fd_ver == ASGARD_VERSION) {                             //check for asgard 3.0 (compatible)
+                                      fs->current_alloc_ptr = 0;
+                                      return fs;
+                              }
+                      }
+                      free(fs);                                                                                                       //cannot initialize file system, return null
+                      return NULL;
+              }
+              
+              uint16 fs_get_next_available_sector(fs_handle * fs)
+              {
+                      uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);      
+                      uint16 i, offset, sector_offset;
+                      uint16 pos;
+                      uint16 last_available_pos = fs->current_alloc_ptr + ALLOCATION_TABLE_OFFSET;    //start scanning position
+                      //calculate maximum alloc table size using partition size, not all alloc table is used
+                      uint16 alloc_data_offset = ALLOCATION_TABLE_OFFSET + ((fs->fs_table.fs_size / sector_size) * sizeof(uint1
+             -6));                
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 2   
+
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      for(i = last_available_pos;i<alloc_data_offset;i+=sector_size) {                                //scanning for free space
+                              ioman_read(fs->rca, i, fs_buffer, sector_size);
+                              for(offset=0, sector_offset=0;offset<sector_size;offset+=sizeof(uint16), sector_offset++) {
+                                      pos = *(uint16 *)(fs_buffer + offset);
+                                      if(pos == FS_VOID) {
+                                              free(fs_buffer);                                                                                                        //don't forget to freed buffer before return
+                                              //(sector_index * sector_size) + offset, update alloc_ptr
+                                              fs->current_alloc_ptr = (i - ALLOCATION_TABLE_OFFSET);
+                                              return (((i - ALLOCATION_TABLE_OFFSET) * sector_size) + sector_offset);
+                                      }
+                              }
+                      }
+                      fs->current_alloc_ptr = 0;                      
+                      alloc_data_offset = ALLOCATION_TABLE_OFFSET;                                                                    //set alloc_ptr to start and see if there's some fre
+             -e space
+                      for(i = alloc_data_offset;i<last_available_pos;i+=sector_size) {                                //scanning for free space
+                              ioman_read(fs->rca, i, fs_buffer, sector_size);
+                              for(offset=0, sector_offset=0;offset<sector_size;offset+=sizeof(uint16), sector_offset++) {
+                                      pos = *(uint16 *)(fs_buffer + offset);
+                                      if(pos == FS_VOID) {
+                                              free(fs_buffer);                                                                                                        //don't forget to freed buffer before return
+                                              //(sector_index * sector_size) + offset, update alloc_ptr
+                                              fs->current_alloc_ptr = (i - ALLOCATION_TABLE_OFFSET);
+                                              return (((i - ALLOCATION_TABLE_OFFSET) * sector_size) + sector_offset);
+                                      }
+                              }
+                      }
+                      fs->current_alloc_ptr = 0;                                                                      //i give up there's no available space
+                      free(fs_buffer);                                                                                        //don't forget to freed buffer before return
+                      return FS_NO_AVAILABLE_SPACE;                                                           //no available space (0xFFFF, reserved)
+              }
+              
+              void fs_set_next_sector(fs_handle * fs, uint16 sector_index, uint16 next_sector)
+              {
+                      uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 actual_address = ALLOCATION_TABLE_OFFSET + (sector_index * sizeof(uint16));              //actual address in p
+             -lain segment
+                      uint16 sector_address = actual_address / sector_size;                                                   
+                      uint16 offset = actual_address % sector_size;
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      ioman_read(fs->rca, sector_address, fs_buffer, sector_size);                                    //read a block of alloc table
+                      *(uint16 *)(fs_buffer + offset) = next_sector;                                                                  //set value
+                      ioman_write(fs->rca, sector_address, fs_buffer, sector_size);                                   //write the new block to alloc table
+                      //
+                      memset(fs_buffer, 0, sector_size);                                                                                              //clear buffer
+                      //actual_address = ALLOCATION_DATA_OFFSET + (next_sector * sector_size);                        //actual address in plain segm
+             -ent
+                      fs_write_sector(fs, next_sector, fs_buffer, sector_size);                                       //clear next sector contents, prevent any a
+             -ccess to the previous data
+                      free(fs_buffer);                                                                                                                                //just freed the buffer before return
+              }
+              
+              uint16 fs_get_next_sector(fs_handle * fs, uint16 sector_index) {
+                      uint16 sector_size = actual_sector_size(fs->fs_table.sector_size);
+                      uint16 actual_address = ALLOCATION_TABLE_OFFSET + (sector_index * sizeof(uint16));              //actual address in p
+             -lain segment
+                      uint16 sector_address = actual_address / sector_size;                                                                                                           
+                      uint16 offset = actual_address % sector_size;
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      ioman_read(fs->rca, sector_address, fs_buffer, sector_size);                                    //read a block of alloc table
+                      sector_index = *(uint16 *)(fs_buffer + offset);
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 3   
+
+                      free(fs_buffer);                                                                                                                                //just freed the buffer before return
+                      return sector_index;                                                                                                                    //biar ngirit stack, variable yang ndak dipake direuse
+              }
+              
+              uint16 fs_read_sector(fs_handle * fs, uint16 sector_index, uchar * buffer, uint16 sector_size) {
+                      //uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 actual_address = ALLOCATION_DATA_OFFSET + (sector_index * sector_size);  //actual address in plain 
+             -segment
+                      //uint16 r_size = (size > sector_size)?sector_size:size;
+                      return ioman_read(fs->rca, actual_address, buffer, sector_size);
+                      //return sector_size;           //return number of bytes readed
+              }
+              
+              uint16 fs_write_sector(fs_handle * fs, uint16 sector_index, uchar * buffer, uint16 sector_size) {
+                      //uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 actual_address = ALLOCATION_DATA_OFFSET + (sector_index * sector_size);  //actual address in plain 
+             -segment
+                      //uint16 w_size = (size > sector_size)?sector_size:size;
+                      //printf("address : %x, %x %x %x %x, %i\n", actual_address, buffer[0], buffer[1], buffer[2], buffer[3], s
+             -ector_size); getch();
+                      return ioman_write(fs->rca, actual_address, buffer, sector_size);
+                      //return sector_size;           //return number of bytes wrote
+              }
+              
+              fs_entry * fs_create_entry(fs_handle * fs, uchar type, uint16 fid, uint16 first_sector_index) {
+                      uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 sector_index = first_sector_index;
+                      uint16 next_sector, entry_sector;
+                      fs_entry * i_entry;
+                      fs_entry * entry = NULL;
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      uint16 i;
+                      //printf("first sector index : %x\n", first_sector_index);
+                      while(1) {
+                              fs_read_sector(fs, sector_index, fs_buffer, sector_size);
+                              for(i=0;i<sector_size;i+=sizeof(fs_entry)) {
+                                      i_entry = (fs_entry *)(fs_buffer + i);
+                                      //printf("scanned entry : %x\n", i_entry->fid);
+                                      if((i_entry->type & FS_TYPE_EXIST) == 0) {                                                              //this entry is non existent, replace with the new en
+             -try and writeback
+                                              i_entry->type = type | FS_TYPE_EXIST;
+                                              i_entry->fid = fid;
+                                              i_entry->size = 0;
+                                              //printf("create new entry fid : %x at sector : %x\n", i_entry->fid, sector_index);getch();
+                                              if(type & FS_TYPE_DIR) {
+                                                      entry_sector = fs_get_next_available_sector(fs);
+                                                      if(entry_sector == FS_NO_AVAILABLE_SPACE) {
+                                                              //printf("entry cannot be created\n");
+                                                              goto exit_fsc_entry;                                                                            //entry cannot be created
+                                                      } else {
+                                                              i_entry->ptr = entry_sector;
+                                                              fs_set_next_sector(fs, entry_sector, FS_EOS);
+                                                      }
+                                              } else {
+                                                      i_entry->ptr = FS_EOS;                                                                                  //didn't have any data sector
+                                              }
+                                              //printf("write new sector at sector index : %x, %x\n", sector_index, i_entry->fid); getch();
+                                              //printf("sector_size : %x\n", sector_size);getch();
+                                              fs_write_sector(fs, sector_index, fs_buffer, sector_size);                      //write back to the specified sector
+                                              entry = (fs_entry *)malloc(sizeof(fs_entry));
+                                              m_memcopy(entry, i_entry, sizeof(fs_entry));
+                                              goto exit_fsc_entry;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 4   
+
+                                      }
+                              }
+                              next_sector = fs_get_next_sector(fs, sector_index);                                                     //get next sector
+                              if(next_sector == FS_EOS) {                                                                                                     //check if next sector is unavailable
+                                      next_sector = fs_get_next_available_sector(fs);                                                 //try to look for free sector
+                                      if(next_sector == FS_EOS) {                                                                                             //no available space
+                                              goto exit_fsc_entry;                                                                                            //quit create entry operation
+                                      }
+                                      fs_set_next_sector(fs, next_sector, FS_EOS);
+                                      fs_set_next_sector(fs, sector_index, next_sector);                                              //set the new sector as next sector
+                              }
+                              sector_index = next_sector;
+                      }
+                      exit_fsc_entry:
+                      free(fs_buffer);
+                      return entry;
+              }
+              
+              void fs_update_entry(fs_handle * fs, fs_entry * entry, uint16 first_sector_index) {
+                      uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 sector_index = first_sector_index;
+                      uint16 next_sector;
+                      fs_entry * i_entry;
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      uint16 i;
+                      while(1) {
+                              fs_read_sector(fs, sector_index, fs_buffer, sector_size);
+                              for(i=0;i<sector_size;i+=sizeof(fs_entry)) {
+                                      i_entry = (fs_entry *)(fs_buffer + i);
+                                      if(i_entry->fid == entry->fid) {                                                                        //entry found, update type, size and ptr
+                                              i_entry->type = entry->type;
+                                              i_entry->rsv = entry->rsv;
+                                              i_entry->size = entry->size;
+                                              i_entry->ptr = entry->ptr;                                                                              //didn't have any data sector
+                                              fs_write_sector(fs, sector_index, fs_buffer, sector_size);              //write back to the specified sector
+                                              goto exit_fsu_entry;
+                                      }
+                              }
+                              next_sector = fs_get_next_sector(fs, sector_index);                                             //get next sector
+                              if(next_sector == FS_EOS) {                                                                                             //no available space
+                                      goto exit_fsu_entry;                                                                                            //quit create entry operation
+                              }
+                              sector_index = next_sector;
+                      }
+                      exit_fsu_entry:
+                      free(fs_buffer);
+              }
+              
+              void fs_delete_entry(fs_handle * fs, fs_entry * entry, uint16 first_sector_index) {
+                      entry->type &= ~FS_TYPE_EXIST;                                                                                                  //set type to non existent
+                      entry->size = 0;
+                      fs_unlink_sector_chain(fs, entry->ptr);                                                                                 //unlink all sector chain (data chain)
+                      fs_update_entry(fs, entry, first_sector_index);                                                                 //update entry
+              }
+              
+              void fs_unlink_sector_chain(fs_handle * fs, uint16 first_sector_index) {
+                      uint16 next_sector;
+                      uint16 sector_index = first_sector_index;                                                                               //set to first sector
+                      while(sector_index != FS_EOS) {                                                                                                 //check for end of sector
+                              next_sector = fs_get_next_sector(fs, sector_index);
+                              fs_set_next_sector(fs, sector_index, FS_VOID);                                                          //set link to void(empty) and also clear it conten
+             -t
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 5   
+
+                              sector_index = next_sector;
+                      }
+              }
+              
+              fs_file * fs_root(fs_handle * fs) {                                                                                                     //automatically return handle to the root file system, use
+             -ful for creating master file
+                      fs_file * file = (fs_file *)malloc(sizeof(fs_file));                                            
+                      file->fs = fs;
+                      file->entry.type = FS_TYPE_DIR | FS_TYPE_USER | FS_TYPE_SYS | FS_TYPE_EXIST;
+                      file->entry.fid = 0;
+                      file->entry.size = 0;
+                      file->entry.ptr = 0;                                                                                                                    //always 0 for root file system
+                      file->sector_index = 0;
+                      file->data_ptr = 0;
+                      return file;
+              }
+              
+              fs_file * fs_fopen_q(fs_handle * fs, uint16 * fids, uchar lsize, uchar mode) {
+                      uint16 sector_size = (uint16)actual_sector_size(fs->fs_table.sector_size);
+                      uint16 sector_index = 0;
+                      uint16 first_sector_index = sector_index;
+                      uint16 fid;
+                      uchar i;
+                      uint16 j;
+                      fs_entry * entry;
+                      fs_file * file = NULL;
+                      uchar * fs_buffer = (uchar *)malloc(sector_size);
+                      for(i=0;i<lsize;i++) {
+                              fid = *(uint16 *)(fids + (i * sizeof(uint16)));
+                              fs_read_sector(fs, sector_index, fs_buffer, sector_size);
+                              sector_index = fs_get_next_sector(fs, sector_index);                                            //get next sector (if available)
+                              for(j=0;j<sector_size;j+=sizeof(fs_entry)) {                                                            //check for all entry list in the specified sector
+                                      entry = (fs_entry *)(fs_buffer + j);
+                                      if(entry->fid == fid) {                                                                                                 //check mode here
+                                              if(entry->type & FS_TYPE_EXIST && (entry->type & mode) != 0) {          //file exist and accessible
+                                                      if(i<(lsize - 1)) {                                                                                             //the selected file
+                                                              file = (fs_file *)malloc(sizeof(fs_file));                                      //the selected file, automatically create fs_file
+                                                              file->fs = fs;
+                                                              m_memcopy(&file->entry, entry, sizeof(fs_entry));
+                                                              file->sector_index = first_sector_index;
+                                                              file->data_ptr = 0;
+                                                              goto exit_fsopen;
+                                                      } else if(entry->type & FS_TYPE_DIR) {                                                  //check if directory, then iterate through it
+                                                              sector_index = entry->ptr;
+                                                              first_sector_index = sector_index;                                                      //change first_sector_index to the new directory
+                                                      }
+                                              }
+                                      }
+                              }
+                              if(sector_index == FS_EOS) {                                                                                            //have no next sector
+                                      goto exit_fsopen;
+                              }
+                      }
+                      exit_fsopen:
+                      free(fs_buffer);
+                      return file;
+              }
+              
+              fs_file * fs_fopen(fs_file * parent, uint16 fid, uchar mode) {
+                      uint16 sector_size;
+                      uint16 sector_index;
+                      uint16 j;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 6   
+
+                      fs_entry * entry;
+                      fs_file * file = NULL;
+                      uchar * fs_buffer;
+                      sector_index = parent->entry.ptr;
+                      sector_size = (uint16)actual_sector_size(parent->fs->fs_table.sector_size);
+                      m_mem_dump();
+                      fs_buffer = (uchar *)malloc(sector_size);
+                      //printf("sector_size : %i\n", sector_size);
+                      if(parent == NULL) goto exit_fsopen;                                                                                    //check for parent
+                      while(sector_index != FS_EOS) {
+                              //printf("parent : %x\n", parent);
+                              //m_mem_dump();
+                              fs_read_sector(parent->fs, sector_index, fs_buffer, sector_size);
+                              //printf("ggg fs.c line 291 %x %x\n", parent, fs_buffer);
+                              sector_index = fs_get_next_sector(parent->fs, sector_index);                            //get next sector (if available)
+                              for(j=0;j<sector_size;j+=sizeof(fs_entry)) {                                                            //check for all entry list in the specified sector
+                                      entry = (fs_entry *)(fs_buffer + j);
+                                      //printf("entry->fid : %x\n", entry->fid);
+                                      if(entry->fid == fid) {                                                                                                 //fid found
+                                              //printf("file mode : %x, current mode :%x\n\n\n\n", entry->type, mode);
+                                              if(entry->type & FS_TYPE_EXIST && (entry->type & mode) != 0) {          //file exist and accessible                                                                                     
+             -        //the selected file
+                                                      file = (fs_file *)malloc(sizeof(fs_file));                                              //the selected file, automatically create fs_file
+                                                      file->fs = parent->fs;
+                                                      m_memcopy(&file->entry, entry, sizeof(fs_entry));
+                                                      file->sector_index = parent->sector_index;
+                                                      file->data_ptr = 0;
+                                                      goto exit_fsopen;
+                                              }
+                                      }
+                              }
+                              getch();
+                              if(sector_index == FS_EOS) {                                                                                            //have no next sector
+                                      goto exit_fsopen;
+                              }
+                      }
+                      exit_fsopen:
+                      free(fs_buffer);
+                      return file;
+              }
+              
+              uint16 fs_fwrite(fs_file * file, uchar * buffer, uint16 size) {
+                      uint16 sector_size = (uint16)actual_sector_size(file->fs->fs_table.sector_size);
+                      uint16 sector_index = file->entry.ptr;                                                          //first data sector
+                      uint16 elapsed_sector = file->data_ptr / sector_size;                           //number of sector elapsed until data_ptr
+                      uint16 sector_offset = file->data_ptr % sector_size;                            //offset of sector to the data at the specified d
+             -ata_ptr
+                      uint16 next_sector;                                                                                                     //next sector index
+                      uint16 w_size = 0;                                                                                                      //number of bytes wrote
+                      uint16 l_size;                                                                                                          //local size for memory copy read->copy->write
+                      uint16 i;                                                                                                                       
+                      uchar * fs_buffer;
+                      if(file->entry.type & FS_TYPE_DIR) return 0;                                            //unable to write directory
+                      if(sector_index == FS_EOS) {
+                              next_sector = fs_get_next_available_sector(file->fs);                   //try to look for free sector
+                              if(next_sector == FS_EOS) {                                                                             //no available space
+                                      goto exit_write_sequence;                                                                       //quit write operation
+                              }
+                              fs_set_next_sector(file->fs, next_sector, FS_EOS);
+                              file->entry.ptr = next_sector;                                                                  //change entry data ptr
+                              sector_index = next_sector;                                     
+                              fs_update_entry(file->fs, &file->entry, file->sector_index);            //update entry
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 7   
+
+                              file->data_ptr = 0;                                                                                             //clear file->data_ptr if one already exist
+                              elapsed_sector = file->data_ptr / sector_size;                                  //re-calculate elapsed_sector
+                              sector_offset = file->data_ptr % sector_size;                                   //re-calculate sector_offset
+                      }
+                      fs_buffer = (uchar *)malloc(sector_size);                                                       //allocate new buffer
+                      for(i=0;i<elapsed_sector;i++) {                                                                         //set sector_index
+                              sector_index = fs_get_next_sector(file->fs, sector_index);
+                      }
+                      //for(i=0;i<size;i+=sector_size) {
+                      while(size > 0) {
+                              fs_read_sector(file->fs, sector_index, fs_buffer, sector_size);
+                              l_size = (sector_size - sector_offset);
+                              l_size = (size > l_size)? l_size : size;
+                              size -= l_size;
+                              m_memcopy((uchar *)(fs_buffer + sector_offset), (uchar *)(buffer + w_size), l_size);
+                              w_size += l_size;
+                              fs_write_sector(file->fs, sector_index, fs_buffer, sector_size);
+                              next_sector = fs_get_next_sector(file->fs, sector_index);
+                              if((int32)size > 0 && next_sector == FS_EOS) {                                  //jika next sector tidak tersedia dan masih ada data 
+             -yang tersisa, the use of uint16 might cause overflow so cast it to int32
+                                      next_sector = fs_get_next_available_sector(file->fs);           //try to look for free sector
+                                      if(next_sector == FS_EOS) {                                                                     //no available space
+                                              goto exit_write_sequence;
+                                      }
+                                      fs_set_next_sector(file->fs, next_sector, FS_EOS);                      //set next_sector->next = FS_EOS, the sector->next
+             - might be 0x0000, this prevent the concatenation with sector index 0
+                                      fs_set_next_sector(file->fs, sector_index, next_sector);        //set the new sector as next sector
+                              }
+                              sector_index = next_sector;
+                              sector_offset = 0;                                                                                                              //clear offset
+                      }
+                      exit_write_sequence:
+                      if((file->data_ptr + w_size) > file->entry.size) {                                      //check if number of bytes wrote exceeds the file 
+             -size
+                              file->entry.size = (file->data_ptr + w_size);                                   //change entry size
+                              fs_update_entry(file->fs, &file->entry, file->sector_index);            //update entry
+                      }
+                      file->data_ptr = (file->data_ptr + w_size);                                                     //update file->data_ptr for next operation
+                      free(fs_buffer);
+                      return w_size;
+              }
+              
+              uint16 fs_fread(fs_file * file, uchar * buffer, uint16 size) {
+                      uint16 sector_size = (uint16)actual_sector_size(file->fs->fs_table.sector_size);
+                      uint16 sector_index = file->entry.ptr;                                                          //first data sector
+                      uint16 elapsed_sector = file->data_ptr / sector_size;                           //number of sector elapsed until data_ptr
+                      uint16 sector_offset = file->data_ptr % sector_size;                            //offset of sector to the data at the specified d
+             -ata_ptr
+                      uint16 next_sector;                                                                                                     //next sector index
+                      uint16 r_size = 0;                                                                                                      //number of bytes wrote
+                      uint16 l_size;                                                                                                          //local size for memory copy read->copy
+                      uint16 i;                                                                                                                       
+                      uchar * fs_buffer;
+                      if(file->entry.type & FS_TYPE_DIR) return 0;                                            //unable to read directory
+                      if(sector_index == FS_EOS) {
+                              return 0;
+                      }
+                      fs_buffer = (uchar *)malloc(sector_size);                                                       //allocate new buffer
+                      for(i=0;i<elapsed_sector;i++) {                                                                         //set sector_index
+                              sector_index = fs_get_next_sector(file->fs, sector_index);
+                      }
+                      //for(i=0;i<size;i+=sector_size) {
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 8   
+
+                      while(size > 0) {
+                              fs_read_sector(file->fs, sector_index, fs_buffer, sector_size);
+                              l_size = (sector_size - sector_offset);
+                              l_size = (size > l_size)? l_size : size;
+                              size -= l_size;
+                              m_memcopy((uchar *)(buffer + r_size), (uchar *)(fs_buffer + sector_offset), l_size);
+                              r_size += l_size;
+                              next_sector = fs_get_next_sector(file->fs, sector_index);
+                              if(next_sector == FS_EOS) {                                                                             //jika next sector tidak tersedia
+                                      goto exit_read_sequence;
+                              }
+                              sector_index = next_sector;
+                              sector_offset = 0;                                                                                                              //clear offset
+                      }
+                      exit_read_sequence:
+                      file->data_ptr = (file->data_ptr + r_size);                                                     //update file->data_ptr for next operation
+                      free(fs_buffer);
+                      return r_size;
+              }
+              
+              
+              //format and initialize file system
+              fs_handle * fs_format(hw_rca * rca, uint32 partition_size, uchar requested_sector_size)
+              {
+                      uchar allocated_sector_size;
+                      ef_table * fs_table;
+                      //uint16 alloc_data_offset = ALLOCATION_TABLE_OFFSET + ((partition_size / sector_size) * sizeof(uint16));
+                      //check for partition_size = f(sector_size)
+                      uint32 maximum_partition;
+                      uchar * fs_buffer;
+                      uint16 sector_size;
+                      uint16 i;
+                      fs_handle * fs;
+                      fs_file * root;
+                      partition_size = partition_size - ALLOCATION_DATA_OFFSET;               //when user asked for 64K then the actual part
+             -ition size is 64K-2K
+                      //the system automatically corrected the size of sector size according to the partition size requested, m
+             -aximum sector size = 2048
+                      for(allocated_sector_size=requested_sector_size;allocated_sector_size < 128;allocated_sector_size<<=1) {
+                              sector_size = (uint16)actual_sector_size(allocated_sector_size);
+                              maximum_partition = (ALLOCATION_TABLE_SIZE / sizeof(uint16)) * sector_size;             //calculate maximum partiti
+             -on size
+                              if(maximum_partition > partition_size) break;                                                                   //check for partition size capability
+                      }
+                      fs_buffer = (uchar *)malloc(sector_size);
+                      memset(fs_buffer, 0, allocated_sector_size);                                                                            //clear buffer for alloc table and file system conf
+                      for(i=0;i<ALLOCATION_DATA_OFFSET;i+=sector_size) {
+                              ioman_write(rca, i, fs_buffer, sector_size);
+                      }
+                      fs_table = (ef_table *)malloc(sizeof(ef_table));
+                      fs_table->fs_type[0] = 'A';
+                      fs_table->fs_type[1] = 'S';
+                      fs_table->fs_type[2] = 'G';
+                      fs_table->fd_ver = ASGARD_VERSION;
+                      fs_table->fs_mod = 16;                                                                                                                          //16 bit or 32 bit, reserved for future use (default 16)
+                      fs_table->sector_size = allocated_sector_size;
+                      fs_table->fs_size = partition_size;
+                      ioman_write(rca, 0, (uchar *)fs_table, sizeof(ef_table));
+                      free(fs_table);                                                                                                                                 //freed fs_table, we didn't need this anymore
+                      free(fs_buffer);                                                                                                                                        //freed fs_buffer, we didn't need this anymore
+                      fs =  fs_init(rca);                                                                                                                                     //initialize file system
+                      //printf("next available sector : %x\n", fs_get_next_available_sector(fs));
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 9   
+
+                      fs_set_next_sector(fs, 0, FS_EOS);                                                                                                      //allocate sector 0 for root file system
+                      //fs_entry * fs_create_entry(fs, FS_TYPE_USER | FS_TYPE_DIR | FS_TYPE_SYS | FS_TYPE_EXIST, 0x3f00, 0);
+                      root = fs_root(fs);
+                      free(fs_mkdir(root, 0x3f00, FS_TYPE_USER | FS_TYPE_DIR | FS_TYPE_SYS));
+                      free(root);
+                      return fs;
+              }
+              
+              fs_file * fs_mkdir(fs_file * parent, uint16 fid, uchar mode) {
+                      fs_entry * entry;
+                      fs_file * file;
+                      if((parent->entry.type & FS_TYPE_DIR) == 0) return NULL;
+                      mode = mode | FS_TYPE_DIR | FS_TYPE_EXIST;
+                      file = (fs_file *)malloc(sizeof(fs_file));
+                      entry = fs_create_entry(parent->fs, mode, fid, parent->entry.ptr);
+                      file->fs = parent->fs;
+                      m_memcopy(&file->entry, entry, sizeof(fs_entry));
+                      file->sector_index = parent->entry.ptr;
+                      file->data_ptr = 0;
+                      free(entry);
+                      return file;
+              }
+              
+              fs_file * fs_fcreate(fs_file * parent, uint16 fid, uchar mode) {
+                      fs_entry * entry;
+                      fs_file * file;
+                      if((parent->entry.type & FS_TYPE_DIR) == 0) return NULL;
+                      mode |= FS_TYPE_EXIST;
+                      mode &= ~FS_TYPE_DIR;
+                      file = (fs_file *)malloc(sizeof(fs_file));
+                      printf("parent->entry.ptr : %x\n", parent->entry.ptr);getch();
+                      entry = fs_create_entry(parent->fs, mode, fid, parent->entry.ptr);
+                      file->fs = parent->fs;
+                      m_memcopy(&file->entry, entry, sizeof(fs_entry));
+                      file->sector_index = parent->entry.ptr;
+                      file->data_ptr = 0;
+                      free(entry);
+                      return file;
+              }
+              
+              void fs_rmfile(fs_file * file, uchar mode) {
+                      if(file->entry.type & FS_TYPE_EXIST && (file->entry.type & mode) != 0)
+                              fs_delete_entry(file->fs, &file->entry, file->sector_index);
+              }
+              
+              uint16 fs_freespace()
+              {
+                      //ambil space bebas memanfaatkan allocation table
+                      //nilai yang direturn adalah jumlah cluster yang bebas
+                      return 0;
+                      
+              }
+              
+              //reserve for future use, lebih efektif untuk media mekanik
+              void fs_defrag()
+              {
+                      //gunakan algoritma dfs pada file_dirlist untuk mencari file yang terfragmentasi
+                      //proses ini bisa lama
+                      /*uint16 cluster_no=0;                  //pilih root, MF
+                      uint16 node_stack[QUEUE_SIZE];  //nodes queue, maksimum hanya menyimpan 5 child
+                      uint16 space_stack[QUEUE_SIZE];
+                      uchar stack_index=1;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 10  
+
+                      uchar space_index=1;
+                      char i,j=0,k;
+                      ef_header *curfile;                             //inisialisasi
+                      char buffer[5] = { 0,0,0,0,0 };
+                      get_next_child:
+                      curfile = file_get_header(cluster_no);
+                      if(curfile->sibling!=0) {
+                              //enqueue child
+                              space_stack[space_index++] = j;
+                              node_stack[stack_index++] = curfile->sibling;
+                      }
+                      //printf        if(curfile->child!=0) {
+                              putchar(0xbf);
+                              putchar(0x0a);
+                              cluster_no = curfile->child;
+                              j=j+5;
+                              goto get_next_child;
+                      }
+                      putchar(0x0a);
+                      if(stack_index==1) { return; }
+                      //dequeue
+                      cluster_no = node_stack[--stack_index];
+                      j = space_stack[--space_index]; 
+                      goto get_next_child;*/
+              }
+              
+              void fs_dismount(fs_handle * fs)
+              {
+                      //ioman_close();
+                      hw_rca * rca = fs->rca;
+                      free(fs);
+                      ioman_close(rca);
+              }
+              #endif
+ 563          
+ 564          
+ 565          #if ASGARD_VERSION == 4
+ 566          //static fs_chain _chunkroot;
+ 567          fs_table fs_info;
+ 568          
+ 569          uchar fs_init(void) {
+ 570   1              //fs_table * table;
+ 571   1              //table = (fs_table *)m_alloc(sizeof(fs_table));
+ 572   1              ioman_read_buffer(0, &fs_info, sizeof(fs_table));               //load fs_info from memory
+*** WARNING C182 IN LINE 572 OF ASGARD\FS.C: pointer to different objects
+ 573   1              if(fs_info.fs_type[0] == 'A' &&
+ 574   1                      fs_info.fs_type[1] == 'S' &&
+ 575   1                      fs_info.fs_type[2] == 'G') {
+ 576   2                      if(fs_info.fs_ver != ASGARD_VERSION) { return FS_WRONG_VERSION; }
+ 577   2                      //ioman_read_buffer(ALLOCATION_DATA_OFFSET, &_chunkroot, sizeof(fs_chain));
+ 578   2                      //m_free(table);
+ 579   2                      //initialize file system security
+ 580   2                      chv_init();
+ 581   2                      return FS_INITIALIZED;
+ 582   2              }
+ 583   1              //m_free(table);
+ 584   1              return FS_UNFORMATTED;
+ 585   1      } 
+ 586          
+ 587          uint32 fs_freespace(void) _REENTRANT_ {
+ 588   1              uint32 freespace;
+ 589   1              //fs_table * table;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 11  
+
+ 590   1              //table = (fs_table *)m_alloc(sizeof(fs_table));
+ 591   1              //ioman_read_buffer(0, (uchar *)table, sizeof(fs_table));
+ 592   1              freespace = (fs_info.fs_size - fs_get_allocated_space()) - ALLOCATION_DATA_OFFSET;
+ 593   1              //m_free(table);
+ 594   1              return freespace;
+ 595   1      }
+ 596          
+ 597          uchar code _fsh_mask[] = "";
+ 598          uchar fs_generate_FSH(uchar * buffer) _REENTRANT_ {
+ 599   1              #define HASH_SIZE               0x40
+ 600   1              uchar temp[HASH_SIZE];
+ 601   1              //uint32 locator = 0x200;                       //start of file system data
+ 602   1              uchar i = 0, j;
+ 603   1              memset(buffer, 0, HASH_SIZE);           //clear output buffer
+ 604   1              memset(temp, 0, HASH_SIZE);                     //clear temp 
+ 605   1              ioman_read_buffer(ALLOCATION_DATA_OFFSET, temp, HASH_SIZE);
+ 606   1              //metadata hash
+ 607   1              while(((fs_chain *)temp)->next != 0) {
+ 608   2                      ioman_read_buffer(((fs_chain *)temp)->next, temp, HASH_SIZE);
+ 609   2                      for(i=0;i<HASH_SIZE;i++) {
+ 610   3                              buffer[i] ^= temp[i];
+ 611   3                      }
+ 612   2              }
+ 613   1              //chaining mechanism
+ 614   1              for(i=(HASH_SIZE - 8);i!=0;i-=8) {
+ 615   2                      for(j=0;j<8;j++) {
+ 616   3                              buffer[i] ^= buffer[i+8];
+ 617   3                      }
+ 618   2              }
+ 619   1              //mask with program code
+ 620   1              for(i=0;i<HASH_SIZE;i++) {
+ 621   2                      buffer[i] ^= _fsh_mask[i];
+ 622   2              }
+ 623   1              return HASH_SIZE;
+ 624   1      }
+ 625          
+ 626          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint32 fs_get_allocated_space(void) _REENTRANT_ { 
+                      uint32 allocated_space = 0;
+                      uint32 alloc_pos;
+              #else
+ 631          uint16 fs_get_allocated_space(void) _REENTRANT_ {
+ 632   1              uint16 alloc_pos;                
+ 633   1              uint16 allocated_space = 0;
+ 634   1      #endif
+ 635   1              //fs_chain * alloc_ptr = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 636   1              fs_chain fs_chdr;
+ 637   1              alloc_pos = ALLOCATION_DATA_OFFSET;
+ 638   1              //memcpy(&fs_chdr, &_chunkroot, sizeof(fs_chain));
+ 639   1              ioman_read_buffer(ALLOCATION_DATA_OFFSET, &fs_chdr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 639 OF ASGARD\FS.C: pointer to different objects
+ 640   1              get_next_chain:
+ 641   1              if(fs_chdr.next == 0) {         //allocate new chunk at the end of the heap
+ 642   2                      allocated_space += fs_chdr.size + sizeof(fs_chain);
+ 643   2                      //m_free(alloc_ptr);
+ 644   2                      return allocated_space;
+ 645   2              }
+ 646   1              //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+ 647   1              //alloc_ptr_temp = alloc_ptr;
+ 648   1              //alloc_pos_temp = alloc_pos;
+ 649   1              //memcopy(alloc_ptr_temp, alloc_ptr, 0, sizeof(fs_chain));
+ 650   1              //alloc_ptr = alloc_ptr->next;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 12  
+
+ 651   1              allocated_space += fs_chdr.size + sizeof(fs_chain);
+ 652   1              alloc_pos = fs_chdr.next;
+ 653   1              ioman_read_buffer(alloc_pos, &fs_chdr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 653 OF ASGARD\FS.C: pointer to different objects
+ 654   1              goto get_next_chain;
+ 655   1      }
+ 656          
+ 657          extern BYTEX    FlashBuffer[512];
+ 658          uint16 fs_format(uint32 size) _REENTRANT_ {
+ 659   1              //fs_table * table;
+ 660   1              register uint16 status;
+ 661   1              df_header * head;
+ 662   1              fs_chain _chunkroot;
+ 663   1              #if FS_ADDRESS_WIDTH == AW_32BIT
+                      uint32 address;
+                      #else
+ 666   1              uint16 address;
+ 667   1              #endif
+ 668   1              //table = (fs_table *)m_alloc(sizeof(fs_table));
+ 669   1              //initialize file system info
+ 670   1              ioman_erase_all();
+ 671   1              fs_info.fs_type[0] = 'A';                                       //default tag
+ 672   1              fs_info.fs_type[1] = 'S';
+ 673   1              fs_info.fs_type[2] = 'G';
+ 674   1              fs_info.fs_ver = ASGARD_VERSION;                                //4
+ 675   1              fs_info.fs_mod = FS_ADDRESS_WIDTH;                      //16 bit or 32 bit, reserved for future use (default 16)
+ 676   1              fs_info.sector_size = 0;                                        //no sector available (only for AS30), not used
+ 677   1              fs_info.fs_size = size;                                         //file system limitation
+ 678   1              status = ioman_write_buffer(0, &fs_info, sizeof(fs_table));
+*** WARNING C182 IN LINE 678 OF ASGARD\FS.C: pointer to different objects
+ 679   1              if(status != APDU_SUCCESS) goto exit_format;
+ 680   1              //initialize fs_alloc / linked list structure
+ 681   1              _chunkroot.size = 0;            //chunkroot tidak bisa di s_free
+ 682   1              _chunkroot.next = NULL;
+ 683   1              _chunkroot.prev = ALLOCATION_DATA_OFFSET;
+ 684   1              address = ALLOCATION_DATA_OFFSET + (sizeof(fs_chain) + sizeof(df_header) + (sizeof(df_header) % 4) );
+ 685   1              status = ioman_write_buffer(address, (uchar *)&_chunkroot, sizeof(fs_chain));
+ 686   1              if(status != APDU_SUCCESS) goto exit_format;
+ 687   1              _chunkroot.prev = 0;
+ 688   1              _chunkroot.size = sizeof(df_header);
+ 689   1              _chunkroot.next = address;
+ 690   1              status = ioman_write_buffer(ALLOCATION_DATA_OFFSET, (uchar *)&_chunkroot, sizeof(fs_chain));
+ 691   1              if(status != APDU_SUCCESS) goto exit_format;
+ 692   1              //initialize root file system / tree structure (Master File, 0x3F00)
+ 693   1              address = ALLOCATION_DATA_OFFSET + sizeof(fs_chain);
+ 694   1              head = (df_header *)m_alloc(sizeof(df_header));
+ 695   1              head->parent = 0;
+ 696   1              head->sibling = 0;
+ 697   1              head->child = 0;                                                                                        //not use, only for cyclic
+ 698   1              head->fid = FID_MF;
+ 699   1              head->type = T_MF;
+ 700   1              head->length = 9;                                                                                       //length of the following data
+ 701   1              head->file_char = 1;                                                                            //not clarified
+ 702   1              head->num_of_df = 0;
+ 703   1              head->num_of_ef = 0;
+ 704   1              head->num_of_chv = 2;                                                                           //just set to 2
+ 705   1              status = ioman_write_buffer(address, (uchar *)head, sizeof(df_header));         //write the specified allocated 
+             -address
+ 706   1              if(status != APDU_SUCCESS) goto exit_format;
+ 707   1              
+ 708   1              //m_free(table);
+ 709   1              //#ifdef _X86_ARCH                                                                              //PC only simulation
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 13  
+
+ 710   1              //initialize default file system security
+ 711   1              chv_create(1, "1234\xFF\xFF\xFF\xFF", "12345678", 3, 10);                       //create chv 1  (default disable)
+ 712   1              chv_create(2, "1234\xFF\xFF\xFF\xFF", "12345678", 3, 10);                       //create chv 2  (default disable)
+ 713   1              chv_create(4, "12345678", "12345678", 100, 100);                        //create chv 4 (admin login)
+ 714   1              chv_create(6, "12345678", "12345678", 100, 100);                        //create chv 6 (system login)
+ 715   1              chv_enable(2, "1234\xFF\xFF\xFF\xFF");                          //automatically enable chv 2
+ 716   1              chv_enable(4, "12345678");                                                      //automatically enable chv 4
+ 717   1              chv_enable(6, "12345678");                                                      //automatically enable chv 6
+ 718   1              chv_init();
+ 719   1              exit_format:
+ 720   1              m_free(head);
+ 721   1              return status;
+ 722   1              //#endif
+ 723   1      }
+ 724          
+ 725          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint32 fs_alloc(uint32 size) _REENTRANT_ {
+                      uint32 alloc_pos;
+                      uint32 alloc_pos_temp;
+                      uint32 candidate_pos;
+              #else
+ 731          uint16 fs_alloc(uint16 size) _REENTRANT_ {
+ 732   1              uint16 alloc_pos;
+ 733   1              uint16 alloc_pos_temp;
+ 734   1              uint16 candidate_pos;
+ 735   1      #endif
+ 736   1              fs_chain * alloc_ptr = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 737   1              fs_chain * alloc_ptr_temp = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 738   1              fs_chain * candidate = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 739   1              alloc_pos = ALLOCATION_DATA_OFFSET;
+ 740   1              //printf("aaa\n");
+ 741   1              //memcpy(alloc_ptr, &_chunkroot, sizeof(fs_chain));      
+ 742   1              ioman_read_buffer(ALLOCATION_DATA_OFFSET, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 742 OF ASGARD\FS.C: pointer to different objects
+ 743   1              //#ifdef OS_uCOS_II_H
+ 744   1              //OS_ENTER_CRITICAL();
+ 745   1              //#endif
+ 746   1              //printf("aa\n");
+ 747   1              //size = size + (4 - (size % 4));               //4 byte align
+ 748   1              get_next_chain:
+ 749   1              if(alloc_ptr->next == 0) {              //allocate new chunk at the end of the heap
+ 750   2                      alloc_ptr->size = size;
+ 751   2                      //check for file system limit
+ 752   2                      if(((uint32)alloc_pos + sizeof(fs_chain) + size) >= (fs_info.fs_size - sizeof(fs_chain))) {
+ 753   3                              m_free(candidate);
+ 754   3                              m_free(alloc_ptr_temp);
+ 755   3                              m_free(alloc_ptr);
+ 756   3                              return 0;                               //return 0 if there is no available space       
+ 757   3                      }
+ 758   2                      alloc_ptr->next = (alloc_pos + sizeof(fs_chain) + size);
+ 759   2                      //disini cek STACK POINTER, dikhawatirkan akan bertabrakan dengan stack, sebaiknya antara stack pointer 
+             -dan heap dibuat
+ 760   2                      //GAP yang cukup lebar karena dikhawatirkan ukuran stack akan bertambah setelah keluar dari fungsi s_all
+             -oc karena automatic allocation
+ 761   2                      alloc_ptr->prev = alloc_pos_temp;
+ 762   2                      //alloc_ptr_temp = alloc_ptr->next;     //berubah fungsi untuk menjadi pointer chunk selanjutnya
+ 763   2                      alloc_pos_temp = alloc_ptr->next;
+ 764   2                      alloc_ptr_temp->prev = alloc_pos;
+ 765   2                      alloc_ptr_temp->next = 0;
+ 766   2                      alloc_ptr_temp->size = 0;
+ 767   2                      ioman_write_buffer(alloc_pos_temp, alloc_ptr_temp, sizeof(fs_chain));
+*** WARNING C182 IN LINE 767 OF ASGARD\FS.C: pointer to different objects
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 14  
+
+ 768   2                      ioman_write_buffer(alloc_pos, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 768 OF ASGARD\FS.C: pointer to different objects
+ 769   2                      //alloc_ptr = alloc_ptr_temp;
+ 770   2                      //#ifdef MIDGARD_DEBUG_ACTIVATED
+ 771   2                      //#endif
+ 772   2                      //Uart_Printf("%d\n", alloc_ptr);
+ 773   2                      //#ifdef OS_uCOS_II_H
+ 774   2                      //OS_EXIT_CRITICAL();
+ 775   2                      //#endif
+ 776   2                      //_total_heap += alloc_ptr->size;
+ 777   2                      //if(_total_heap > _maximum_total_heap) {
+ 778   2                      //      printf("Maximum total heap : %d\n", _total_heap);
+ 779   2                      //      _maximum_total_heap = _total_heap;
+ 780   2                      //}
+ 781   2                      m_free(candidate);
+ 782   2                      m_free(alloc_ptr_temp);
+ 783   2                      m_free(alloc_ptr);
+ 784   2                      return (alloc_pos + sizeof(fs_chain));  //return pointer sekarang + ukuran header karena *[header]+[body]
+ 785   2              }
+ 786   1              //temp = alloc_ptr->next;               //isi dengan pointer chunk sebelumnya
+ 787   1              //alloc_ptr_temp = alloc_ptr;
+ 788   1              alloc_pos_temp = alloc_pos;
+ 789   1              memcpy(alloc_ptr_temp, alloc_ptr, sizeof(fs_chain));
+ 790   1              //alloc_ptr = alloc_ptr->next;
+ 791   1              alloc_pos = alloc_ptr->next;
+ 792   1              ioman_read_buffer(alloc_ptr->next, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 792 OF ASGARD\FS.C: pointer to different objects
+ 793   1              if(alloc_pos >= (alloc_pos_temp + alloc_ptr_temp->size + sizeof(fs_chain) + sizeof(fs_chain) + size + (si
+             -ze % 4))) {
+ 794   2                      //allocate new heap using FFA (First Fit Algorithm)
+ 795   2                      //Uart_Printf("allocate previous heap\n");
+ 796   2                      candidate_pos = (alloc_pos_temp + alloc_ptr_temp->size + sizeof(fs_chain));
+ 797   2                      //ioman_read_buffer(candidate_pos, candidate, sizeof(fs_chain));
+ 798   2                      //#ifdef MIDGARD_DEBUG_ACTIVATED
+ 799   2                      //printf(" * creating new chunk with size %i\n", size);
+ 800   2                      //#endif
+ 801   2                      //candidate->size = size + (size % 4);
+ 802   2                      candidate->size = size;
+ 803   2                      alloc_ptr_temp->next = candidate_pos;
+ 804   2                      candidate->prev = alloc_pos_temp;
+ 805   2                      candidate->next = alloc_pos;
+ 806   2                      alloc_ptr->prev = candidate_pos;
+ 807   2                      ioman_write_buffer(candidate_pos, candidate, sizeof(fs_chain));
+*** WARNING C182 IN LINE 807 OF ASGARD\FS.C: pointer to different objects
+ 808   2                      ioman_write_buffer(alloc_pos_temp, alloc_ptr_temp, sizeof(fs_chain));
+*** WARNING C182 IN LINE 808 OF ASGARD\FS.C: pointer to different objects
+ 809   2                      ioman_write_buffer(alloc_pos, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 809 OF ASGARD\FS.C: pointer to different objects
+ 810   2                      //Uart_Printf("%d %d %d %d\n", candidate->prev, candidate, candidate->size, candidate->next);
+ 811   2                      //#ifdef MIDGARD_DEBUG_ACTIVATED
+ 812   2                      //printf(" * address of new chunk at %x\n", (uint32)candidate);
+ 813   2                      //#endif
+ 814   2                      //#ifdef OS_uCOS_II_H
+ 815   2                      //Uart_Printf("exit\n");
+ 816   2                      //OS_EXIT_CRITICAL();
+ 817   2                      //#endif
+ 818   2                      //_total_heap += candidate->size;
+ 819   2                      //if(_total_heap > _maximum_total_heap) {
+ 820   2                      //      printf("Maximum total heap : %d\n", _total_heap);
+ 821   2                      //      _maximum_total_heap = _total_heap;
+ 822   2                      //}
+ 823   2                      m_free(candidate);
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 15  
+
+ 824   2                      m_free(alloc_ptr_temp);
+ 825   2                      m_free(alloc_ptr);
+ 826   2                      return candidate_pos + sizeof(fs_chain);
+ 827   2              }
+ 828   1              goto get_next_chain;
+ 829   1      }
+ 830          
+ 831          #if FS_ADDRESS_WIDTH == AW_32BIT
+              uint16 fs_dealloc(uint32 address) _REENTRANT_ {
+                      uint32 alloc_pos;
+                      uint32 alloc_prev_pos;
+                      uint32 alloc_next_pos;
+              #else
+ 837          uint16 fs_dealloc(uint16 address) _REENTRANT_ {
+ 838   1              uint16 alloc_pos;
+ 839   1              uint16 alloc_prev_pos;
+ 840   1              uint16 alloc_next_pos;
+ 841   1      #endif
+ 842   1              register uint16 status;
+ 843   1              //#ifdef OS_uCOS_II_H
+ 844   1              //#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register 
+             -*/
+ 845   1          //OS_CPU_SR  cpu_sr;
+ 846   1          //#endif
+ 847   1          //#endif
+ 848   1              fs_chain * alloc_ptr = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 849   1              fs_chain * alloc_prev = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 850   1              fs_chain * alloc_next = (fs_chain *)m_alloc(sizeof(fs_chain));
+ 851   1              alloc_pos = address - sizeof(fs_chain);
+ 852   1              ioman_read_buffer(alloc_pos, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 852 OF ASGARD\FS.C: pointer to different objects
+ 853   1              alloc_prev_pos = alloc_ptr->prev;
+ 854   1              ioman_read_buffer(alloc_prev_pos, alloc_prev, sizeof(fs_chain));
+*** WARNING C182 IN LINE 854 OF ASGARD\FS.C: pointer to different objects
+ 855   1              alloc_next_pos = alloc_ptr->next;
+ 856   1              ioman_read_buffer(alloc_next_pos, alloc_next, sizeof(fs_chain));
+*** WARNING C182 IN LINE 856 OF ASGARD\FS.C: pointer to different objects
+ 857   1      
+ 858   1              if(address == 0) { status = APDU_MEMORY_PROBLEM; goto exit_dealloc; }
+ 859   1              if(alloc_prev == 0) { status = APDU_SUCCESS; goto exit_dealloc; }               //this memory is already freed
+ 860   1              if(alloc_ptr->size == 0) { status = APDU_SUCCESS; goto exit_dealloc; }          //this memory is already freed
+ 861   1              //if(alloc_next_pos == 0) {             //this is the last chunk
+ 862   1                      //printf("this is the last chunk\n");   
+ 863   1              //}
+ 864   1              //#ifdef OS_uCOS_II_H
+ 865   1              //OS_ENTER_CRITICAL();
+ 866   1              //#endif
+ 867   1              //alloc_prev = alloc_ptr->prev;
+ 868   1              #ifdef MIDGARD_DEBUG_ACTIVATED
+                      //printf(" * delete chunk at %x\n", (intptr)alloc_ptr);
+                      //printf(" * chunk at %x, next chunk at ", (intptr)alloc_prev);
+                      #endif
+ 872   1              //_total_heap -= alloc_ptr->size;
+ 873   1              //alloc_ptr = alloc_ptr->next;
+ 874   1              if(alloc_pos == ALLOCATION_DATA_OFFSET) {
+ 875   2                      //alloc_prev->next = alloc_ptr->next;
+ 876   2                      //alloc_prev->next->prev = alloc_prev;
+ 877   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf("%x\n", (intptr)alloc_prev->next);
+                              #endif
+ 880   2              } else { 
+ 881   2                      alloc_next->prev = alloc_prev_pos;
+C51 COMPILER V7.01  FS                                                                     01/25/2014 09:07:14 PAGE 16  
+
+ 882   2                      alloc_prev->next = alloc_next_pos;
+ 883   2                      //alloc_prev->next->prev = alloc_prev;
+ 884   2                      #ifdef MIDGARD_DEBUG_ACTIVATED
+                              //printf("%x\n", (intptr)alloc_prev->next);
+                              #endif
+ 887   2                      //s_gc();
+ 888   2                      //getch();
+ 889   2              }
+ 890   1              alloc_ptr->next = 0;
+ 891   1              alloc_ptr->prev = 0;
+ 892   1              alloc_ptr->size = 0;
+ 893   1              status = ioman_write_buffer(alloc_pos, alloc_ptr, sizeof(fs_chain));
+*** WARNING C182 IN LINE 893 OF ASGARD\FS.C: pointer to different objects
+ 894   1              if(status != APDU_SUCCESS) goto exit_dealloc;
+ 895   1              status = ioman_write_buffer(alloc_prev_pos, alloc_prev, sizeof(fs_chain));
+*** WARNING C182 IN LINE 895 OF ASGARD\FS.C: pointer to different objects
+ 896   1              if(status != APDU_SUCCESS) goto exit_dealloc;
+ 897   1              status = ioman_write_buffer(alloc_next_pos, alloc_next, sizeof(fs_chain));
+*** WARNING C182 IN LINE 897 OF ASGARD\FS.C: pointer to different objects
+ 898   1              if(status != APDU_SUCCESS) goto exit_dealloc;
+ 899   1      
+ 900   1              exit_dealloc: 
+ 901   1              m_free(alloc_next); 
+ 902   1              m_free(alloc_prev); 
+ 903   1              m_free(alloc_ptr); 
+ 904   1              return status;
+ 905   1              //#ifdef OS_uCOS_II_H
+ 906   1              //OS_EXIT_CRITICAL();
+ 907   1              //#endif
+ 908   1      
+ 909   1      }
+ 910          
+ 911          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2334    ----
+   CONSTANT SIZE    =     19    ----
+   XDATA SIZE       =     10    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  17 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1 @@
+"framework\RFM.c" LARGE OMF2 OPTIMIZE (9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\RFM.lst) OBJECT(.\Debug\Output\RFM.obj)

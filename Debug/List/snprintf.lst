@@ -1,0 +1,619 @@
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE SNPRINTF
+OBJECT MODULE PLACED IN .\Debug\Output\snprintf.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE misc\snprintf.c LARGE OMF2 OPTIMIZE(SIZE) REGFILE(.\Debug\Output\Yggdrasi
+                    -l20.ORC) BROWSE NOINTVECTOR DEBUG PRINT(.\Debug\List\snprintf.lst) OBJECT(.\Debug\Output\snprintf.obj)
+
+stmt level    source
+
+   1          /*
+   2           * snprint16f.c - a portable implementation of snprint16f
+   3           *
+   4           * AUTHOR
+   5           *   Mark Martinec <mark.martinec@ijs.si>, April 1999
+   6           *   Copyright: Mark Martinec
+   7           *
+   8           * TERMS AND CONDITIONS
+   9           *   for copying, distribution and modification, NO WARRANTY:
+  10           *   GNU GENERAL PUBLIC LICENSE, Version 2 or later
+  11           *   (see file LICENSE in the distribution kit)
+  12           *
+  13           * FEATURES
+  14           * - careful adherence to specs regarding flags, field width and precision;
+  15           * - good performance for large string handling (large format, large
+  16           *   argument or large paddings). Performance is similar to system's sprint16f
+  17           *   and in several cases significantly better (make sure you compile with
+  18           *   optimizations turned on, tell the compiler the code is strict ANSI
+  19           *   if necessary to give it more freedom for optimizations);
+  20           * - written in standard ANSI C - requires an ANSI C compiler.
+  21           *
+  22           * SUPPORTED FORMATS AND DATA TYPES
+  23           *
+  24           * This snprint16f only supports format specifiers:
+  25           * s, c, d, o, u, x, X, p  (and synonyms: i, D, U, O - see below)
+  26           * with flags: '-', '+', ' ', '0' and '#'.
+  27           * An asterisk is supported for field width as well as precision.
+  28           *
+  29           * Data type modifiers 'h' (short int16), 'l' (long int16)
+  30           * and 'll' (long long int16) are supported.
+  31           * NOTE:
+  32           *   If macro SNPRint16F_LONGLONG_SUPPORT is not defined (default) the
+  33           *   data type modifier 'll' is recognized but treated the same as 'l',
+  34           *   which may cause argument value truncation! Defining
+  35           *   SNPRint16F_LONGLONG_SUPPORT requires that your system's sprint16f also
+  36           *   handles data type modifier 'll'. long long int16 is a language
+  37           *   extension which may not be portable.
+  38           *
+  39           * Conversion of numeric data (formats d, o, u, x, X, p) with data type
+  40           * modifiers (none or h, l, ll) is left to the system routine sprint16f,
+  41           * but all handling of flags, field width and precision as well as c and
+  42           * s formats is done very carefully by this portable routine. If a string
+  43           * precision (truncation) is specified (e.g. %.8s) it is guaranteed the
+  44           * string beyond the specified precision will not be referenced.
+  45           *
+  46           * Data type modifiers h, l and ll are ignored for c and s formats (data
+  47           * types wint16_t and wchar_t are not supported).
+  48           *
+  49           * The following common synonyms for conversion characters are supported:
+  50           *   - i is a synonym for d
+  51           *   - D is a synonym for ld, explicit data type modifiers are ignored
+  52           *   - U is a synonym for lu, explicit data type modifiers are ignored
+  53           *   - O is a synonym for lo, explicit data type modifiers are ignored
+  54           *
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 2   
+
+  55           * The following is specifically not supported:
+  56           *   - flag ' (thousands' grouping character) is recognized but ignored
+  57           *   - numeric formats: f, e, E, g, G and synonym F
+  58           *   - data type modifier 'L' (long double) and 'q' (quad - use 'll' instead)
+  59           *   - wide character/string formats: C, lc, S, ls
+  60           *   - writeback of converted string length: conversion character n
+  61           *   - the n$ specification for direct reference to n-th argument
+  62           *   - locales
+  63           *
+  64           * AVAILABILITY
+  65           *   http://www.ijs.si/software/snprint16f/
+  66           *
+  67           * REVISION HISTORY
+  68           *    Apr 1999  V0.9  Mark Martinec
+  69           *              - initial version, some modifications after comparing print16f
+  70           *                man pages for Digital Unix 4.0, Solaris 2.6 and HPUX 10,
+  71           *                and checking how Perl handles sprint16f (differently!);
+  72           *  9 Apr 1999  V1.0  Mark Martinec <mark.martinec@ijs.si>
+  73           *              - added main test program, fixed remaining inconsistencies,
+  74           *                added optional (long long int16) support;
+  75           * 12 Apr 1999  V1.1  Mark Martinec <mark.martinec@ijs.si>
+  76           *              - support the 'p' format (point16er to void);
+  77           *              - if a string precision is specified
+  78           *                make sure the string beyond the specified precision
+  79           *                will not be referenced (e.g. by strlen);
+  80           * 13 Apr 1999  V1.2  Mark Martinec <mark.martinec@ijs.si>
+  81           *              - support synonyms %D=%ld, %U=%lu, %O=%lo;
+  82           *              - speed up the case of long format string with few conversions;
+  83           * 30 Jun 1999  V1.3  Mark Martinec <mark.martinec@ijs.si>
+  84           *              - fixed runaway loop (eventually crashing when str_l wraps
+  85           *                beyond 2*31) while copying format string without
+  86           *                conversion specifiers to a buffer that is too short
+  87           *                (thanks to Edwin Young <edwiny@autonomy.com> for
+  88           *                spoting the problem)
+  89           *              - added macros PORTABLE_SNPRint16F_VERSION_(MAJOR|MINOR)
+  90           *                to snprint16f.h
+  91           */
+  92          
+  93          
+  94          /* Define HAVE_SNPRint16F if your system already has snprint16f.
+  95           *
+  96           * If HAVE_SNPRint16F is defined this module will produce no code
+  97           * unless PREFER_PORTABLE_SNPRint16F is defined as well,
+  98           * causing portable version of snprint16f to be called portable_snprint16f.
+  99           */
+ 100          /* #define HAVE_SNPRint16F */
+ 101          
+ 102          /* Define PREFER_PORTABLE_SNPRint16F if your system does have snprint16f
+ 103           * but you would prefer to use this portable routine instead.
+ 104           * In this case the portable routine is declared as portable_snprint16f
+ 105           * and a macro 'snprint16f' is defined to expand to 'portable_snprint16f'
+ 106           * - see file snprint16f.h .
+ 107           * Defining this macro if HAVE_SNPRint16F is *not* defined does no harm.
+ 108           */
+ 109          /* #define PREFER_PORTABLE_SNPRint16F */
+ 110          
+ 111          /* Define SNPRint16F_LONGLONG_SUPPORT if you want to support
+ 112           * data type (long long int16) and data type modifier 'll' (e.g. %lld).
+ 113           * If undefined, 'll' is recognized but treated as a single 'l'.
+ 114           *
+ 115           * If the system's sprint16f does not handle 'll'
+ 116           * the SNPRint16F_LONGLONG_SUPPORT must not be defined!
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 3   
+
+ 117           *
+ 118           * This is off by default since (long long int16) is a language extension.
+ 119           */
+ 120          /* #define SNPRint16F_LONGLONG_SUPPORT */
+ 121          
+ 122          
+ 123          /* Define the following macros if desired:
+ 124           *   SOLARIS_COMPATIBLE, SOLARIS_BUG_COMPATIBLE,
+ 125           *   HPUX_COMPATIBLE, HPUX_BUG_COMPATIBLE,
+ 126           *   DIGITAL_UNIX_COMPATIBLE, DIGITAL_UNIX_BUG_COMPATIBLE,
+ 127           *   PERL_COMPATIBLE, PERL_BUG_COMPATIBLE,
+ 128           *
+ 129           * - For portable applications it is best not to rely on peculiarities
+ 130           *   of a given implementation so it may be best not to define any
+ 131           *   of the macros that select compatibility and to avoid features
+ 132           *   that vary among the systems.
+ 133           *
+ 134           * - Selecting compatibility with more than one operating system
+ 135           *   is not strictly forbidden but is not recommended.
+ 136           *
+ 137           * - 'x'_BUG_COMPATIBLE implies 'x'_COMPATIBLE .
+ 138           *
+ 139           * - 'x'_COMPATIBLE refers to (and enables) a behaviour that is
+ 140           *   documented in a sprint16f man page on a given operating system
+ 141           *   and actually adhered to by the system's sprint16f (but not on
+ 142           *   most other operating systems). It may also refer to and enable
+ 143           *   a behaviour that is declared 'undefined' or 'implementation specific'
+ 144           *   in the man page but a given implementation behaves predictably
+ 145           *   in a certain way.
+ 146           *
+ 147           * - 'x'_BUG_COMPATIBLE refers to (and enables) a behaviour of system's sprint16f
+ 148           *   that contradicts the sprint16f man page on the same operating system.
+ 149           */
+ 150          /* ============================================= */
+ 151          /* NO USER SERVICABLE PARTS FOLLOWING THIS POint16 */
+ 152          /* ============================================= */
+ 153          
+ 154          /*
+ 155           * If the system does have snprint16f and the portable routine is not
+ 156           * specifically required, this module produces no code.
+ 157           */
+ 158          #if !defined(HAVE_SNPRint16F) || defined(PREFER_PORTABLE_SNPRint16F)
+ 159          
+ 160          
+ 161          #if defined(SOLARIS_BUG_COMPATIBLE) && !defined(SOLARIS_COMPATIBLE)
+              #define SOLARIS_COMPATIBLE
+              #endif
+ 164          
+ 165          #if defined(HPUX_BUG_COMPATIBLE) && !defined(HPUX_COMPATIBLE)
+              #define HPUX_COMPATIBLE
+              #endif
+ 168          
+ 169          #if defined(DIGITAL_UNIX_BUG_COMPATIBLE) && !defined(DIGITAL_UNIX_COMPATIBLE)
+              #define DIGITAL_UNIX_COMPATIBLE
+              #endif
+ 172          
+ 173          #if defined(PERL_BUG_COMPATIBLE) && !defined(PERL_COMPATIBLE)
+              #define PERL_COMPATIBLE
+              #endif
+ 176          
+ 177          #include "defs.h"
+*** WARNING C245 IN LINE 4 OF DEFS.H: unknown #pragma, line ignored
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 4   
+
+*** WARNING C245 IN LINE 5 OF DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 6 OF DEFS.H: unknown #pragma, line ignored
+*** WARNING C245 IN LINE 7 OF DEFS.H: unknown #pragma, line ignored
+ 178          #include <string.h>
+ 179          #include <stdlib.h>
+ 180          #include <stdio.h>
+ 181          #include <stdarg.h>
+ 182          
+ 183          #ifdef isdigit
+              #undef isdigit
+              #endif
+ 186          #define isdigit(c) ((c) >= '0' && (c) <= '9')
+ 187          
+ 188          #if !defined(HAVE_SNPRint16F)
+ 189          /* declare our portable routine under name snprint16f */
+ 190          #define portable_snprint16f snprint16f
+ 191          #else
+              /* declare our portable routine under name portable_snprint16f */
+              #endif
+ 194          
+ 195          /* prototype */
+ 196          int16 portable_snprint16f(char *str, size_t str_m, const char *fmt, /*args*/ ...) _REENTRANT_ ;
+ 197          
+ 198          /* declaration */
+ 199          int16 portable_snprint16f(char *str, size_t str_m, const char *fmt, /*args*/ ...) _REENTRANT_ {
+ 200   1        va_list ap;
+ 201   1        size_t str_l = 0;
+ 202   1        const char *p = fmt;
+ 203   1      
+ 204   1        if (str_m < 1) return -1;
+ 205   1      
+ 206   1        va_start(ap, fmt);
+ 207   1        if (!p) p = "";
+ 208   1        while (*p) {
+ 209   2          if (*p != '%') {
+ 210   3         /* if (str_l < str_m) str[str_l++] = *p++;    -- this would be sufficient */
+ 211   3         /* but the following code achieves better performance for cases
+ 212   3          * where format string is long and contains few conversions */
+ 213   3            const char *q = strchr(p+1,'%');
+ 214   3            int16 n = !q ? strlen(p) : (q-p);
+ 215   3            int16 avail = (int16)(str_m-str_l);
+ 216   3            if (avail > 0) {
+ 217   4              register int16 k; register char *r; register const char* p1;
+ 218   4              for (p1=p, r=str+str_l, k=(n>avail?avail:n); k>0; k--) *r++ = *p1++;
+ 219   4            }
+ 220   3            p += n; str_l += n;
+ 221   3          } else {
+ 222   3            const char *starting_p;
+ 223   3            int16 min_field_width = 0, precision = 0;
+ 224   3            int16 zero_padding = 0, precision_specified = 0, justify_left = 0;
+ 225   3            int16 alternative_form = 0, force_sign = 0;
+ 226   3            int16 space_for_positive = 1; /* If both the ' ' and '+' flags appear,
+ 227   3                                           the ' ' flag should be ignored. */
+ 228   3            char data_type_modifier = '\0';      /* allowed valued: \0, h, l, L, p */
+ 229   3            char tmp[32];/* temporary buffer for simple numeric->string conversion */
+ 230   3      
+ 231   3            const char *str_arg = 0;/* string address in case of string arguments  */
+ 232   3            int16 str_arg_l;  /* natural field width of arg without padding and sign */
+ 233   3      
+ 234   3            int16 long_arg;  /* long int16 argument value - always defined
+ 235   3              in case of numeric arguments, regardless of data type modifiers.
+ 236   3              In case of data type modifier 'll' the value is stored in long_long_arg
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 5   
+
+ 237   3              and only the sign of long_arg is guaranteed to be correct */
+ 238   3            void *ptr_arg; /* point16er argument value - only defined for p format   */
+ 239   3            int16 int16_arg;   /* int16 argument value - only defined if no h or l modif.*/
+ 240   3      #ifdef SNPRint16F_LONGLONG_SUPPORT
+                    long long int16 long_long_arg = 0;  /* long long argument value - only
+                                                         defined if ll modifier is present */
+              #endif
+ 244   3            int16 number_of_zeros_to_pad = 0;
+ 245   3            int16 zero_padding_insertion_ind = 0;
+ 246   3            char fmt_spec = '\0';            /* current format specifier character */
+ 247   3      
+ 248   3            starting_p = p; p++;  /* skip '%' */
+ 249   3         /* parse flags */
+ 250   3            while (*p == '0' || *p == '-' || *p == '+' ||
+ 251   3                   *p == ' ' || *p == '#' || *p == '\'') {
+ 252   4              switch (*p) {
+ 253   5              case '0': zero_padding = 1; break;
+ 254   5              case '-': justify_left = 1; break;
+ 255   5              case '+': force_sign = 1; space_for_positive = 0; break;
+ 256   5              case ' ': force_sign = 1;
+ 257   5           /* If both the ' ' and '+' flags appear, the ' ' flag should be ignored */
+ 258   5      #ifdef PERL_COMPATIBLE
+                   /* ... but in Perl the last of ' ' and '+' applies */
+                                space_for_positive = 1;
+              #endif
+ 262   5                        break;
+ 263   5              case '#': alternative_form = 1; break;
+ 264   5              case '\'': break;
+ 265   5              }
+ 266   4              p++;
+ 267   4            }
+ 268   3         /* If the '0' and '-' flags both appear, the '0' flag should be ignored. */
+ 269   3      
+ 270   3         /* parse field width */
+ 271   3            if (*p == '*') {
+ 272   4              p++; min_field_width = va_arg(ap, int16);
+ 273   4              if (min_field_width < 0)
+ 274   4                { min_field_width = -min_field_width; justify_left = 1; }
+ 275   4            } else if (isdigit((int16)(*p))) {
+ 276   4              min_field_width = *p++ - '0';
+ 277   4              while (isdigit((int16)(*p)))
+ 278   4                min_field_width = 10*min_field_width + (*p++ - '0');
+ 279   4            }
+ 280   3         /* parse precision */
+ 281   3            if (*p == '.') {
+ 282   4              p++; precision_specified = 1;
+ 283   4              if (*p == '*') {
+ 284   5                p++; precision = va_arg(ap, int16);
+ 285   5                if (precision < 0) {
+ 286   6                  precision_specified = 0; precision = 0;
+ 287   6               /* NOTE:
+ 288   6                *   Solaris 2.6 man page claims that in this case the precision
+ 289   6                *   should be set to 0.  Digital Unix 4.0 and HPUX 10 man page
+ 290   6                *   claim that this case should be treated as unspecified precision,
+ 291   6                *   which is what we do here.
+ 292   6                */
+ 293   6                }
+ 294   5              } else if (isdigit((int16)(*p))) {
+ 295   5                precision = *p++ - '0';
+ 296   5                while (isdigit((int16)(*p))) precision = 10*precision + (*p++ - '0');
+ 297   5              }
+ 298   4            }
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 6   
+
+ 299   3         /* parse 'h', 'l' and 'll' data type modifiers */
+ 300   3            if (*p == 'h' || *p == 'l') {
+ 301   4              data_type_modifier = *p; p++;
+ 302   4              if (data_type_modifier == 'l' && *p == 'l') {/* double l = long long */
+ 303   5      #ifdef SNPRint16F_LONGLONG_SUPPORT
+                        data_type_modifier = '2';               /* double l encoded as '2' */
+              #else
+ 306   5                data_type_modifier = 'l';                /* treat it as single 'l' */
+ 307   5      #endif
+ 308   5                p++;
+ 309   5              }
+ 310   4            }
+ 311   3            fmt_spec = *p;
+ 312   3         /* common synonyms: */
+ 313   3            switch (fmt_spec) {
+ 314   4            case 'i': fmt_spec = 'd'; break;
+ 315   4            case 'D': fmt_spec = 'd'; data_type_modifier = 'l'; break;
+ 316   4            case 'U': fmt_spec = 'u'; data_type_modifier = 'l'; break;
+ 317   4            case 'O': fmt_spec = 'o'; data_type_modifier = 'l'; break;
+ 318   4            default: break;
+ 319   4            }
+ 320   3         /* get parameter value, do initial processing */
+ 321   3            switch (fmt_spec) {
+ 322   4            case '%': /* % behaves similar to 's' regarding flags and field widths */
+ 323   4            case 'c': /* c behaves similar to 's' regarding flags and field widths */
+ 324   4            case 's':
+ 325   4              data_type_modifier = '\0';       /* wint16_t and wchar_t not supported */
+ 326   4           /* the result of zero padding flag with non-numeric format is undefined */
+ 327   4           /* Solaris and HPUX 10 does zero padding in this case, Digital Unix not */
+ 328   4      #ifdef DIGITAL_UNIX_COMPATIBLE
+                      zero_padding = 0;        /* turn zero padding off for string formats */
+              #endif
+ 331   4              str_arg_l = 1;
+ 332   4              switch (fmt_spec) {
+ 333   5              case '%':
+ 334   5                str_arg = p; break;
+ 335   5              case 'c':
+ 336   5                { int16 j = va_arg(ap, int16); str_arg = (const char*) &j; }
+ 337   5                break;
+ 338   5              case 's':
+ 339   5                str_arg = va_arg(ap, const char *);
+ 340   5                if (!str_arg) str_arg_l = 0;
+ 341   5             /* make sure not to address string beyond the specified precision !!! */
+ 342   5                else if (!precision_specified) str_arg_l = strlen(str_arg);
+ 343   5             /* truncate string if necessary as requested by precision */
+ 344   5                else if (precision <= 0) str_arg_l = 0;
+ 345   5                else {
+ 346   6                  const char *q = memchr(str_arg,'\0',(size_t)precision);
+ 347   6                  str_arg_l = !q ? precision : (q-str_arg);
+ 348   6                }
+ 349   5                break;
+ 350   5              default: break;
+ 351   5              }
+ 352   4              break;
+ 353   4            case 'd': case 'o': case 'u': case 'x': case 'X': case 'p':
+ 354   4              long_arg = 0; int16_arg = 0; ptr_arg = NULL;
+ 355   4              if (fmt_spec == 'p') {
+ 356   5              /* HPUX 10: An l, h, ll or L before any other conversion character
+ 357   5               *   (other than d, i, o, u, x, or X) is ignored.
+ 358   5               * Digital Unix:
+ 359   5               *   not specified, but seems to behave as HPUX does.
+ 360   5               * Solaris: If an h, l, or L appears before any other conversion
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 7   
+
+ 361   5               *   specifier (other than d, i, o, u, x, or X), the behavior
+ 362   5               *   is undefined. (Actually %hp converts only 16-bits of address
+ 363   5               *   and %llp treats address as 64-bit data which is incompatible
+ 364   5               *   with (void *) argument on a 32-bit system).
+ 365   5               */
+ 366   5      #ifdef SOLARIS_COMPATIBLE
+              #  ifdef SOLARIS_BUG_COMPATIBLE
+                        /* keep data type modifiers even if it represents 'll' */
+              #  else
+                        if (data_type_modifier == '2') data_type_modifier = '\0';
+              #  endif
+              #else
+ 373   5                data_type_modifier = '\0';
+ 374   5      #endif
+ 375   5                ptr_arg = va_arg(ap, void *); long_arg = !ptr_arg ? 0 : 1;
+ 376   5              } else {
+ 377   5                switch (data_type_modifier) {
+ 378   6                case '\0':
+ 379   6                case 'h':
+ 380   6               /* It is non-portable to specify a second argument of char or short
+ 381   6                * to va_arg, because arguments seen by the called function
+ 382   6                * are not char or short.  C converts char and short arguments
+ 383   6                * to int16 before passing them to a function.
+ 384   6                */
+ 385   6                  int16_arg = va_arg(ap, int16); long_arg = int16_arg; break;
+ 386   6                case 'l':
+ 387   6                  long_arg = va_arg(ap, int16); break;
+ 388   6      #ifdef SNPRint16F_LONGLONG_SUPPORT
+                        case '2':
+                          long_long_arg = va_arg(ap, long long int16);
+                          /* only the sign of long_arg is guaranteed */
+                          if      (long_long_arg > 0) long_arg = +1;
+                          else if (long_long_arg < 0) long_arg = -1;
+                          else long_arg = 0;
+                          break;
+              #endif
+ 397   6                }
+ 398   5              }
+ 399   4              str_arg = tmp; str_arg_l = 0;
+ 400   4           /* NOTE:
+ 401   4            *   For d, i, o, u, x, and X conversions, if precision is specified,
+ 402   4            *   the '0' flag should be ignored. This is so with Solaris 2.6,
+ 403   4            *   Digital UNIX 4.0 and HPUX 10;  but not with Perl.
+ 404   4            */
+ 405   4      #ifndef PERL_COMPATIBLE
+ 406   4              if (precision_specified) zero_padding = 0;
+ 407   4      #endif
+ 408   4              if (fmt_spec == 'd') {
+ 409   5                if (force_sign && long_arg >= 0)
+ 410   5                  tmp[str_arg_l++] = space_for_positive ? ' ' : '+';
+ 411   5               /* leave negative numbers for sprint16f to handle,
+ 412   5                  to avoid handling tricky cases like (short int16)(-32768) */
+ 413   5              } else if (alternative_form) {
+ 414   5                if (long_arg != 0 && (fmt_spec == 'x' || fmt_spec == 'X') )
+ 415   5                  { tmp[str_arg_l++] = '0'; tmp[str_arg_l++] = fmt_spec; }
+ 416   5      #ifdef HPUX_COMPATIBLE
+                        else if (fmt_spec == 'p'
+                       /* HPUX 10: for an alternative form of p conversion,
+                        *          a nonzero result is prefixed by 0x. */
+              #ifndef HPUX_BUG_COMPATIBLE
+                       /* Actually it uses 0x prefix even for a zero value. */
+                                 && long_arg != 0
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 8   
+
+              #endif
+                                ) { tmp[str_arg_l++] = '0'; tmp[str_arg_l++] = 'x'; }
+              #endif
+ 426   5              }
+ 427   4              zero_padding_insertion_ind = str_arg_l;
+ 428   4              if (!precision_specified) precision = 1;   /* default precision is 1 */
+ 429   4              if (precision == 0 && long_arg == 0
+ 430   4      #ifdef HPUX_BUG_COMPATIBLE
+                          && fmt_spec != 'p'
+                       /* HPUX 10 man page claims: With conversion character p the result of
+                        * converting a zero value with a precision of zero is a null string.
+                        * Actually it returns all zeroes. */
+              #endif
+ 436   4              ) {  /* converted to null string */  }
+ 437   4              else {
+ 438   5                char f[5]; int16 f_l = 0;
+ 439   5                f[f_l++] = '%';
+ 440   5                if (!data_type_modifier) { }
+ 441   5                else if (data_type_modifier=='2') { f[f_l++] = 'l'; f[f_l++] = 'l'; }
+ 442   5                else f[f_l++] = data_type_modifier;
+ 443   5                f[f_l++] = fmt_spec; f[f_l++] = '\0';
+ 444   5                if (fmt_spec == 'p') str_arg_l+=sprintf(tmp+str_arg_l, f, ptr_arg);
+ 445   5                else {
+ 446   6                  switch (data_type_modifier) {
+ 447   7                  case '\0':
+ 448   7                  case 'h': str_arg_l+=sprintf(tmp+str_arg_l, f, int16_arg);  break;
+ 449   7                  case 'l': str_arg_l+=sprintf(tmp+str_arg_l, f, long_arg); break;
+ 450   7      #ifdef SNPRint16F_LONGLONG_SUPPORT
+                          case '2': str_arg_l+=sprintf(tmp+str_arg_l,f,long_long_arg); break;
+              #endif
+ 453   7                  }
+ 454   6                }
+ 455   5                if (zero_padding_insertion_ind < str_arg_l &&
+ 456   5                    tmp[zero_padding_insertion_ind] == '-')
+ 457   5                  zero_padding_insertion_ind++;
+ 458   5              }
+ 459   4              { int16 num_of_digits = str_arg_l - zero_padding_insertion_ind;
+ 460   5                if (alternative_form && fmt_spec == 'o'
+ 461   5      #ifdef HPUX_COMPATIBLE                                  /* ("%#.o",0) -> ""  */
+                            && (str_arg_l > 0)
+              #endif
+ 464   5      #ifdef DIGITAL_UNIX_BUG_COMPATIBLE                      /* ("%#o",0) -> "00" */
+              #else
+ 466   5                    && !(zero_padding_insertion_ind < str_arg_l
+ 467   5                         && tmp[zero_padding_insertion_ind] == '0')
+ 468   5      #endif
+ 469   5                ) {      /* assure leading zero for alternative-form octal numbers */
+ 470   6                  if (!precision_specified || precision < num_of_digits+1)
+ 471   6                    { precision = num_of_digits+1; precision_specified = 1; }
+ 472   6                }
+ 473   5             /* zero padding to specified precision? */
+ 474   5                if (num_of_digits < precision) 
+ 475   5                  number_of_zeros_to_pad = precision - num_of_digits;
+ 476   5              }
+ 477   4           /* zero padding to specified minimal field width? */
+ 478   4              if (!justify_left && zero_padding) {
+ 479   5                int16 n = min_field_width - (str_arg_l+number_of_zeros_to_pad);
+ 480   5                if (n > 0) number_of_zeros_to_pad += n;
+ 481   5              }
+ 482   4              break;
+ 483   4            default:  /* unrecognized format, keep format string unchanged */
+ 484   4              zero_padding = 0;   /* turn zero padding off for non-numeric formats */
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 9   
+
+ 485   4      #ifndef DIGITAL_UNIX_COMPATIBLE
+ 486   4              justify_left = 1; min_field_width = 0;                /* reset flags */
+ 487   4      #endif
+ 488   4      #ifdef PERL_COMPATIBLE
+                   /* keep the entire format string unchanged */
+                      str_arg = starting_p; str_arg_l = p - starting_p;
+              #else
+ 492   4           /* discard the unrecognized format, just keep the unrecognized fmt char */
+ 493   4              str_arg = p; str_arg_l = 0;
+ 494   4      #endif
+ 495   4              if (*p) str_arg_l++;  /* include invalid fmt specifier if not at EOS */
+ 496   4              break;
+ 497   4            }
+ 498   3            if (*p) p++;          /* step over the just processed format specifier */
+ 499   3         /* insert padding to the left as requested by min_field_width */
+ 500   3            if (!justify_left) {                /* left padding with blank or zero */
+ 501   4              int16 n = min_field_width - (str_arg_l+number_of_zeros_to_pad);
+ 502   4              if (n > 0) {
+ 503   5                int16 avail = (int16)(str_m-str_l);
+ 504   5                if (avail > 0) {      /* memset(str+str_l, zp, (n>avail?avail:n)); */
+ 505   6                  const char zp = (zero_padding ? '0' : ' ');
+ 506   6                  register int16 k; register char *r;
+ 507   6                  for (r=str+str_l, k=(n>avail?avail:n); k>0; k--) *r++ = zp;
+ 508   6                }
+ 509   5                str_l += n;
+ 510   5              }
+ 511   4            }
+ 512   3         /* zero padding as requested by the precision for numeric formats requred?*/
+ 513   3            if (number_of_zeros_to_pad <= 0) {
+ 514   4           /* will not copy first part of numeric here,   *
+ 515   4            * force it to be copied later in its entirety */
+ 516   4              zero_padding_insertion_ind = 0;
+ 517   4            } else {
+ 518   4           /* insert first part of numerics (sign or '0x') before zero padding */
+ 519   4              int16 n = zero_padding_insertion_ind;
+ 520   4              if (n > 0) {
+ 521   5                int16 avail = (int16)(str_m-str_l);
+ 522   5                if (avail > 0) memcpy(str+str_l, str_arg, (size_t)(n>avail?avail:n));
+ 523   5                str_l += n;
+ 524   5              }
+ 525   4           /* insert zero padding as requested by the precision */
+ 526   4              n = number_of_zeros_to_pad;
+ 527   4              if (n > 0) {
+ 528   5                int16 avail = (int16)(str_m-str_l);
+ 529   5                if (avail > 0) {     /* memset(str+str_l, '0', (n>avail?avail:n)); */
+ 530   6                  register int16 k; register char *r;
+ 531   6                  for (r=str+str_l, k=(n>avail?avail:n); k>0; k--) *r++ = '0';
+ 532   6                }
+ 533   5                str_l += n;
+ 534   5              }
+ 535   4            }
+ 536   3         /* insert formatted string (or unmodified format for unknown formats) */
+ 537   3            { int16 n = str_arg_l - zero_padding_insertion_ind;
+ 538   4              if (n > 0) {
+ 539   5                int16 avail = (int16)(str_m-str_l);
+ 540   5                if (avail > 0) memcpy(str+str_l, str_arg+zero_padding_insertion_ind,
+ 541   5                                      (size_t)(n>avail ? avail : n) );
+ 542   5                str_l += n;
+ 543   5              }
+ 544   4            }
+ 545   3         /* insert right padding */
+ 546   3            if (justify_left) {          /* right blank padding to the field width */
+C51 COMPILER V7.01  SNPRINTF                                                               03/25/2013 14:37:19 PAGE 10  
+
+ 547   4              int16 n = min_field_width - (str_arg_l+number_of_zeros_to_pad);
+ 548   4              if (n > 0) {
+ 549   5                int16 avail = (int16)(str_m-str_l);
+ 550   5                if (avail > 0) {     /* memset(str+str_l, ' ', (n>avail?avail:n)); */
+ 551   6                  register int16 k; register char *r;
+ 552   6                  for (r=str+str_l, k=(n>avail?avail:n); k>0; k--) *r++ = ' ';
+ 553   6                }
+ 554   5                str_l += n;
+ 555   5              }
+ 556   4            }
+ 557   3          }
+ 558   2        }
+ 559   1        va_end(ap);
+ 560   1        if (str_m > 0)  /* make sure the string is null-terminated
+ 561   1                           even at the expense of overwriting the last character */
+ 562   1          str[str_l <= str_m-1 ? str_l : str_m-1] = '\0';
+ 563   1        return str_l;  /* return the number of characters formatted
+ 564   1                          (excluding trailing null character),
+ 565   1                          that is, the number of characters that would have been
+ 566   1                          written to the buffer if it were large enough */
+ 567   1      }
+ 568          #endif
+ 569          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4867    ----
+   CONSTANT SIZE    =      1    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

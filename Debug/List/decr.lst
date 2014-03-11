@@ -1,0 +1,75 @@
+C51 COMPILER V7.01  DECR                                                                   01/25/2014 09:07:28 PAGE 1   
+
+
+C51 COMPILER V7.01, COMPILATION OF MODULE DECR
+OBJECT MODULE PLACED IN .\Debug\Output\decr.obj
+COMPILER INVOKED BY: C:\Keil51\C51\BIN\C51.EXE plugins\decr.c LARGE OMF2 OPTIMIZE(9,SIZE) BROWSE NOINTVECTOR DEBUG PRINT
+                    -(.\Debug\List\decr.lst) OBJECT(.\Debug\Output\decr.obj)
+
+stmt level    source
+
+   1          #include "..\defs.h"
+   2          #include "..\config.h"
+   3          #include "..\midgard\midgard.h"
+   4          #include "..\asgard\file.h"
+   5          #include "..\liquid.h"
+   6          #include "..\framework\VAS.h"
+   7          #include "..\framework\SMS.h" 
+   8          #include "..\framework\dcs.h"
+   9          #include "..\framework\des.h"
+  10          #include "decr.h"
+  11          #include <string.h>
+  12          
+  13          #if VAS_DECR_ALLOCATED
+              
+              uchar decr_decode(void) _REENTRANT_ {                    //return response length  
+                      extern uchar * vas_cistr;                       //current input string
+                      extern uchar vas_cvid;                          //current variable id
+                      extern uchar STK_buffer[];
+                      uchar len;                                                      //input string length
+                      uchar plen;                                             //padded length
+                      uchar key_id;
+                      uchar i;
+                      fs_handle temp_fs;
+                      uchar * key = NULL;
+                      if(vas_cistr == NULL) goto exit_plugin;
+                      len = vas_cistr[0];
+                      key_id = vas_cistr[1];
+                      plen = vas_cistr[2];
+                      len = (len - 2);                //length of encrypted string    
+                      //memcpy(STK_buffer, vas_cistr + 3,len);                //copy encrypted string
+              
+                      key = m_alloc(16);                                                      //allocate key buffer
+                      _select(&temp_fs, FID_MF);
+                      _select(&temp_fs, FID_LIQUID); 
+                      if(_select(&temp_fs, FID_WIBKEY) < 0x9F00) goto exit_plugin;
+                      _readrec(&temp_fs, key_id, key, 16);
+                      DES_MemOperation(len, DES_MODE_TDES | DES_MODE_CBC | DES_MODE_DECRYPT, key, vas_cistr + 3, STK_buffer);
+                      m_free(key);                                                            //freed up key buffer
+                      len = (len - plen);
+                      VAS_set_variable(vas_cvid, len, STK_buffer);                    //set variable
+                      exit_plugin:
+                      VAS_exit_plugin();
+                      return 0; 
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V7.01  DECR                                                                   01/25/2014 09:07:28 PAGE 2   
+
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
